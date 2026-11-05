@@ -14,6 +14,13 @@ alle Funktionen von 0.9.0 bereits auf realer MGU-Hardware funktionieren.
 [Entwicklung](docs/DEVELOPMENT.md) · [Architektur](docs/ARCHITECTURE.md) ·
 [Credits](CREDITS.md) · [Drittanbieter](THIRD_PARTY_NOTICES.md)
 
+## Als Quelle im MGU Store
+
+`pllanaio/mgu-browser` hinzufügen und den Branch **main** auswählen.
+Die neue `mgu-repo.json` beschreibt den Browser und seinen Store-Build.
+Der separate native Runtime ist weiterhin Voraussetzung und noch nicht als
+allgemeines Store-Paket veröffentlicht. Details: [MGU Store](docs/MGU_STORE.md).
+
 ## Danke an die Projekte, die das ermöglichen
 
 - **[cauliflowermossgrape und das idrive7-apps-Team](https://github.com/cauliflowermossgrape/idrive7-apps)**:

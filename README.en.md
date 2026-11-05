@@ -6,6 +6,11 @@ This is a **source preview, not a ready-to-install MGU-Store release**.
 
 The [full German README](README.md) describes features and verified limits.
 
+For source discovery in MGU Store, add `pllanaio/mgu-browser` and select the
+**main branch**. The root `mgu-repo.json` declares the frontend build and its
+dependencies. The separate native runtime is not yet generally distributed;
+see [MGU Store integration](docs/MGU_STORE.md).
+
 ## Implemented locally
 
 - Real HTML/CSS/JavaScript rendering, back/forward, reload/stop, editable URL bar.
