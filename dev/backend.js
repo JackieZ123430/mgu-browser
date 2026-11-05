@@ -4,10 +4,14 @@ const fs=require('fs'),net=require('net'),path=require('path');
 if(process.env.MGU_EMULATOR_MODE!=='1'||process.platform!=='linux'||process.getuid()===0)throw new Error('Unprivileged laptop emulator required');
 const base=process.env.MGU_BROWSER_DATA,socketPath=process.env.MGU_BROWSER_SOCKET;
 const Browser=require('./browser_session'),Channel=require('./ipc_protocol'),peer=require('./peer_uid.node');
+const {SecureBrowserData,dpapi}=require('./secure_browser_data');
+const configuration=JSON.parse(fs.readFileSync(path.join(__dirname,'../config.json'),'utf8'));
+const windowsKeyHelper=path.join(configuration.project,'.local/browser-dpapi.exe');
+const profileStore=new SecureBrowserData(path.join(base,'protected'),fs.existsSync(windowsKeyHelper)?dpapi(windowsKeyHelper):null);
 const now=()=>{const t=process.hrtime();return t[0]*1000+t[1]/1e6;};
 let owner=null,allowed=false,updated=0,generation=0,phase='idle',lastURL=null,frames=0;
 const gate={check:()=>({allowed:allowed&&now()-updated<1500})};
-const browser=new Browser({gate,mediaDisabled:false,binary:process.env.MGU_CHROMIUM,profileRoot:path.join(base,'profiles'),viewport:{width:1280,height:384},env:{HOME:process.env.HOME}});
+const browser=new Browser({gate,mediaDisabled:false,binary:process.env.MGU_CHROMIUM,profileRoot:path.join(base,'profiles'),profileStore,viewport:{width:1280,height:384},env:{HOME:process.env.HOME}});
 function status(){fs.writeFileSync(path.join(base,'service-state.json'),JSON.stringify({laptop:true,uid:process.getuid(),pid:process.pid,connected:!!owner,allowed:gate.check().allowed,phase,url:lastURL,frames,codec:browser.performance.codec}));}
 function stop(reason){allowed=false;browser.stop(reason);phase='idle';status();}
 browser.on('frame',frame=>{
@@ -51,6 +55,14 @@ const server=net.createServer(socket=>{
                 case 'clearTab':result=await browser.clearTab();break;
                 case 'mediaAction':result=await browser.mediaAction(m.action);break;
                 case 'mediaCapabilities':result=await browser.mediaCapabilities();break;
+                case 'privacyStatus':result=await browser.privacyStatus();break;
+                case 'privacyConfigure':result=await browser.privacyConfigure(m.prefs);break;
+                case 'vaultUnlock':try{result=await browser.vaultUnlock(m.password);}finally{m.password=null;}break;
+                case 'clearBrowserData':result=await browser.clearBrowserData(m.kind);break;
+                case 'vaultList':result=await browser.vaultList();break;
+                case 'vaultSave':result=await browser.vaultSave();break;
+                case 'vaultFill':result=await browser.vaultFill(m.loginId);break;
+                case 'vaultRemove':result=await browser.vaultRemove(m.loginId);break;
                 case 'mediaDemo':result=await require('./browser_media_demo')(browser);break;
                 case 'locale':result=await browser.setLocale(m.locale);break;
                 case 'wifiStatus':result={supported:false,mode:'laptop',connected:null,message:'Im Emulator wird die Internetverbindung des Laptops genutzt.'};break;

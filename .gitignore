@@ -21,6 +21,9 @@ node_modules/
 *.pfx
 *.mgu
 *.node
+*.exe
+*.dpapi
+protected/
 *.core
 core.*
 browser-state.json

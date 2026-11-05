@@ -29,6 +29,7 @@ Vor dem Start in PowerShell die eigenen Pfade konfigurieren:
 ```powershell
 $env:MGU_WSL_DISTRO = 'Debian'
 $env:MGU_SDK_PATH = 'C:\Projects\idrive7-apps'
+python tools/build_secret_helper.py
 powershell -NoProfile -File tools/emulator.ps1 Start
 ```
 
@@ -90,7 +91,8 @@ bestimmt**. Der Quellcode-Vorabstand enthält keinen universellen Fahrzeug-Insta
 
 Der Emulator synchronisiert App- und `src/`-Dateien regelmäßig in seine private
 Linux-Kopie. Änderungen laden die App neu; gemeinsame Backend-Änderungen starten
-zusätzlich das lokale Backend neu. Dabei endet die temporäre Browsersitzung.
+zusätzlich das lokale Backend neu. Dabei endet die aktive Browsersitzung;
+aktivierte verschlüsselte Sitzungen werden beim sauberen Beenden gesichert.
 Während einer Anmeldung deshalb keine unnötigen Quelländerungen vornehmen.
 
 ## Bedienung im Emulator
@@ -107,6 +109,9 @@ und den Browser bereit. Die Tests erzeugen jeweils eigene temporäre Sitzungen:
 
 - `test/emulator_input_smoke.js`: normale Texte, Groß-/Kleinschreibung,
   Sonderzeichen, Unicode und Felder mit eigener Keydown-PIN-Verarbeitung.
+- `test/emulator_storage_smoke.js`: verschlüsseltes Profil nach echtem Engine-Neustart,
+  persistente und Session-Cookies, Local Storage, HTTP-Cache, getrenntes Löschen
+  sowie Passwort-Speichern/-Ausfüllen/-Löschen mit eigenen Testdaten.
 - `test/emulator_backend_smoke.js`: IPC, Benutzerprüfung, echte Frames,
   Navigation, Tabs, Fokus/Heartbeat und Profilbereinigung. Der Test benötigt
   für getrennte Testbenutzer root; der Browser selbst bleibt unprivilegiert.

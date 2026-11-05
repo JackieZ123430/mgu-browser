@@ -1,5 +1,5 @@
 'use strict';
-// Independent Chromium targets share one engine and one temporary profile.
+// Independent Chromium targets share one engine and one active profile.
 const Policy=require('./url_policy');
 module.exports={
     async setLocale(locale){

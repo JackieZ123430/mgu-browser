@@ -4,11 +4,11 @@ Ein experimenteller Browser für BMW MGU / iDrive 7: eine native, mit dem
 iDrive-Controller bedienbare Oberfläche und eine getrennte Chromium-Engine
 für echtes HTML, CSS und JavaScript.
 
-**Entwicklungsstand: 0.8.1, 5. November 2026. Dieses Repository enthält einen
+**Entwicklungsstand: 0.9.0, 5. November 2026. Dieses Repository enthält einen
 Quellcode-Vorabstand, noch keine allgemein installierbare MGU-Store-Veröffentlichung.**
 Die aktuelle Oberfläche wird im lokalen SDK-App-Emulator entwickelt. Die auf
 einer Entwicklungs-Headunit erprobte ältere Version 0.6.1 belegt nicht, dass
-alle Funktionen von 0.8.1 bereits auf realer MGU-Hardware funktionieren.
+alle Funktionen von 0.9.0 bereits auf realer MGU-Hardware funktionieren.
 
 [English overview](README.en.md) · [Roadmap](docs/ROADMAP.md) ·
 [Entwicklung](docs/DEVELOPMENT.md) · [Architektur](docs/ARCHITECTURE.md) ·
@@ -122,7 +122,11 @@ die ganze Displayfläche, auch den Bereich der sonst sichtbaren Statusleiste.
 `object-fit: contain` erhält das vollständige Bild ohne Abschneiden. Bei
 abweichenden Seitenverhältnissen können Balken bleiben.
 
-Im Vollbild bleiben native iDrive-Aktionen verfügbar: Wiedergabe/Pause,
+Im Vollbild haben erkannte Website-Steuerungen Vorrang. Drehen/Drücken bedient
+dann die Seite; eine zweite Browser-Kontrollleiste wird nicht eingeblendet.
+Die Erkennung berücksichtigt HTML-Video-Controls und gängige beschriftete
+Player-Schaltflächen. Ungewöhnliche Player können weitere Anpassungen benötigen.
+Ohne eigene Website-Steuerung bleiben native Fallback-Aktionen verfügbar: Wiedergabe/Pause,
 zehn Sekunden zurück/vor, Stumm/Ton und Vollbild verlassen. Drehen wählt,
 Drücken aktiviert; links/rechts neigen spult. Die Bedienung erscheint bei
 Controller-Aktivität und bleibt bei Pause sichtbar.
@@ -145,8 +149,13 @@ Das ist kein Nachweis der Unterstützung jedes Abonnementdienstes.
 | Fahrzeuglautsprecher | Audio-Routing und hörbare Wiedergabe auf der MGU noch nicht bestätigt |
 | Geschützte Wiedergabe auf echter MGU | Nicht bestätigt; Laptop-Ergebnisse sind nicht auf die Headunit übertragbar |
 
-**Die produktive Headunit-Konfiguration in `backend/server.js` hält Medien
-weiterhin deaktiviert.** Diese Veröffentlichung ändert weder Fahrzeugcodierung
+**Die Headunit-Quellkonfiguration in `backend/server.js` aktiviert Medien jetzt
+mit `mediaDisabled: false`.** Damit entfallen die vom optionalen Sperrmodus
+ausgelöste Medien-CSP, das pauschale Abfangen von Media-Anfragen und die Sperre
+der Videoaktionen. Diese Quelländerung ist noch nicht auf der realen Headunit
+installiert oder dort getestet. Sie liefert keine fehlenden Codecs, keine
+Widevine-Komponente und keine BMW-Audio-Anbindung nach.
+Diese Veröffentlichung ändert weder Fahrzeugcodierung
 noch Firmware. Chrome, Widevine und SDK-Binaries werden nicht mitgeliefert und
 nicht in ein öffentliches `.mgu`-Paket kopiert.
 
@@ -159,9 +168,36 @@ Pipes, keinen öffentlich erreichbaren Debugging-Port. TLS-Prüfungen bleiben ak
 Ein nativer JPEG-Decoder überträgt gerenderte Frames an den SDK-Renderer.
 
 Fokusverlust beziehungsweise ein ausgefallener App-Heartbeat beendet die Sitzung.
-Die Chromium-Profile sind derzeit temporär: **Logins und Cookies gehen beim
-Schließen oder Neuladen verloren.** Verlauf und Lesezeichen sind dagegen
-eigene lokale App-Daten. Passwortverwaltung und dauerhafte Sitzungen sind offen.
+Aktive Chromium-Profile sind temporär; seit 0.9.0 können sie beim sauberen
+Beenden **verschlüsselt gesichert und beim nächsten Start wiederhergestellt**
+werden. „Angemeldet bleiben“ und „HTTP-Cache behalten“ sind getrennte,
+anfangs deaktivierte Einstellungen. Wiederhergestellt werden unter anderem
+Cookies einschließlich Session-Cookies, Local Storage und sonstiger Website-Speicher.
+Anbieter können eine Sitzung weiterhin ablaufen lassen oder erneut prüfen.
+
+Unter **Datenschutz & Logins** lassen sich Website-Daten mit Abmeldung,
+HTTP-Cache und App-Verlauf getrennt löschen; die Verlaufsaufzeichnung ist
+abschaltbar. Bekannte Token-/Anmeldeparameter werden aus Verlauf-URLs entfernt.
+Lesezeichen und App-Verlauf bleiben eigenständige lokale App-Daten.
+
+Die integrierte Passwortverwaltung bietet bewusst ausgelöstes Speichern aus
+einem ausgefüllten Formular, Ausfüllen auf exakt demselben HTTPS-Ursprung und
+Löschen einzelner Zugänge. Sie sendet das Anmeldeformular nicht automatisch ab
+und speichert keine Passwörter ungefragt. Seitenübergreifende oder mehrstufige
+Formulare und Frames benötigen weitere Arbeit.
+
+**Laptop:** Windows DPAPI schützt den lokalen Speicherschlüssel; Sitzungsarchiv
+und Passworttresor werden mit AES-256-GCM verschlüsselt.
+**MGU-Backend:** derselbe Speicher hat einen plattformunabhängigen
+Masterpasswort-Modus mit PBKDF2-SHA256, zufälligem Salt und 600.000 Iterationen.
+Das Masterpasswort wird maskiert eingerichtet und nach Backend-Neustart erneut
+zum Entsperren benötigt. Dieser Code ist für die Headunit vorgesehen, aber
+noch nicht auf deren realer Laufzeit qualifiziert.
+
+Die Sicherung ist auf 64 MiB Profildaten und 16 MiB je Datei begrenzt. Eigene
+Chromium-Passwort- und Verlaufsdatenbanken werden nicht archiviert. Ein harter
+Stromverlust oder Absturz kann Änderungen seit dem letzten sauberen Beenden
+verlieren; eine konsistente periodische Sicherung ist noch offen.
 Details: [Architektur](docs/ARCHITECTURE.md) und [Sicherheit](SECURITY.md).
 
 ## Entwicklung und Mitarbeit

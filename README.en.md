@@ -1,7 +1,7 @@
 # MGU Browser — English overview
 
 An experimental native browser UI for BMW MGU / iDrive 7, backed by a separate
-Chromium process. Version 0.8.1 is being developed in a local SDK app emulator.
+Chromium process. Version 0.9.0 is being developed in a local SDK app emulator.
 This is a **source preview, not a ready-to-install MGU-Store release**.
 
 The [full German README](README.md) describes features and verified limits.
@@ -27,9 +27,16 @@ Netflix currently fails before its password step. Disney+ login has reached the
 profile-PIN step and confirmed visible playback, fullscreen and controller
 play/pause in the laptop emulator. YouTube, Prime Video and
 Paramount+ require further qualification. Vehicle audio is also unconfirmed.
-The production head-unit backend still disables media.
+The head-unit backend source now enables media; this change is not installed or
+validated on real MGU hardware. It does not provide missing codecs, a CDM or audio routing.
 
-Browser profiles are temporary: closing/reloading loses cookies and logins.
+Version 0.9.0 adds opt-in encrypted session and HTTP-cache persistence, separate
+site/cache/history clearing, and an explicit origin-bound password manager.
+Windows DPAPI wraps the laptop key; the MGU backend has a portable master-password
+mode with PBKDF2-SHA256 and AES-256-GCM. Both share the same storage format and
+browser code. Real-MGU qualification is pending. Clean shutdown is required to
+save the latest state; sudden power loss is not fully covered. Website-provided
+video controls take precedence, with native controls used only as fallback.
 Proprietary SDK files, credentials, vehicle data, firmware dumps, CDMs and
 binary packages are excluded. An additional license for original project code
 has not yet been selected; third-party components retain their own licenses.

@@ -17,7 +17,13 @@ class FakeBrowser extends EventEmitter{
     async wifiReconnect(){}async mediaAction(action){this.calls.push('video-'+action);}
     async setLocale(locale){this.locale=locale;}
     async navigate(url){this.url=url;if(this.tabs[0])this.tabs.find(t=>t.active).url=url;this.emit('navigation',url);}
-    async request(op){assert.equal(op,'mediaCapabilities');return {mediaEnabled:true,widevine:true,h264:true,vp9:true};}
+    async request(op,args){
+        if(op==='privacyStatus')return this.privacy||{supported:true,locked:false,rememberSessions:false,rememberCache:false,protection:'Fixture protection'};
+        if(op==='privacyConfigure'){this.privacy=Object.assign(await this.request('privacyStatus'),args.prefs);return this.privacy;}
+        if(op==='vaultList')return [];
+        if(op==='vaultUnlock'){assert.equal(args.password,'w'.repeat(12));this.privacy.locked=false;this.privacy.needsSetup=false;return this.privacy;}
+        assert.equal(op,'mediaCapabilities');return {mediaEnabled:true,widevine:true,h264:true,vp9:true};
+    }
     async text(){}async key(){this.calls.push('web-key');}async tap(){}async scroll(delta){this.scrollDelta=delta;}
     async back(){this.calls.push('back');}async forward(){this.calls.push('forward');}async reload(){this.calls.push('reload');}
     async stopLoading(){}async resize(w,h){this.size=[w,h];}
@@ -58,6 +64,11 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     const passwordText='w'.repeat(8);assert(!JSON.stringify(frame).includes(passwordText),'Password must never enter renderer text');
     await press('wifi-connect');assert.deepEqual(browser.wifi,{ssid:'Test-Hotspot',password:passwordText});
     await press('wifi-back');await press('settings-done');
+    await press('settings');await press('privacy-settings');await press('remember-sessions');assert(browser.privacy.rememberSessions);
+    await press('remember-cache');assert(browser.privacy.rememberCache);await press('clear-history');assert(frame.targets.some(t=>t.key==='privacy-confirm'));await press('privacy-cancel');
+    await press('passwords');assert(frame.targets.some(t=>t.key==='vault-save'));await press('vault-back');
+    browser.privacy.locked=true;browser.privacy.needsSetup=true;tick();await press('vault-unlock');for(let i=0;i<12;i++)await press('key-0-1');assert(!JSON.stringify(frame).includes('w'.repeat(12)),'Master password must stay out of rendered text');await press('done');for(let i=0;i<12;i++)await press('key-0-1');await press('done');assert.equal(browser.privacy.locked,false);
+    await press('privacy-back');await press('settings-done');
     await press('settings');await press('streaming-settings');
     frame.targets.forEach(t=>assert(t.x>=0&&t.x+t.w<=1600,'Streaming control outside display'));
     await press('stream-2');assert.equal(browser.url,'https://www.disneyplus.com/');
@@ -75,6 +86,10 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     assert(Number.isFinite(browser.scrollDelta)&&browser.scrollDelta>0,'Released drag must retain its queued scroll delta');
     browser.emit('frame',{width:1280,height:380,rgba:Buffer.alloc(1280*380*4)});browser.emit('media',{fullscreen:true,paused:true,currentTime:10,duration:120});tick();
     await press('video-toggle');await press('video-forward');await press('video-exit');assert(browser.calls.includes('video-toggle')&&browser.calls.includes('video-forward')&&browser.calls.includes('video-exit'));
+    browser.emit('media',{fullscreen:true,hasSiteControls:true,paused:true});tick();
+    assert(!frame.targets.some(t=>t.key==='video-toggle'),'Website controls must suppress the native fallback overlay');
+    const keyCount=browser.calls.filter(c=>c==='web-key').length;await feed(1,0);await feed(0,1);await feed(0,0);
+    assert(browser.calls.filter(c=>c==='web-key').length>=keyCount+2,'Fullscreen website controls receive rotary Tab and press Enter');
     browser.emit('media',{fullscreen:false});tick();await press('close');
     assert(closed,'Close must leave the app MAIN state');assert.equal(browser.child,null,'Close must stop Chromium');
     console.log('SDK UI: tabs, URL keyboard, masked hotspot settings, fullscreen controls, target bounds and app close passed');

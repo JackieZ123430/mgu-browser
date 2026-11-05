@@ -29,12 +29,14 @@ class BrowserSession extends EventEmitter {
         try{fs.mkdirSync(this.options.profileRoot,0o700);}catch(e){if(e.code!=='EEXIST')throw e;}
         const profileStat=fs.lstatSync(this.options.profileRoot);
         if(!profileStat.isDirectory()||profileStat.isSymbolicLink()||profileStat.uid!==process.getuid())throw new Error('Profilordner gehört nicht dem Browser-Benutzer');
-        this.profile=fs.mkdtempSync(path.join(this.options.profileRoot,'session-'));
+        const profile=this.profile=fs.mkdtempSync(path.join(this.options.profileRoot,'session-'));
+        try{if(this.options.profileStore)await this.options.profileStore.restore(profile);this.requireAllowed();if(epoch!==this.epoch||this.profile!==profile)throw new Error('Browserstart abgebrochen');}catch(e){removeProfile(profile,this.options.profileRoot);if(this.profile===profile)this.profile=null;throw e;}
         const args=['--headless','--disable-gpu','--remote-debugging-pipe','--no-first-run','--no-default-browser-check','--lang='+this.locale,
             '--disable-sync','--disable-background-networking','--disable-extensions','--disable-component-update',
             '--disable-breakpad','--disable-dev-shm-usage','--disk-cache-size=16777216','--media-cache-size=8388608',
             '--window-size='+this.viewport.width+','+this.viewport.height,'--user-data-dir='+this.profile,'about:blank'];
         if(this.options.mediaDisabled)args.push('--disable-blink-features=WebCodecs');
+        if(this.options.profileStore&&this.options.profileStore.prefs.rememberSessions)args.push('--restore-last-session');
         // Browser/renderer sandbox stays enabled. No --no-sandbox, root browser,
         // insecure TLS flag, public debugging port or remote rendering backend.
         const child=cp.spawn(this.options.binary,args,{stdio:['ignore','ignore','pipe','pipe','pipe'],detached:true,env:Object.assign({},process.env,this.options.env||{})});
@@ -194,7 +196,7 @@ class BrowserSession extends EventEmitter {
             if(pipe&&!pipe.closed)pipe.send('Browser.close',{},null,2000).catch(()=>{});
             let exited=child.exitCode!==null||child.signalCode!==null;
             this.closing=new Promise(resolve=>{
-                const cleanup=()=>setTimeout(()=>{try{removeProfile(profile,this.options.profileRoot);}catch(e){this.emit('diagnostic','Profile cleanup failed: '+e.code);}resolve();},500);
+                const cleanup=()=>setTimeout(async()=>{try{if(this.options.profileStore)await this.options.profileStore.capture(profile);}catch(e){this.emit('diagnostic','Geschützte Sitzung konnte nicht gespeichert werden');}finally{try{removeProfile(profile,this.options.profileRoot);}catch(e){this.emit('diagnostic','Profile cleanup failed: '+e.code);}resolve();}},500);
                 if(exited)cleanup();else child.once('close',()=>{exited=true;cleanup();});
             });
             const timer=setTimeout(()=>{if(!exited&&child.pid){try{process.kill(-child.pid,'SIGTERM');}catch(e){try{child.kill('SIGTERM');}catch(ignore){}}}},2500);
@@ -206,6 +208,7 @@ class BrowserSession extends EventEmitter {
 }
 Object.assign(BrowserSession.prototype,require('./browser_pages'));
 Object.assign(BrowserSession.prototype,require('./browser_media'));
+Object.assign(BrowserSession.prototype,require('./browser_privacy'));
 // Node 8 has no recursive rm. Never follow links when clearing our temporary
 // profile, and accept only the direct session directory we created ourselves.
 function removeProfile(profile,root){

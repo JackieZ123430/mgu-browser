@@ -1,18 +1,21 @@
 'use strict';
 const fs=require('fs'),path=require('path'),Policy=require('./url_policy');
+function historyURL(url){try{const parsed=new (require('url').URL)(url);for(const key of Array.from(parsed.searchParams.keys()))if(/token|auth|password|session|serverstate|nonce|^state$|^code$|^pin$/i.test(key))parsed.searchParams.delete(key);if(/token|auth|password|session|code=/i.test(parsed.hash))parsed.hash='';return parsed.href;}catch(e){return '';}}
 class BrowserState{
     constructor(directory){
-        this.file=path.join(directory,'browser-state.json');this.data={homepage:'',autoHide:false,zoom:100,history:[],bookmarks:[]};
+        this.file=path.join(directory,'browser-state.json');this.data={homepage:'',autoHide:false,zoom:100,historyEnabled:true,history:[],bookmarks:[]};
         try{if(fs.statSync(this.file).size<524288)Object.assign(this.data,JSON.parse(fs.readFileSync(this.file,'utf8')));}catch(e){}
-        this.data.history=(Array.isArray(this.data.history)?this.data.history:[]).filter(i=>i&&Policy.allowed(i.url)).slice(0,120);
+        this.data.history=(Array.isArray(this.data.history)?this.data.history:[]).filter(i=>i&&Policy.allowed(i.url)).map(i=>Object.assign({},i,{url:historyURL(i.url)})).slice(0,120);
         this.data.bookmarks=(Array.isArray(this.data.bookmarks)?this.data.bookmarks:[]).filter(i=>i&&Policy.allowed(i.url)).slice(0,80);
         if(!Policy.allowed(this.data.homepage))this.data.homepage='';
         if([100,125,150].indexOf(this.data.zoom)<0)this.data.zoom=100;
     }
     save(){try{fs.writeFileSync(this.file+'.partial',JSON.stringify(this.data),{mode:0o600});fs.renameSync(this.file+'.partial',this.file);}catch(e){}}
-    set(key,value){if(['homepage','autoHide','zoom'].indexOf(key)<0)return;this.data[key]=value;this.save();}
+    set(key,value){if(['homepage','autoHide','zoom','historyEnabled'].indexOf(key)<0)return;this.data[key]=value;this.save();}
+    clearHistory(){this.data.history=[];this.save();}
     visit(url,title,count){
-        if(!Policy.allowed(url))return;
+        if(!Policy.allowed(url)||!this.data.historyEnabled)return;
+        url=historyURL(url);if(!url)return;
         const now=Date.now(),old=this.data.history.find(i=>i.url===url),entry=old||{url,count:0};
         if(!old||(count!==false&&now-old.at>2000))entry.count++;
         entry.at=now;if(title)entry.title=String(title).slice(0,140);

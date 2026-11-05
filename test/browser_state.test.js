@@ -11,6 +11,8 @@ test('browser preferences, bounded history and bookmarks survive reopening',()=>
         reopened.toggleBookmark('https://example.net/');assert(!new BrowserState(dir).bookmarked('https://example.net/'));
         for(let i=0;i<140;i++)s.visit('https://example.org/'+i,'Page '+i);assert.equal(s.data.history.length,120);
         s.visit('javascript:alert(1)','bad');assert.equal(s.data.history.length,120);
+        s.visit('https://example.org/login?serverState=fixture-private&lang=de#access_token=fixture','Login');assert.equal(s.data.history[0].url,'https://example.org/login?lang=de');
+        s.set('historyEnabled',false);s.clearHistory();s.visit('https://example.org/no-history','Private');assert.equal(s.data.history.length,0);assert.equal(new BrowserState(dir).data.historyEnabled,false);
     }finally{
         assert.equal(path.dirname(fs.realpathSync(dir)),fs.realpathSync(os.tmpdir()));assert(path.basename(dir).startsWith('mgu-browser-state-'));fs.rmSync(dir,{recursive:true});
     }

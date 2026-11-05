@@ -22,6 +22,9 @@ const until=async check=>{for(let i=0;!check()&&i<100;i++)await delay(100);asser
     const capabilities=await browser.mediaCapabilities();
     fs.writeFileSync(path.resolve(__dirname,'../.local/emulator/media-capabilities.json'),JSON.stringify(capabilities,null,2));
     await require('../src/browser_media_demo')(browser);await until(()=>media.fullscreen);
+    assert.equal(media.hasSiteControls,false,'Video without controls needs the native fallback');
+    await browser.send('Runtime.evaluate',{expression:'document.querySelector("video").controls=true'});await until(()=>media.hasSiteControls);
+    await browser.send('Runtime.evaluate',{expression:'document.querySelector("video").controls=false'});await until(()=>!media.hasSiteControls);
     const fit=await browser.send('Runtime.evaluate',{expression:'JSON.stringify((()=>{const v=document.querySelector("video"),r=v.getBoundingClientRect();return {fit:getComputedStyle(v).objectFit,width:r.width,height:r.height,viewportWidth:innerWidth,viewportHeight:innerHeight,videoWidth:v.videoWidth,videoHeight:v.videoHeight};})())',returnByValue:true});
     const rect=JSON.parse(fit.result.value);assert.equal(rect.fit,'contain');assert.equal(rect.width,rect.viewportWidth);assert.equal(rect.height,rect.viewportHeight);assert.equal(rect.videoWidth/rect.videoHeight,16/9);
     await browser.mediaAction('toggle');await until(()=>media.paused);

@@ -16,9 +16,15 @@ private Arbeitsverzeichnisse und lokale Git-Historie werden nicht übernommen.
 - Laptop-Emulator ausschließlich auf Loopback; kein automatischer Fahrzeugzugriff.
 
 Dies sind Implementierungsmerkmale, keine abgeschlossene externe Sicherheitsprüfung.
-Die Headunit-Integration, permanente Logins, Berechtigungsdialoge und
-Passwortverwaltung benötigen weitere Arbeit. URL-Schutz und temporäre Profile
+Die Headunit-Integration, Berechtigungsdialoge und die Hardware-Qualifikation
+des neuen Speichers benötigen weitere Arbeit. URL-Schutz und temporäre Profile
 sind kein Ersatz für vollständige Website-/Netzwerk-Isolation; Tabs teilen Cookies.
+
+0.9.0 bietet verschlüsselte opt-in Persistenz und einen getrennten Passworttresor.
+Windows DPAPI beziehungsweise ein Masterpasswort schützt den Archivschlüssel.
+Autofill ist an den exakten HTTPS-Ursprung gebunden und sendet kein Formular ab.
+Es gibt keine automatische Übernahme bereits verwendeter Passwörter. Siehe
+docs/ARCHITECTURE.md für Speichergrenzen und den noch offenen Stromverlust-Fall.
 
 Keine Geheimnisse, Lizenzantworten, Schlüsselmaterial, VINs oder Browserprofile
 in öffentliche Issues einstellen. Einen Fehler zunächst mit einer kleinen

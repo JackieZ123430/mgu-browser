@@ -18,6 +18,7 @@ mgu.run({async start(ctx){
     let media={fullscreen:false},mediaIndex=1,mediaUntil=0;
     let mediaCaps=null,mediaBusy=false;
     let wifiNetworks=[],wifiScanning=false,wifiScanError='',wifiOffset=0;
+    let privacyState=null,privacyBusy=false,logins=[],loginOffset=0,privacyConfirmation=null,vaultSetup='';
     const videoActions=['back','toggle','forward','mute','exit'];
     const browser=new Browser({gate});
     const locale=new BrowserLocale(ctx.app,language=>{if(serviceReady&&gate.check().allowed)safe(()=>browser.setLocale(language));});
@@ -52,12 +53,19 @@ mgu.run({async start(ctx){
         keyboard='text';panel=null;keyMode='abc';webMode=false;reading=false;activity();
         if(ctx.display)ctx.display.focusKey='tgt:key-0-0';
     }
-    function dismissKeyboard(){if(keyboard==='wifi-password')draft='';keyboard=null;replaceDraft=false;webMode=false;if(ctx.display)ctx.display.focusKey='tgt:urlbar';activity();}
+    function dismissKeyboard(){if(keyboard==='wifi-password'||String(keyboard).indexOf('vault-')===0){draft='';vaultSetup='';}keyboard=null;replaceDraft=false;webMode=false;if(ctx.display)ctx.display.focusKey='tgt:urlbar';activity();}
     async function type(value){
         activity();if(keyboard==='text')return browser.text(value);
         if(replaceDraft){draft='';replaceDraft=false;}draft=(draft+value).slice(0,2048);
     }
     async function finishKeyboard(){
+        if(String(keyboard).indexOf('vault-')===0){
+            if(draft.length<12){note('Masterpasswort benötigt mindestens 12 Zeichen');return;}
+            if(keyboard==='vault-create'){vaultSetup=draft;draft='';keyboard='vault-confirm';return;}
+            if(keyboard==='vault-confirm'&&draft!==vaultSetup){draft='';note('Masterpasswörter stimmen nicht überein');return;}
+            const secret=draft;draft='';vaultSetup='';keyboard=null;privacyBusy=true;
+            try{privacyState=await browser.request('vaultUnlock',{password:secret});note('Geschützter Speicher entsperrt');}finally{privacyBusy=false;}return;
+        }
         if(keyboard==='text'){dismissKeyboard();return browser.key('Enter');}
         if(keyboard==='wifi-ssid'||keyboard==='wifi-password'){
             if(keyboard==='wifi-ssid')wifiSSID=draft;else wifiPassword=draft;
@@ -75,7 +83,7 @@ mgu.run({async start(ctx){
         landing=true;webMode=false;currentURL='';title='';frame=null;if(browser.child)await browser.clearTab();loading=false;
     }
     async function closeApp(){
-        closing=true;pendingLaunch=false;keyboard=null;draft='';wifiPassword='';panel=null;frame=null;landing=true;loading=false;
+        closing=true;pendingLaunch=false;keyboard=null;draft='';vaultSetup='';wifiPassword='';panel=null;frame=null;landing=true;loading=false;
         await browser.stop('Browser geschlossen');await ui.close('MAIN');
     }
     function launch(){
@@ -138,6 +146,13 @@ mgu.run({async start(ctx){
         focus:d=>{showMedia();mediaIndex=(mediaIndex+d%videoActions.length+videoActions.length)%videoActions.length;},
         press:()=>{showMedia();safe(()=>browser.mediaAction(videoActions[mediaIndex]));}
     };
+    const siteMediaActions={
+        toolbar:()=>safe(()=>browser.mediaAction('exit')),
+        keyboard:()=>safe(()=>browser.key('ArrowRight')),
+        scroll:()=>safe(()=>browser.mediaAction('reveal')),
+        focus:d=>safe(async()=>{await browser.mediaAction('reveal');for(let n=0;n<Math.abs(d);n++)await browser.key('Tab',d<0);}),
+        press:()=>safe(()=>browser.key('Enter'))
+    };
     function focusUI(delta){
         const display=ctx.display,targets=display&&display.pageTargets||[];if(!targets.length)return;
         const index=targets.findIndex(t=>'tgt:'+t.key===display.focusKey);
@@ -154,7 +169,7 @@ mgu.run({async start(ctx){
         focus:focusUI,toolbar:()=>tiltUI('W'),keyboard:()=>tiltUI('E'),scroll:d=>tiltUI(d<0?'N':'S'),
         press:()=>{const display=ctx.display,target=display&&(display.pageTargets||[]).find(t=>'tgt:'+t.key===display.focusKey);if(target)safe(()=>target.run());}
     };
-    const actions=()=>media.fullscreen?mediaActions:webMode&&!keyboard&&!panel&&!landing&&browser.child?webActions:uiActions;
+    const actions=()=>media.fullscreen?(media.hasSiteControls?siteMediaActions:mediaActions):webMode&&!keyboard&&!panel&&!landing&&browser.child?webActions:uiActions;
     const controller=new Controller({focus:d=>actions().focus(d),toolbar:()=>actions().toolbar(),keyboard:()=>actions().keyboard(),scroll:d=>actions().scroll(d),press:()=>actions().press()});
     const input=v=>{if(!gate.check().allowed)return false;controller.feed(v);return true;};
     nativeBridge.setControllerHandler(input);ctx.controller.onInput(input);
@@ -200,6 +215,10 @@ mgu.run({async start(ctx){
         panel='streaming';keyboard=null;webMode=false;reading=false;activity();
         mediaCaps=await browser.request('mediaCapabilities');
     }
+    async function openPrivacy(){panel='privacy';keyboard=null;webMode=false;reading=false;privacyBusy=true;activity();try{privacyState=await browser.request('privacyStatus');}finally{privacyBusy=false;}}
+    async function changePrivacy(name){privacyBusy=true;try{const prefs={};prefs[name]=!privacyState[name];privacyState=await browser.request('privacyConfigure',{prefs});}finally{privacyBusy=false;}}
+    async function openPasswords(){panel='passwords';loginOffset=0;logins=await browser.request('vaultList');}
+    function confirmPrivacy(label,run,back){privacyConfirmation={label,run,back:back||'privacy'};panel='privacy-confirm';}
     function button(c,x,y,w,h,label,fn,key,options){
         const o=options||{},enabled=o.enabled!==false;
         if(!o.flat)c.roundRect(x,y,w,h,7,o.primary?'#315d84':C.field);
@@ -300,6 +319,7 @@ mgu.run({async start(ctx){
         c.text('Einstellungen',64,114,36,C.text);
         button(c,1170,79,364,42,'Internet / mobiler Hotspot',openNetwork,'network-settings');
         button(c,1170,139,364,42,'Medien & Streaming',openStreaming,'streaming-settings');
+        button(c,1170,199,364,42,'Datenschutz & Logins',openPrivacy,'privacy-settings');
         c.text('STARTSEITE',65,157,15,C.muted);
         const homeText=keyboard==='homepage'?draft:store.data.homepage;
         c.text((homeText||ascii('Keine feste Seite - haeufig besuchte Seiten anzeigen')).slice(0,keyboard?67:115),65,190,21,C.text,{literal:true});
@@ -314,6 +334,46 @@ mgu.run({async start(ctx){
         button(c,620,384,156,42,store.data.autoHide?'Ein':'Aus',()=>store.set('autoHide',!store.data.autoHide),'auto-hide');
         c.text('Controller nach links oder die kleine Leiste oben holt die Bedienung zurueck.',65,462,17,C.muted);
         if(!keyboard)button(c,1288,bottom-60,246,42,'Fertig',()=>{panel=null;webMode=false;if(ctx.display)ctx.display.focusKey='tgt:settings';activity();},'settings-done',{primary:true});
+    }
+    function drawPrivacy(c,bottom){
+        c.text('Datenschutz & Logins',64,114,34,C.text);
+        const enabled=!!privacyState&&privacyState.supported&&!privacyState.locked&&!privacyBusy;
+        c.text(privacyBusy?'Geschützter Speicher wird geprüft ...':privacyState&&privacyState.supported?privacyState.locked?'Masterpasswort: Speicher zuerst entsperren':privacyState.protection:'Geschützter Speicher in dieser Laufzeit nicht verfügbar',65,157,18,C.muted);
+        if(privacyState&&privacyState.supported&&privacyState.locked&&!keyboard)button(c,1170,178,364,42,privacyState.needsSetup?'Masterpasswort einrichten':'Speicher entsperren',()=>{keyboard=privacyState.needsSetup?'vault-create':'vault-unlock';draft='';vaultSetup='';replaceDraft=false;keyMode='abc';upper=false;},'vault-unlock');
+        c.text('Angemeldet bleiben',65,211,23,C.text);
+        button(c,850,178,294,42,privacyState&&privacyState.rememberSessions?'Ein':'Aus',()=>changePrivacy('rememberSessions'),'remember-sessions',{enabled});
+        c.text('HTTP-Cache behalten',65,268,23,C.text);
+        button(c,850,235,294,42,privacyState&&privacyState.rememberCache?'Ein':'Aus',()=>changePrivacy('rememberCache'),'remember-cache',{enabled});
+        c.text('Verlauf aufzeichnen',65,325,23,C.text);
+        button(c,850,292,294,42,store.data.historyEnabled?'Ein':'Aus',()=>store.set('historyEnabled',!store.data.historyEnabled),'remember-history');
+        button(c,64,354,390,42,'Website-Daten löschen / abmelden',()=>confirmPrivacy('Website-Daten löschen und alle Websites abmelden?',async()=>{privacyState=await browser.request('clearBrowserData',{kind:'sites'});landing=true;currentURL='';title='';}), 'clear-sites',{enabled});
+        button(c,470,354,290,42,'HTTP-Cache löschen',()=>confirmPrivacy('Gespeicherten HTTP-Cache löschen?',async()=>{privacyState=await browser.request('clearBrowserData',{kind:'cache'});}), 'clear-cache',{enabled});
+        button(c,776,354,290,42,'Verlauf löschen',()=>confirmPrivacy('Den lokalen Browser-Verlauf löschen?',async()=>store.clearHistory()),'clear-history');
+        button(c,1082,354,452,42,'Passwortverwaltung',openPasswords,'passwords',{enabled});
+        c.text('Speichern erfolgt beim Beenden. Ohne Sitzungen bleiben Logins nur bis zum Schließen.',65,439,17,C.muted);
+        button(c,1288,bottom-52,246,42,'Zurueck',()=>{panel='settings';},'privacy-back');
+    }
+    function drawPasswords(c,bottom){
+        c.text('Passwortverwaltung',64,114,34,C.text);
+        c.text('Speichern und Ausfüllen nur auf der passenden HTTPS-Seite. Keine automatische Anmeldung.',65,155,18,C.muted);
+        button(c,64,172,544,42,'Zugang aus aktuellem Formular speichern',async()=>{await browser.request('vaultSave');logins=await browser.request('vaultList');note('Zugang verschlüsselt gespeichert');},'vault-save',{enabled:!!browser.child});
+        if(!logins.length)c.text('Noch keine gespeicherten Zugänge',65,275,23,C.muted);
+        logins.slice(loginOffset,loginOffset+4).forEach((entry,i)=>{
+            const x=64+(i%2)*748,y=235+Math.floor(i/2)*88;c.roundRect(x,y,722,76,8,C.panel);
+            c.text(entry.origin.slice(0,34),x+14,y+29,20,C.text,{literal:true});
+            c.text(entry.username.slice(0,40),x+14,y+55,17,C.muted,{literal:true});
+            button(c,x+438,y+18,148,38,'Ausfüllen',async()=>{await browser.request('vaultFill',{loginId:entry.id});panel=null;enterPage();note('Zugang ausgefüllt');},'vault-fill-'+i,{enabled:!!browser.child});
+            button(c,x+596,y+18,112,38,'Löschen',()=>confirmPrivacy('Diesen gespeicherten Zugang löschen?',async()=>{await browser.request('vaultRemove',{loginId:entry.id});logins=await browser.request('vaultList');loginOffset=Math.max(0,Math.min(loginOffset,logins.length-1));},'passwords'),'vault-remove-'+i);
+        });
+        if(logins.length>4)button(c,64,bottom-52,246,42,'Weitere',()=>{loginOffset=loginOffset+4<logins.length?loginOffset+4:0;},'vault-next');
+        button(c,1288,bottom-52,246,42,'Zurueck',()=>{panel='privacy';},'vault-back');
+    }
+    function drawPrivacyConfirmation(c,bottom){
+        c.text('Löschen bestätigen',64,114,34,C.text);
+        c.text(privacyConfirmation.label,65,198,24,C.text);
+        c.text('Diese Aktion lässt sich nicht rückgängig machen.',65,247,20,C.muted);
+        button(c,64,310,320,44,'Abbrechen',()=>{panel=privacyConfirmation.back;privacyConfirmation=null;},'privacy-cancel');
+        button(c,410,310,320,44,'Löschen',async()=>{const request=privacyConfirmation;await request.run();panel=request.back;privacyConfirmation=null;note('Daten gelöscht');},'privacy-confirm');
     }
     function drawNetwork(c,bottom){
         c.text('Internet / mobiler Hotspot',64,114,34,C.text);
@@ -367,7 +427,7 @@ mgu.run({async start(ctx){
     }
     function drawKeyboard(c,bottom){
         const x=W-SIDE;c.fillRect(x,BAR,SIDE,bottom-BAR,C.panel);c.fillRect(x,BAR,1,bottom-BAR,C.line);
-        c.text(keyboard==='homepage'?'Startseite':keyboard==='url'?'Adresse oder Suche':keyboard==='wifi-ssid'?'WLAN-Name':keyboard==='wifi-password'||password?'Passwort eingeben':'Text eingeben',x+22,96,24,C.text);
+        c.text(String(keyboard).indexOf('vault-')===0?keyboard==='vault-confirm'?'Masterpasswort bestätigen':'Masterpasswort':keyboard==='homepage'?'Startseite':keyboard==='url'?'Adresse oder Suche':keyboard==='wifi-ssid'?'WLAN-Name':keyboard==='wifi-password'||password?'Passwort eingeben':'Text eingeben',x+22,96,24,C.text);
         button(c,x+SIDE-66,70,44,34,'X',dismissKeyboard,'keyboard-close',{flat:true});
         [['abc','ABC'],['123','123'],['symbols','#+=']].forEach((m,i)=>button(c,x+20+i*146,116,132,36,m[1],()=>{keyMode=m[0];},'mode-'+m[0],{primary:keyMode===m[0]}));
         button(c,x+458,116,122,36,upper?'AA':'Aa',()=>{upper=!upper;},'shift');
@@ -376,19 +436,22 @@ mgu.run({async start(ctx){
             const value=upper?(ch==='ß'?'ẞ':ch.toUpperCase()):ch;
             button(c,x+20+i*56+(10-row.length)*2,168+r*48,50,40,value,()=>type(value),'key-'+r+'-'+i);
         }));
-        if(keyboard!=='text')c.text(keyboard.indexOf('wifi-')===0?'WLAN-Daten werden nicht protokolliert.':replaceDraft?'Erstes Zeichen ersetzt die Adresse.':'HTTPS wird automatisch ergaenzt.',x+22,376,16,C.muted);
+        if(keyboard!=='text')c.text(keyboard.indexOf('vault-')===0?'*'.repeat(Math.min(draft.length,36)):keyboard.indexOf('wifi-')===0?'WLAN-Daten werden nicht protokolliert.':replaceDraft?'Erstes Zeichen ersetzt die Adresse.':'HTTPS wird automatisch ergaenzt.',x+22,376,16,C.muted);
         button(c,x+20,392,172,40,'Leerzeichen',()=>type(' '),'space');
         button(c,x+204,392,172,40,keyboard==='text'||keyboard.indexOf('wifi-')===0?'@':'.com',()=>type(keyboard==='text'||keyboard.indexOf('wifi-')===0?'@':'.com'),'suffix');
         button(c,x+388,392,192,40,'Loeschen',()=>{if(keyboard==='text')return browser.key('Backspace');if(replaceDraft){draft='';replaceDraft=false;}else draft=draft.slice(0,-1);},'delete');
         button(c,x+20,444,172,44,'Abbrechen',dismissKeyboard,'cancel');
-        button(c,x+204,444,376,44,starting?'Laedt ...':keyboard==='homepage'?'Speichern':keyboard==='text'||keyboard.indexOf('wifi-')===0?'Fertig':'Oeffnen',finishKeyboard,'done',{primary:true});
+        button(c,x+204,444,376,44,starting?'Laedt ...':keyboard==='homepage'?'Speichern':keyboard==='text'||keyboard.indexOf('wifi-')===0||keyboard.indexOf('vault-')===0?'Fertig':'Oeffnen',finishKeyboard,'done',{primary:true});
     }
     ctx.loop('MAIN',12,()=>{
         const cv=ctx.canvas(W,H).clear(C.bg),bottom=H+cv.extra;
         const hidden=media.fullscreen||(!landing&&!panel&&!keyboard&&webMode&&frame&&(reading||(store.data.autoHide&&Date.now()-lastAction>6500)));
         const top=hidden?0:BAR+TABS;tipLabels={};page=null;
         if(!hidden){toolbar(cv);tabstrip(cv);}
-        if(panel==='wifi-list')belowTabs(cv,()=>drawWifiList(cv,bottom-TABS));
+        if(panel==='privacy-confirm')belowTabs(cv,()=>drawPrivacyConfirmation(cv,bottom-TABS));
+        else if(panel==='passwords')belowTabs(cv,()=>drawPasswords(cv,bottom-TABS));
+        else if(panel==='privacy')belowTabs(cv,()=>drawPrivacy(cv,bottom-TABS));
+        else if(panel==='wifi-list')belowTabs(cv,()=>drawWifiList(cv,bottom-TABS));
         else if(panel==='streaming')belowTabs(cv,()=>drawStreaming(cv,bottom-TABS));
         else if(panel==='network')belowTabs(cv,()=>drawNetwork(cv,bottom-TABS));
         else if(panel==='settings')belowTabs(cv,()=>drawSettings(cv,bottom-TABS));
@@ -406,12 +469,12 @@ mgu.run({async start(ctx){
             cv.roundRect(12,8,60,28,9,'#202833');icon(cv,'more',42,22,C.text);
             cv.target(12,8,60,28,()=>{webMode=false;reading=false;activity();},'show-toolbar');tipLabels['show-toolbar']='Browserleiste anzeigen';
         }
-        if(media.fullscreen)drawVideoControls(cv,bottom);
+        if(media.fullscreen&&!media.hasSiteControls)drawVideoControls(cv,bottom);
         if(keyboard){cv.targets=cv.targets.filter(t=>t.y<BAR+TABS||t.x+t.w<=W-SIDE);belowTabs(cv,()=>drawKeyboard(cv,bottom-TABS));}
         if(panel==='network'&&!wifiBusy&&Date.now()-wifiPoll>2500){wifiPoll=Date.now();safe(refreshWifi);}
         const focused=ctx.display&&ctx.display.focusKey,focusedKey=focused&&focused.slice(0,4)==='tgt:'?focused.slice(4):'';
         const hint=Date.now()<toastUntil?toast:!webMode&&!keyboard&&!panel&&!landing&&tipLabels[focusedKey];
-        if(hint){const w=Math.min(W-32,ascii(hint).length*10+42);cv.roundRect((W-w)/2,bottom-42,w,31,8,'#253243');cv.text(ascii(hint),(W-w)/2+20,bottom-20,17,C.text);}
+        if(hint&&!media.fullscreen){const w=Math.min(W-32,ascii(hint).length*10+42);cv.roundRect((W-w)/2,bottom-42,w,31,8,'#253243');cv.text(ascii(hint),(W-w)/2+20,bottom-20,17,C.text);}
         cv.scroll=false;return ui.image('MAIN_GFX',cv);
     });
     process.once('exit',()=>{locale.close();browser.destroy();});

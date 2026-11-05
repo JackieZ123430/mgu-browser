@@ -3,6 +3,8 @@ const fs=require('fs'),net=require('net'),path=require('path');
 const Channel=require('./ipc_protocol'),Browser=require('./browser_session'),peer=require('./peer_uid.node');
 const networkProbe=require('./network_probe');
 const wifi=require('./wifi_control');
+const {SecureBrowserData}=require('./secure_browser_data');
+const profileStore=new SecureBrowserData('/var/opt/mgu-browser/data/protected');
 const SOCKET='/var/opt/mgu-browser/data/backend.sock';
 let owner=null,allowed=false,updated=0,generation=0;
 let phase='idle';
@@ -12,7 +14,7 @@ let lastNetworkProbe=0;
 function status(){fs.writeFileSync('/var/opt/mgu-browser/data/service-state.json',JSON.stringify({uid:process.getuid(),connected:!!owner,allowed,generation,phase,pid:process.pid}));}
 const now=()=>{const t=process.hrtime();return t[0]*1000+t[1]/1e6;};
 const gate={onBlock:null,check(){return {allowed:allowed&&now()-updated>=0&&now()-updated<1500};}};
-const browser=new Browser({gate,mediaDisabled:true,binary:'/var/opt/mgu-browser/engine/browser-launch',profileRoot:'/var/opt/mgu-browser/data/profiles',viewport:{width:1280,height:384},env:{HOME:'/var/opt/mgu-browser/data',FONTCONFIG_FILE:'/var/opt/mgu-browser/engine/fonts.conf',CHROME_DEVEL_SANDBOX:'/var/opt/mgu-browser/engine/chrome-sandbox'}});
+const browser=new Browser({gate,mediaDisabled:false,binary:'/var/opt/mgu-browser/engine/browser-launch',profileRoot:'/var/opt/mgu-browser/data/profiles',profileStore,viewport:{width:1280,height:384},env:{HOME:'/var/opt/mgu-browser/data',FONTCONFIG_FILE:'/var/opt/mgu-browser/engine/fonts.conf',CHROME_DEVEL_SANDBOX:'/var/opt/mgu-browser/engine/chrome-sandbox'}});
 function stop(reason){allowed=false;browser.stop(reason);phase='idle';status();}
 browser.on('frame',frame=>{
     if(!owner||!gate.check().allowed||(owner.socket.writableLength||owner.socket.bufferSize||0)>2*1024*1024)return;
@@ -67,6 +69,14 @@ const server=net.createServer(socket=>{
                 case 'clearTab':result=await browser.clearTab();break;
                 case 'mediaAction':result=await browser.mediaAction(message.action);break;
                 case 'mediaCapabilities':result=await browser.mediaCapabilities();break;
+                case 'privacyStatus':result=await browser.privacyStatus();break;
+                case 'privacyConfigure':result=await browser.privacyConfigure(message.prefs);break;
+                case 'vaultUnlock':try{result=await browser.vaultUnlock(message.password);}finally{message.password=null;}break;
+                case 'clearBrowserData':result=await browser.clearBrowserData(message.kind);break;
+                case 'vaultList':result=await browser.vaultList();break;
+                case 'vaultSave':result=await browser.vaultSave();break;
+                case 'vaultFill':result=await browser.vaultFill(message.loginId);break;
+                case 'vaultRemove':result=await browser.vaultRemove(message.loginId);break;
                 case 'locale':result=await browser.setLocale(message.locale);break;
                 case 'wifiStatus':result=await wifi({op:'status'});break;
                 case 'wifiConnect':result=await wifi({op:'connect',ssid:message.ssid,password:message.password});message.password=null;break;
@@ -89,4 +99,5 @@ setInterval(()=>{
     let state;try{state=JSON.parse(fs.readFileSync('/var/opt/mgu-browser/network-status.json','utf8'));}catch(e){return;}
     if(state.connected&&(state.updated!==lastNetworkStamp||((!lastNetwork||!lastNetwork.https)&&now()-lastNetworkProbe>15000))){lastNetworkStamp=state.updated;lastNetworkProbe=now();networkProbe().then(result=>{lastNetwork=result;fs.writeFileSync('/var/opt/mgu-browser/data/network-status.json',JSON.stringify(result));if(owner)owner.json({event:'network',value:result});});}
 },2000);
-for(const sig of ['SIGTERM','SIGINT'])process.on(sig,()=>{stop('Backend beendet');server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),3000).unref();});
+let shuttingDown=false;
+for(const sig of ['SIGTERM','SIGINT'])process.on(sig,async()=>{if(shuttingDown)return;shuttingDown=true;stop('Backend beendet');if(owner)owner.socket.destroy();server.close();const timeout=setTimeout(()=>process.exit(0),18000);timeout.unref();await browser.closing;process.exit(0);});

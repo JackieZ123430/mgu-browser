@@ -78,29 +78,31 @@ werden nicht Teil von App-Paketen oder Testberichten.
 - [ ] Erst danach installierbare Releases veröffentlichen; kein ungeprüftes
   Paket oder Store-Katalog wird als fertige Veröffentlichung angeboten.
 
-## 6. Dauerhafte Anmeldungen und Passwortverwaltung — nächster Arbeitsbereich
+## 6. Dauerhafte Anmeldungen und Passwortverwaltung — Stand 0.9.0
 
 Cookies beziehungsweise gültige Sitzungstoken können Anmeldungen erhalten;
 der Browserverlauf allein kann das nicht. Cache beschleunigt erneute Aufrufe,
 ersetzt aber weder eine Anmeldung noch eine vom Anbieter verlangte erneute Prüfung.
 
-- [ ] Dauerhafte Sitzungen ausdrücklich aktivieren und deaktivieren können.
-- [ ] Cookies/Website-Daten, Cache und Verlauf getrennt verwalten und löschen.
+- [x] Dauerhafte Sitzungen ausdrücklich aktivieren und deaktivieren können, lokal getestet.
+- [x] Cookies/Website-Daten, HTTP-Cache und Verlauf getrennt verwalten und löschen.
 - [ ] Privatmodus beziehungsweise eine temporäre Sitzung ohne Übernahme anbieten.
 - [ ] Speicherverbrauch des Caches begrenzen und Offline-/Neuladeverhalten erklären.
-- [ ] Passwortverwaltung mit geeignetem geschütztem Speicher und klaren
-  Aktionen zum Speichern, Ausfüllen und Löschen entwickeln.
-- [ ] Zugangsdaten streng an den HTTPS-Ursprung binden und keine Geheimnisse
+- [x] Passwortverwaltung mit geschütztem Speicher und ausdrücklichen
+  Aktionen zum Speichern, Ausfüllen und Löschen implementieren und lokal testen.
+- [x] Zugangsdaten streng an den HTTPS-Ursprung binden und keine Geheimnisse
   im Renderer, Verlauf, Diagnoseausgaben oder Repository speichern.
-- [ ] Laptop-Speicher und verfügbare Schutzmechanismen der MGU getrennt prüfen;
-  ohne geeigneten Schutz keine automatische Klartext-Passwortablage vorsehen.
+- [x] Windows-DPAPI-Adapter und plattformunabhängigen Masterpasswort-Modus implementieren.
+- [ ] Masterpasswort-Modus, Speicherbedarf und Entsperrzeiten auf echter MGU qualifizieren.
+- [ ] Konsistente periodische Sicherung für Absturz und plötzlichen Stromverlust entwickeln.
+- [ ] Erweiterte mehrstufige Anmeldungen und Autofill in Frames unterstützen.
 
 ## 7. Weitere Browserfunktionen
 
 - [ ] Bewusste, geschützte Speicherung und Löschung von Cookies/Logins evaluieren.
 - [ ] Website-Datenverwaltung mit verständlichen Löschfunktionen.
 - [ ] Download-Verhalten und zulässige Speicherorte definieren.
-- [ ] Passwortverwaltung nur mit geeignetem Schutz und klarer Benutzerkontrolle.
+- [ ] Passwortverwaltung weiter verfeinern, unter anderem manuelles Sperren und mehrere Kontenabläufe.
 - [ ] Bessere Lesezeichenverwaltung, Suche im Verlauf und Tab-Wiederherstellung.
 - [ ] Berechtigungsdialoge für Mikrofon, Kamera und andere Website-Funktionen
   entwerfen, bevor entsprechende Schnittstellen angeboten werden.

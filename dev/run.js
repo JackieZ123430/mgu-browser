@@ -53,7 +53,7 @@ async function main(){
         if(stopping)return;stopping=true;clearInterval(poll);ctl.close();
         const children=[emulator,backend].filter(Boolean);
         for(const child of children)if(child.exitCode===null)child.kill('SIGTERM');
-        await Promise.race([Promise.all(children.map(child=>child.exitCode!==null||child.signalCode!==null?Promise.resolve():new Promise(r=>child.once('exit',r)))),new Promise(r=>setTimeout(r,6500))]);
+        await Promise.race([Promise.all(children.map(child=>child.exitCode!==null||child.signalCode!==null?Promise.resolve():new Promise(r=>child.once('exit',r)))),new Promise(r=>setTimeout(r,18000))]);
         for(const child of children)if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');
         for(const file of [control,browserSocket])try{fs.unlinkSync(file);}catch(e){}
         process.exit(0);

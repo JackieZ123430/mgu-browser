@@ -13,6 +13,21 @@ const en={
  ,'WLAN-Netze suchen':'Scan Wi-Fi networks','WLAN-Netze in der Umgebung':'Nearby Wi-Fi networks','WLAN-Netze werden gesucht ...':'Scanning Wi-Fi networks ...','Keine sichtbaren WLAN-Netze gefunden':'No visible Wi-Fi networks found','Netz auswählen, danach das Passwort eingeben.':'Select a network, then enter its password.','Gesichert':'Secured','Offen':'Open','Erneut suchen':'Scan again'
 };
 const de={'gueltige':'gültige','auswaehlen':'auswählen','pruefen':'prüfen','Zurueck':'Zurück','Vorwaerts':'Vorwärts','schliessen':'schließen','Haeufig':'Häufig','haeufig':'häufig','Waehle':'Wähle','waehlt':'wählt','Druecken':'Drücken','bestaetigt':'bestätigt','oeffnen':'öffnen','zurueck':'zurück','geschuetzten':'geschützten','ergaenzt':'ergänzt','Loeschen':'Löschen','Laedt':'Lädt','Oeffnen':'Öffnen'};
+Object.assign(en,{
+ 'Datenschutz & Logins':'Privacy & sign-ins','Angemeldet bleiben':'Keep signed in','HTTP-Cache behalten':'Keep HTTP cache','Verlauf aufzeichnen':'Record history',
+ 'Website-Daten löschen / abmelden':'Clear site data / sign out','HTTP-Cache löschen':'Clear HTTP cache','Verlauf löschen':'Clear history','Passwortverwaltung':'Password manager',
+ 'Geschützter Speicher wird geprüft ...':'Checking protected storage ...','Geschützter Speicher in dieser Laufzeit nicht verfügbar':'Protected storage is unavailable in this runtime',
+ 'Masterpasswort: Speicher zuerst entsperren':'Master password: unlock storage first','Masterpasswort einrichten':'Set up master password','Speicher entsperren':'Unlock storage',
+ 'Speichern erfolgt beim Beenden. Ohne Sitzungen bleiben Logins nur bis zum Schließen.':'Data is saved on exit. Without saved sessions, sign-ins end when the browser closes.',
+ 'Speichern und Ausfüllen nur auf der passenden HTTPS-Seite. Keine automatische Anmeldung.':'Save and fill only on the matching HTTPS site. Sign-in is not submitted automatically.',
+ 'Zugang aus aktuellem Formular speichern':'Save login from the current form','Noch keine gespeicherten Zugänge':'No saved logins yet','Ausfüllen':'Fill','Löschen':'Delete',
+ 'Website-Daten löschen und alle Websites abmelden?':'Clear site data and sign out of all websites?','Gespeicherten HTTP-Cache löschen?':'Clear the saved HTTP cache?',
+ 'Den lokalen Browser-Verlauf löschen?':'Clear local browser history?','Diesen gespeicherten Zugang löschen?':'Delete this saved login?',
+ 'Löschen bestätigen':'Confirm deletion','Diese Aktion lässt sich nicht rückgängig machen.':'This action cannot be undone.','Daten gelöscht':'Data cleared',
+ 'Masterpasswort':'Master password','Masterpasswort bestätigen':'Confirm master password','Masterpasswort benötigt mindestens 12 Zeichen':'The master password needs at least 12 characters',
+ 'Masterpasswörter stimmen nicht überein':'Master passwords do not match','Geschützter Speicher entsperrt':'Protected storage unlocked',
+ 'Zugang verschlüsselt gespeichert':'Login saved encrypted','Zugang ausgefüllt':'Login filled'
+});
 function normalize(value){const s=String(value||'').replace(/_/g,'-');return /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$/.test(s)?s:'en-GB';}
 class BrowserLocale{
     constructor(app,changed){

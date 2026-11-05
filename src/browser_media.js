@@ -1,7 +1,7 @@
 'use strict';
 // Fixed expressions only: no page-provided scripts, selectors or input values.
-const locate='const f=document.fullscreenElement,v=f&&(f.tagName==="VIDEO"?f:f.querySelector("video"));';
-const snapshot='JSON.stringify((()=>{'+locate+'return {fullscreen:!!v,paused:v?!!v.paused:true,muted:v?!!v.muted:false,currentTime:v&&Number.isFinite(v.currentTime)?v.currentTime:0,duration:v&&Number.isFinite(v.duration)?v.duration:0};})())';
+const locate='const f=document.fullscreenElement,vs=f?(f.tagName==="VIDEO"?[f]:Array.from(f.querySelectorAll("video"))):[],v=vs.find(e=>e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0)||vs[0];';
+const snapshot='JSON.stringify((()=>{'+locate+'const buttons=f?Array.from(f.querySelectorAll("button,[role=button]")):[],mediaButtons=buttons.filter(b=>/play|pause|wiederg|abspiel|mute|stumm|fullscreen|vollbild|seek|rewind|forward/i.test([b.getAttribute("aria-label"),b.title,b.getAttribute("data-testid")].join(" "))),hasSiteControls=!!v&&(v.controls||mediaButtons.length>=2||(mediaButtons.length>0&&!!f.querySelector("input[type=range],[role=slider]")));return {fullscreen:!!v,hasSiteControls,paused:v?!!v.paused:true,muted:v?!!v.muted:false,currentTime:v&&Number.isFinite(v.currentTime)?v.currentTime:0,duration:v&&Number.isFinite(v.duration)?v.duration:0};})())';
 const fitScript='document.addEventListener("fullscreenchange",()=>{if(document.getElementById("mgu-video-fit"))return;const s=document.createElement("style");s.id="mgu-video-fit";s.textContent=":fullscreen video,video:fullscreen{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;object-position:center!important;transform:none!important;}";document.documentElement.appendChild(s);});';
 module.exports={
     installVideoFit(session){return this.pipe.send('Page.addScriptToEvaluateOnNewDocument',{source:fitScript},session);},
@@ -21,6 +21,7 @@ module.exports={
     },
     async mediaAction(action){
         this.requireAllowed();
+        if(action==='reveal')return this.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:this.viewport.width/2,y:Math.max(1,this.viewport.height-50)});
         const actions={toggle:'if(v.paused)await v.play();else v.pause();',back:'v.currentTime=Math.max(0,v.currentTime-10);',forward:'const end=Number.isFinite(v.duration)?v.duration:v.seekable.length?v.seekable.end(v.seekable.length-1):v.currentTime;v.currentTime=Math.max(0,Math.min(Math.max(0,end-0.05),v.currentTime+10));',mute:'v.muted=!v.muted;',exit:'await document.exitFullscreen();'};
         if(!Object.prototype.hasOwnProperty.call(actions,action))throw new Error('Unbekannte Videoaktion');
         if(this.options.mediaDisabled&&action!=='exit')throw new Error('Medienwiedergabe ist derzeit deaktiviert');
