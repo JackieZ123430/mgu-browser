@@ -1,0 +1,34 @@
+'use strict';
+// Separate real Chromium instance. Generates its own silent, unencrypted test clip.
+const fs=require('fs'),path=require('path'),assert=require('assert');
+if(process.platform!=='linux'||process.getuid()===0)throw new Error('Run as mgu-dev in WSL');
+const base='/home/mgu-dev/bmw-emulator',Browser=require(base+'/backend/browser_session');
+const profileRoot=fs.mkdtempSync(base+'/data/media-test-');let media={};
+const config=JSON.parse(fs.readFileSync(base+'/config.json','utf8'));
+const browser=new Browser({gate:{check:()=>({allowed:true})},mediaDisabled:false,binary:config.chromium,profileRoot,viewport:{width:1280,height:480}});
+browser.on('media',s=>media=s);browser.on('fault',e=>console.error(e.message));
+const delay=ms=>new Promise(r=>setTimeout(r,ms));
+const until=async check=>{for(let i=0;!check()&&i<100;i++)await delay(100);assert(check(),'Expected video state not reached');};
+(async()=>{try{
+    await browser.setLocale('de-DE');await browser.start('https://example.org/');
+    const language=await browser.send('Runtime.evaluate',{expression:'navigator.language',returnByValue:true});assert.equal(language.result.value,'de-DE');
+    await browser.setLocale('en-GB');
+    const english=await browser.send('Runtime.evaluate',{expression:'navigator.language',returnByValue:true});assert.equal(english.result.value,'en-GB');
+    const first=browser.activeTab;
+    await browser.send('Runtime.evaluate',{expression:'window.tabMarker="preserved"'});
+    await browser.newTab('https://example.org/');const second=browser.activeTab;
+    await browser.selectTab(first);const marker=await browser.send('Runtime.evaluate',{expression:'window.tabMarker',returnByValue:true});assert.equal(marker.result.value,'preserved','Switching must retain JS/page state');
+    await browser.closeTab(second);
+    const capabilities=await browser.mediaCapabilities();
+    fs.writeFileSync(path.resolve(__dirname,'../.local/emulator/media-capabilities.json'),JSON.stringify(capabilities,null,2));
+    await require('../src/browser_media_demo')(browser);await until(()=>media.fullscreen);
+    const fit=await browser.send('Runtime.evaluate',{expression:'JSON.stringify((()=>{const v=document.querySelector("video"),r=v.getBoundingClientRect();return {fit:getComputedStyle(v).objectFit,width:r.width,height:r.height,viewportWidth:innerWidth,viewportHeight:innerHeight,videoWidth:v.videoWidth,videoHeight:v.videoHeight};})())',returnByValue:true});
+    const rect=JSON.parse(fit.result.value);assert.equal(rect.fit,'contain');assert.equal(rect.width,rect.viewportWidth);assert.equal(rect.height,rect.viewportHeight);assert.equal(rect.videoWidth/rect.videoHeight,16/9);
+    await browser.mediaAction('toggle');await until(()=>media.paused);
+    await browser.mediaAction('forward');await until(()=>media.currentTime>=9);
+    await browser.mediaAction('forward');assert(media.fullscreen,'Seeking beyond the clip must not escape fullscreen');
+    await browser.mediaAction('back');await until(()=>media.currentTime<2);
+    await browser.mediaAction('mute');await until(()=>!media.muted);
+    await browser.mediaAction('exit');await until(()=>!media.fullscreen);
+    console.log('Actual Chromium: system locale changes, tab page-state retention, generated video, fullscreen containment, pause/seek/mute/exit passed');
+}finally{browser.destroy();await browser.closing;assert.equal(path.dirname(profileRoot),base+'/data');fs.rmSync(profileRoot,{recursive:true,force:true});}})().catch(e=>{console.error(e.stack);process.exitCode=1;});

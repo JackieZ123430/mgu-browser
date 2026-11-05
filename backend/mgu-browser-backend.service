@@ -1,0 +1,24 @@
+[Unit]
+Description=Owner native browser backend (prototype)
+After=persistency-fs.target mgu-browser-wifi.service
+Wants=persistency-fs.target mgu-browser-wifi.service
+
+[Service]
+Type=simple
+ExecStart=/var/opt/mgu-browser/backend/backend-launch
+Restart=no
+KillMode=control-group
+TimeoutStopSec=5
+MemoryAccounting=yes
+MemoryLimit=768M
+CPUAccounting=yes
+CPUQuota=200%
+CPUShares=128
+Nice=10
+TasksMax=256
+OOMScoreAdjust=500
+Environment=HOME=/var/opt/mgu-browser/data
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

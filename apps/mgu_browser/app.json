@@ -1,0 +1,14 @@
+{
+  "id":"mgu_browser",
+  "title":"Browser",
+  "description":"Browser mit Startseite, Verlauf, Lesezeichen und iDrive-Steuerung",
+  "version":"0.8.1",
+  "vendor":"custom",
+  "loggingId":"OA9B",
+  "maxDiskUsage":268435456,
+  "iconGlyph":"WEB",
+  "signals":{},
+  "screens":[{"name":"MAIN","kind":"canvas","title":" ","bar":false,"buttons":[["BTN_OPEN","Startseite öffnen"],["BTN_BACK","Zurück"],["BTN_STOP","Schließen"]]}],
+  "settings":[],
+  "config":{}
+}

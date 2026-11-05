@@ -1,0 +1,27 @@
+.runtime/
+.build/
+.local/
+__pycache__/
+*.pyc
+browser-capabilities.json
+browser-assessment.json
+logs/
+dist/
+
+# Private external SDK, browser profiles, credentials and local outputs
+kit/
+oap-sdk/
+node_modules/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.mgu
+*.node
+*.core
+core.*
+browser-state.json
+*.profile

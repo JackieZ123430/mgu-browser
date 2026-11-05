@@ -1,0 +1,17 @@
+[Unit]
+Description=Owner browser WLAN startup
+After=persistency-fs.target wpa_supplicant.service
+Wants=persistency-fs.target wpa_supplicant.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /var/opt/mgu-browser/network/control.js
+Group=3911
+RuntimeDirectory=mgu-browser-wifi
+RuntimeDirectoryMode=0750
+TimeoutStartSec=75
+Nice=10
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

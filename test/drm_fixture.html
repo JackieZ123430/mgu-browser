@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8"><title>BMW Browser · Widevine-Test</title>
+<style>body{margin:20px;background:#101823;color:#eef4ff;font:18px sans-serif}h1{font-size:26px}video{width:960px;height:540px;object-fit:contain;background:#000}pre{white-space:pre-wrap;font:16px monospace}</style>
+<h1>BMW Browser · geschützte Testwiedergabe</h1>
+<video id="video" controls muted></video><pre id="status">Widevine wird geprüft …</pre>
+<script src="/shaka-player.compiled.js"></script>
+<script>
+window.drmResult={phase:'initializing',licenseResponses:0,encryptedEvents:0};
+const video=document.getElementById('video'),status=document.getElementById('status');
+video.addEventListener('encrypted',()=>drmResult.encryptedEvents++);
+async function start(){
+  shaka.polyfill.installAll();const player=window.testPlayer=new shaka.Player();await player.attach(video);
+  player.addEventListener('error',e=>{drmResult.error={code:e.detail.code,category:e.detail.category};});
+  player.configure({drm:{servers:{'com.widevine.alpha':'https://cwip-shaka-proxy.appspot.com/no_auth'}},abr:{enabled:false},restrictions:{maxHeight:360},streaming:{bufferingGoal:12}});
+  player.getNetworkingEngine().registerResponseFilter(type=>{if(type===shaka.net.NetworkingEngine.RequestType.LICENSE)drmResult.licenseResponses++;});
+  await player.load('https://storage.googleapis.com/shaka-demo-assets/sintel-widevine/dash.mpd');
+  video.currentTime=12;await video.play();drmResult.phase='playing';
+}
+start().catch(e=>{drmResult.phase='failed';drmResult.error={code:e.code||e.name,category:e.category||null};});
+setInterval(()=>{
+  Object.assign(drmResult,{time:video.currentTime,decodedFrames:video.webkitDecodedFrameCount||0,width:video.videoWidth,height:video.videoHeight,mediaKeys:!!video.mediaKeys,keyStatuses:window.testPlayer?Object.values(testPlayer.getKeyStatuses()):[]});
+  status.textContent=JSON.stringify(drmResult,null,2);
+},250);
+</script>

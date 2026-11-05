@@ -1,0 +1,418 @@
+'use strict';
+const nativeBridge=require('./native_image_bridge');nativeBridge.install();
+const mgu=require('./kit/mgu'),{setImage}=require('./kit/record');
+const Gate=require('./visibility_gate'),Browser=require('./browser_client'),Controller=require('./browser_controller');
+const {BrowserState,inputURL}=require('./browser_state'),icon=require('./browser_icons'),installLayout=require('./browser_layout');
+const {BrowserLocale}=require('./browser_locale');
+const W=1600,H=520,IMAGE=700,BAR=58,TABS=42,SIDE=600;
+const C={bg:'#11151b',bar:'#181d25',field:'#252d38',panel:'#1b222c',line:'#343e4c',text:'#f4f6f9',muted:'#a2afc0',accent:'#78bfff'};
+const displayURL=value=>String(value||'').replace(/^https:\/\//,'').split(/[?#]/)[0];
+mgu.run({async start(ctx){
+    const {ui,log}=ctx,store=new BrowserState(ctx.dataDir),gate=new Gate();
+    installLayout(ctx.display);
+    let frame=null,page=null,currentURL='',title='',webMode=false,landing=true,panel=null,keyboard=null,draft='',replaceDraft=false;
+    let keyMode='abc',upper=false,starting=false,loading=false,canBack=false,canForward=false,serviceReady=false,pendingLaunch=true;
+    let closing=false,wasVisible=false,reading=false,lastAction=Date.now(),toast='',toastUntil=0,resized='',listTab='frequent',listOffset=0;
+    let editable=false,password=false,tipLabels={};
+    let tabs=[],activeTab='',wifiState={},wifiSSID='',wifiPassword='',wifiBusy=false,wifiInternet=null,wifiPoll=0;
+    let media={fullscreen:false},mediaIndex=1,mediaUntil=0;
+    let mediaCaps=null,mediaBusy=false;
+    let wifiNetworks=[],wifiScanning=false,wifiScanError='',wifiOffset=0;
+    const videoActions=['back','toggle','forward','mute','exit'];
+    const browser=new Browser({gate});
+    const locale=new BrowserLocale(ctx.app,language=>{if(serviceReady&&gate.check().allowed)safe(()=>browser.setLocale(language));});
+    const ascii=s=>locale.text(s);
+    const makeCanvas=ctx.canvas.bind(ctx);
+    ctx.canvas=(w,h)=>{
+        const canvas=makeCanvas(w,h);
+        if(!canvas.browserTextLocalized){
+            const text=canvas.text.bind(canvas);
+            canvas.text=(value,x,y,size,color,options)=>text(options&&options.literal?String(value):locale.text(value),x,y,size,color,options);
+            canvas.browserTextLocalized=true;
+        }
+        return canvas;
+    };
+    const activity=()=>{lastAction=Date.now();};
+    const note=message=>{toast=message;toastUntil=Date.now()+3300;};
+    const safe=task=>Promise.resolve().then(typeof task==='function'?task:()=>task).catch(e=>{note(e.message);log.warn(e.message);});
+    async function navigate(value){
+        const url=inputURL(value);if(!url){note('Bitte eine gueltige HTTPS-Adresse eingeben');return;}
+        if(starting)return;starting=true;loading=true;landing=false;keyboard=null;panel=null;reading=false;webMode=false;currentURL=url;activity();
+        try{await browser.setLocale(locale.language);await(browser.child?browser.navigate(url):browser.start(url));}
+        catch(e){loading=false;note(e.message);if(!frame)landing=true;log.warn(e.message);}
+        finally{starting=false;}
+    }
+    function editURL(purpose){
+        keyboard=purpose||'url';draft=keyboard==='homepage'?store.data.homepage:keyboard==='wifi-ssid'?wifiSSID:keyboard==='wifi-password'?wifiPassword:currentURL;
+        replaceDraft=true;keyMode='abc';upper=false;webMode=false;reading=false;activity();
+        if(ctx.display)ctx.display.focusKey='tgt:key-0-0';
+    }
+    function openText(){
+        if(!browser.child||!editable){note('Zuerst ein Textfeld auf der Webseite auswaehlen');return;}
+        keyboard='text';panel=null;keyMode='abc';webMode=false;reading=false;activity();
+        if(ctx.display)ctx.display.focusKey='tgt:key-0-0';
+    }
+    function dismissKeyboard(){if(keyboard==='wifi-password')draft='';keyboard=null;replaceDraft=false;webMode=false;if(ctx.display)ctx.display.focusKey='tgt:urlbar';activity();}
+    async function type(value){
+        activity();if(keyboard==='text')return browser.text(value);
+        if(replaceDraft){draft='';replaceDraft=false;}draft=(draft+value).slice(0,2048);
+    }
+    async function finishKeyboard(){
+        if(keyboard==='text'){dismissKeyboard();return browser.key('Enter');}
+        if(keyboard==='wifi-ssid'||keyboard==='wifi-password'){
+            if(keyboard==='wifi-ssid')wifiSSID=draft;else wifiPassword=draft;
+            draft='';keyboard=null;activity();return;
+        }
+        if(keyboard==='homepage'){
+            const url=draft.trim()?inputURL(draft):'';if(draft.trim()&&!url){note('Startseitenadresse pruefen');return;}
+            store.set('homepage',url);keyboard=null;note(url?'Startseite gespeichert':'Start ohne feste Seite');activity();return;
+        }
+        return navigate(draft);
+    }
+    async function home(){
+        activity();reading=false;panel=null;keyboard=null;
+        if(store.data.homepage)return navigate(store.data.homepage);
+        landing=true;webMode=false;currentURL='';title='';frame=null;if(browser.child)await browser.clearTab();loading=false;
+    }
+    async function closeApp(){
+        closing=true;pendingLaunch=false;keyboard=null;draft='';wifiPassword='';panel=null;frame=null;landing=true;loading=false;
+        await browser.stop('Browser geschlossen');await ui.close('MAIN');
+    }
+    function launch(){
+        if(!pendingLaunch||!serviceReady||!gate.check().allowed||closing)return;
+        pendingLaunch=false;if(browser.child)return;
+        if(store.data.homepage)safe(()=>navigate(store.data.homepage));
+        else {landing=true;webMode=false;panel=null;safe(async()=>{await browser.setLocale(locale.language);await browser.start('');});}
+    }
+    const visible=()=>{
+        const v=ui.isVisible('MAIN')&&(!ui.hasFocus||ui.hasFocus('MAIN'));gate.setVisible(v);
+        if(v&&!wasVisible){closing=false;pendingLaunch=true;launch();}wasVisible=v;
+    };
+    ui.onVisible(visible);if(ui.onFocus)ui.onFocus(visible);visible();setInterval(visible,100);
+    browser.on('ready',()=>{serviceReady=true;resized='';if(!browser.child&&!frame)landing=true;launch();});
+    browser.on('frame',f=>{frame=f;setImage(IMAGE,f.width,f.height,f.rgba);});
+    browser.on('started',()=>{landing=!currentURL;resized='';activity();});
+    browser.on('tabs',value=>{tabs=value;activeTab=(tabs.find(t=>t.active)||{}).id||'';});
+    browser.on('tabSelected',t=>{
+        currentURL=t.url;title=t.title;landing=!t.url;frame=null;page=null;finger=null;
+        canBack=false;canForward=false;editable=false;loading=!!t.loading;resized='';
+        keyboard=null;draft='';panel=null;reading=false;webMode=false;activity();
+        if(ctx.display)ctx.display.focusKey='tgt:'+(t.url?'tab-'+t.id:'urlbar');
+    });
+    browser.on('blocked',reason=>{frame=null;editable=false;webMode=false;loading=false;resized='';if(ctx.display&&ctx.display.browserSetFullscreen)ctx.display.browserSetFullscreen(false);if(!closing&&!landing&&gate.check().allowed&&reason!=='Start')note(reason);});
+    browser.on('media',state=>{
+        const changed=!!state.fullscreen!==!!media.fullscreen;media=state;
+        if(changed){
+            if(ctx.display&&ctx.display.browserSetFullscreen)ctx.display.browserSetFullscreen(!!state.fullscreen);
+            resized='';reading=false;keyboard=null;panel=null;webMode=false;mediaIndex=1;mediaUntil=Date.now()+5000;
+            if(state.fullscreen){landing=false;webMode=true;}
+            else if(ctx.display)ctx.display.focusKey='tgt:tab-'+activeTab;
+        }
+    });
+    browser.on('fault',e=>{loading=false;note(e.message);log.warn(e.message);});
+    browser.on('navigation',url=>{currentURL=url;landing=false;store.visit(url,'');});
+    browser.on('loading',value=>{loading=value;});
+    browser.on('navigationState',s=>{
+        canBack=s.canBack;canForward=s.canForward;currentURL=s.url;title=s.title||'';
+        store.visit(s.url,title,false);
+    });
+    browser.on('input',info=>{
+        editable=!!info.editable;password=!!info.password;
+        if(editable&&webMode&&!keyboard&&!panel&&!landing)openText();
+    });
+    let diagnostic='';browser.on('diagnostic',s=>{if(s!==diagnostic){diagnostic=s;log.warn(s.slice(0,400));}});
+    for(const id of ['BTN_OPEN','BTN_BACK','BTN_STOP'])ctx.hideButton(id);
+    ui.onClick('BTN_OPEN',()=>safe(home));ui.onClick('BTN_BACK',()=>safe(()=>media.fullscreen?browser.mediaAction('exit'):browser.child?browser.back():home()));ui.onClick('BTN_STOP',()=>safe(closeApp));
+    const webActions={
+        toolbar:()=>{webMode=false;reading=false;if(ctx.display&&activeTab)ctx.display.focusKey='tgt:tab-'+activeTab;activity();},
+        keyboard:openText,
+        scroll:d=>{activity();safe(()=>browser.scroll(d));},
+        press:()=>{activity();safe(()=>browser.key('Enter'));},
+        focus:d=>{activity();safe(async()=>{for(let n=0;n<Math.abs(d);n++)await browser.key('Tab',d<0);});}
+    };
+    const showMedia=()=>{mediaUntil=Date.now()+5000;activity();};
+    const mediaActions={
+        toolbar:()=>{showMedia();safe(()=>browser.mediaAction('back'));},
+        keyboard:()=>{showMedia();safe(()=>browser.mediaAction('forward'));},
+        scroll:showMedia,
+        focus:d=>{showMedia();mediaIndex=(mediaIndex+d%videoActions.length+videoActions.length)%videoActions.length;},
+        press:()=>{showMedia();safe(()=>browser.mediaAction(videoActions[mediaIndex]));}
+    };
+    function focusUI(delta){
+        const display=ctx.display,targets=display&&display.pageTargets||[];if(!targets.length)return;
+        const index=targets.findIndex(t=>'tgt:'+t.key===display.focusKey);
+        const next=index<0?(delta<0?targets.length-1:0):(index+delta%targets.length+targets.length)%targets.length;
+        display.focusKey='tgt:'+targets[next].key;activity();if(display._repaint)display._repaint();
+    }
+    function tiltUI(direction){
+        const display=ctx.display;if(!display)return;
+        const target=display._toward&&display._toward(direction,0);
+        if(target&&display._focus)display._focus(target);else focusUI(direction==='W'||direction==='N'?-1:1);
+        activity();if(display._repaint)display._repaint();
+    }
+    const uiActions={
+        focus:focusUI,toolbar:()=>tiltUI('W'),keyboard:()=>tiltUI('E'),scroll:d=>tiltUI(d<0?'N':'S'),
+        press:()=>{const display=ctx.display,target=display&&(display.pageTargets||[]).find(t=>'tgt:'+t.key===display.focusKey);if(target)safe(()=>target.run());}
+    };
+    const actions=()=>media.fullscreen?mediaActions:webMode&&!keyboard&&!panel&&!landing&&browser.child?webActions:uiActions;
+    const controller=new Controller({focus:d=>actions().focus(d),toolbar:()=>actions().toolbar(),keyboard:()=>actions().keyboard(),scroll:d=>actions().scroll(d),press:()=>actions().press()});
+    const input=v=>{if(!gate.check().allowed)return false;controller.feed(v);return true;};
+    nativeBridge.setControllerHandler(input);ctx.controller.onInput(input);
+    let finger=null;
+    if(ctx.display){
+        const touch=ctx.display._touch.bind(ctx.display);
+        ctx.display._touch=function(phase,x,y){
+            const target=(this.pageTargets||[]).some(t=>!t.controllerOnly&&x>=t.x&&x<t.x+t.w&&y>=t.y&&y<t.y+t.h);
+            if(phase===1&&!target&&page&&!panel&&!landing&&frame&&x>=page.x&&x<page.x+page.w&&y>=page.y&&y<page.y+page.h){
+                finger={x,y,last:y,drag:false};enterPage();return;
+            }
+            if(finger){
+                if(phase===2){if(Math.abs(y-finger.y)>12)finger.drag=true;if(finger.drag){const delta=(finger.last-y)*frame.height/page.h;safe(()=>browser.scroll(delta));}finger.last=y;}
+                if(phase===3){const f=finger;finger=null;if(!f.drag){const px=(x-page.x)*frame.width/page.w,py=(y-page.y)*frame.height/page.h;safe(()=>browser.tap(px,py));}}
+                return;
+            }
+            return touch(phase,x,y);
+        };
+    }
+    ctx.onTap((x,y)=>{if(!keyboard&&!panel&&!landing&&page&&frame&&x>=page.x&&x<page.x+page.w&&y>=page.y&&y<page.y+page.h){enterPage();safe(()=>browser.tap((x-page.x)*frame.width/page.w,(y-page.y)*frame.height/page.h));}});
+    ctx.onScroll(d=>{activity();if(panel==='library'){listOffset=Math.max(0,listOffset+(d>0?1:-1));return true;}if(browser.child&&!panel){safe(()=>browser.scroll(d));return true;}return false;});
+    async function refreshWifi(){
+        try{wifiState=await browser.wifiStatus();if(!wifiSSID&&wifiState.ssid)wifiSSID=wifiState.ssid;}
+        catch(e){wifiState={supported:false,error:e.message};}
+    }
+    async function openNetwork(){panel='network';keyboard=null;draft='';webMode=false;reading=false;wifiInternet=null;activity();await refreshWifi();}
+    async function connectWifi(reconnect){
+        wifiBusy=true;wifiInternet=null;
+        try{wifiState=await(reconnect?browser.wifiReconnect():browser.wifiConnect(wifiSSID,wifiPassword));wifiPassword='';note('WLAN-Verbindung wird aufgebaut');}
+        finally{wifiBusy=false;}
+    }
+    async function scanWifi(){
+        panel='wifi-list';keyboard=null;webMode=false;wifiScanning=true;wifiScanError='';wifiOffset=0;activity();
+        try{const result=await browser.wifiScan();wifiNetworks=result.networks||[];if(result.message)wifiScanError=result.message;}
+        catch(e){wifiScanError=e.message;wifiNetworks=[];}
+        finally{wifiScanning=false;}
+    }
+    async function selectTab(id){webMode=false;if(id===activeTab){panel=null;keyboard=null;return;}await browser.selectTab(id);}
+    async function closeTab(id){await browser.closeTab(id);webMode=false;if(ctx.display)ctx.display.focusKey='tgt:tab-'+activeTab;}
+    function enterPage(){webMode=true;activity();note('Webseite aktiv. Controller nach links: Browserleiste.');if(ctx.display)ctx.display.focusKey=null;}
+    async function newTab(){await browser.newTab('');if(ctx.display)ctx.display.focusKey='tgt:urlbar';}
+    async function openStreaming(){
+        panel='streaming';keyboard=null;webMode=false;reading=false;activity();
+        mediaCaps=await browser.request('mediaCapabilities');
+    }
+    function button(c,x,y,w,h,label,fn,key,options){
+        const o=options||{},enabled=o.enabled!==false;
+        if(!o.flat)c.roundRect(x,y,w,h,7,o.primary?'#315d84':C.field);
+        c.text(o.literal?String(label):ascii(label),x+w/2,y+h/2+7,19,enabled?C.text:'#566171',{align:'center',literal:!!o.literal});
+        if(enabled)c.target(x,y,w,h,()=>{activity();return safe(fn);},key);
+        tipLabels[key]=o.tip||label;
+    }
+    function tool(c,x,name,fn,key,enabled,selected){
+        if(selected)c.roundRect(x,7,42,42,7,'#293b4d');
+        icon(c,name,x+21,28,enabled===false?'#566171':selected?C.accent:C.text);
+        if(enabled!==false)c.target(x,6,42,44,()=>{activity();return safe(fn);},key);
+        tipLabels[key]=({back:'Zurueck',forward:'Vorwaerts',home:'Startseite',reload:'Neu laden',stop:'Laden abbrechen',star:'Lesezeichen',history:'Verlauf und Lesezeichen',keyboard:'Tastatur',settings:'Einstellungen',expand:'Lesemodus',close:'Browser schliessen'})[name]||name;
+    }
+    function toolbar(c){
+        c.fillRect(0,0,W,BAR,C.bar);c.fillRect(0,BAR-1,W,1,C.line);
+        tool(c,8,'back',()=>browser.back(),'back',!!browser.child&&canBack);
+        tool(c,56,'forward',()=>browser.forward(),'forward',!!browser.child&&canForward);
+        tool(c,104,'home',home,'home',true);
+        tool(c,152,loading?'stop':'reload',()=>loading?browser.stopLoading():browser.child?browser.reload():home(),'reload',true);
+        const editing=keyboard==='url'||keyboard==='homepage',label=editing?draft:currentURL;
+        c.roundRect(206,8,1044,40,8,editing?'#263f54':C.field);
+        if(!label)icon(c,'search',224,28,C.muted);
+        c.clip(222,12,1008,32);
+        c.text(label?(editing&&label.length>91?label.slice(-91):label):ascii('Adresse oder Suchbegriff'),label?223:244,35,19,label?C.text:C.muted,{literal:true});c.noclip();
+        c.target(206,8,1044,40,()=>editURL('url'),'urlbar');tipLabels.urlbar='Adresse bearbeiten';
+        if(loading)c.fillRect(214,47,140+(Date.now()/14%850),2,C.accent);
+        tool(c,1264,'star',()=>{store.toggleBookmark(currentURL,title);note(store.bookmarked(currentURL)?'Lesezeichen gespeichert':'Lesezeichen entfernt');},'bookmark',!!currentURL,store.bookmarked(currentURL));
+        tool(c,1312,'history',()=>{panel=panel==='library'?null:'library';keyboard=null;webMode=false;listOffset=0;if(ctx.display)ctx.display.focusKey='tgt:'+(panel?'list-'+listTab:'library');},'library',true,panel==='library');
+        if(editable||keyboard==='text')tool(c,1360,'keyboard',()=>keyboard?dismissKeyboard():openText(),'text-keyboard',true,!!keyboard);
+        else tool(c,1360,'cursor',enterPage,'page-control',!!frame&&!landing);
+        tipLabels['page-control']='Webseite steuern';
+        tool(c,1408,'settings',()=>{panel=panel==='settings'?null:'settings';keyboard=null;webMode=false;},'settings',true,panel==='settings');
+        tool(c,1456,'expand',()=>{enterPage();reading=true;panel=null;keyboard=null;},'reading',!!frame);
+        tool(c,1514,'close',closeApp,'close',true);
+    }
+    function tabstrip(c){
+        c.fillRect(0,BAR,W,TABS,'#111820');
+        const width=Math.min(360,Math.floor((W-78)/Math.max(1,tabs.length)));
+        tabs.forEach((t,i)=>{
+            const x=8+i*width,w=width-6,selected=t.id===activeTab;
+            c.roundRect(x,BAR+3,w,TABS-5,6,selected?'#31485e':'#202936');
+            c.text(((t.loading?'... ':'')+(t.title||displayURL(t.url)||ascii('Neuer Tab'))).slice(0,Math.floor((w-60)/10)),x+14,BAR+27,18,C.text,{literal:true});
+            c.target(x,BAR+3,w-39,TABS-5,()=>safe(()=>selectTab(t.id)),'tab-'+t.id);
+            icon(c,'close',x+w-20,BAR+21,C.muted);
+            c.target(x+w-38,BAR+3,38,TABS-5,()=>safe(()=>closeTab(t.id)),'tab-close-'+t.id);
+        });
+        const x=8+tabs.length*width;
+        c.roundRect(x,BAR+3,54,TABS-5,6,C.field);c.text('+',x+27,BAR+29,28,C.text,{align:'center'});
+        if(tabs.length<8)c.target(x,BAR+3,54,TABS-5,()=>safe(newTab),'tab-new');
+        tipLabels['tab-new']='Neuer Tab';
+    }
+    function belowTabs(c,fn){
+        // Recorder.xf is an absolute device transform, not a logical translation.
+        // Offset drawing and hit targets together so placement scaling stays intact.
+        const methods=['text','fillRect','roundRect','target'],originals={};
+        methods.forEach(name=>{originals[name]=c[name];c[name]=function(){const args=Array.prototype.slice.call(arguments);args[name==='text'?2:1]+=TABS;return originals[name].apply(c,args);};});
+        try{fn();}finally{methods.forEach(name=>{c[name]=originals[name];});}
+    }
+    function drawVideoControls(c,bottom){
+        if(Date.now()>mediaUntil&&!media.paused)return;
+        c.roundRect(320,bottom-112,960,98,12,'#161f2c');
+        const labels=['-10 s',media.paused?'Wiedergabe':'Pause','+10 s',media.muted?'Ton ein':'Stumm','Vollbild verlassen'];
+        labels.forEach((label,i)=>button(c,336+i*185,bottom-95,176,44,label,()=>{showMedia();return browser.mediaAction(videoActions[i]);},'video-'+videoActions[i],{primary:i===mediaIndex}));
+        const time=s=>Math.floor((s||0)/60)+':'+('0'+Math.floor((s||0)%60)).slice(-2);
+        c.text(time(media.currentTime)+' / '+time(media.duration)+'   '+ascii('Drehen: wählen | Drücken: ausführen | Neigen links/rechts: 10 s'),350,bottom-29,17,C.muted);
+    }
+    function rowsForList(){
+        if(listTab==='bookmarks')return store.data.bookmarks;
+        if(listTab==='history')return store.data.history;
+        return store.frequent();
+    }
+    function drawStart(c,bottom){
+        c.text(panel==='library'?'Deine Seiten':'Browser',64,118,38,C.text);
+        c.text('Dein Web. Direkt im iDrive.',65,153,19,C.muted);
+        const tabs=[['frequent','Haeufig besucht'],['bookmarks','Lesezeichen'],['history','Verlauf']];
+        tabs.forEach((t,i)=>button(c,64+i*238,181,224,42,t[1],()=>{listTab=t[0];listOffset=0;},'list-'+t[0],{primary:listTab===t[0]}));
+        const items=rowsForList();
+        if(!items.length){
+            c.text(listTab==='bookmarks'?'Noch keine Lesezeichen':listTab==='history'?'Dein Verlauf beginnt mit der ersten Seite':'Hier erscheinen deine haeufig besuchten Seiten',65,282,24,C.text);
+            c.text('Waehle oben die Adressleiste. Drehen waehlt, Druecken bestaetigt.',65,319,19,C.muted);
+            if(listTab==='frequent'){
+                c.text('SCHNELLZUGRIFF',65,380,15,C.muted);
+                [['example.net','https://example.net/'],['Wikipedia','https://de.wikipedia.org/'],['YouTube','https://www.youtube.com/']].forEach((i,n)=>button(c,64+n*340,402,320,62,i[0],()=>navigate(i[1]),'suggestion-'+n));
+            }
+            return;
+        }
+        const count=6,max=Math.max(0,items.length-count);listOffset=Math.min(listOffset,max);
+        items.slice(listOffset,listOffset+count).forEach((item,i)=>{
+            const col=i%3,row=Math.floor(i/3),x=64+col*492,y=240+row*94;
+            c.roundRect(x,y,470,80,10,C.panel);
+            c.text((item.title||displayURL(item.url)).slice(0,38),x+18,y+33,21,C.text,{literal:true});
+            c.text(displayURL(item.url).slice(0,52),x+18,y+61,16,C.muted,{literal:true});
+            c.target(x,y,470,80,()=>safe(()=>navigate(item.url)),'visit-'+i);
+        });
+        if(items.length>count){button(c,64,bottom-55,135,38,'Zurueck',()=>{listOffset=Math.max(0,listOffset-count);},'list-prev');button(c,212,bottom-55,135,38,'Weitere',()=>{listOffset=Math.min(max,listOffset+count);},'list-next');}
+    }
+    function drawSettings(c,bottom){
+        c.text('Einstellungen',64,114,36,C.text);
+        button(c,1170,79,364,42,'Internet / mobiler Hotspot',openNetwork,'network-settings');
+        button(c,1170,139,364,42,'Medien & Streaming',openStreaming,'streaming-settings');
+        c.text('STARTSEITE',65,157,15,C.muted);
+        const homeText=keyboard==='homepage'?draft:store.data.homepage;
+        c.text((homeText||ascii('Keine feste Seite - haeufig besuchte Seiten anzeigen')).slice(0,keyboard?67:115),65,190,21,C.text,{literal:true});
+        button(c,64,214,220,42,'Adresse bearbeiten',()=>editURL('homepage'),'home-edit');
+        button(c,298,214,244,42,'Aktuelle Seite',()=>{if(currentURL){store.set('homepage',currentURL);note('Startseite gespeichert');}else note('Zuerst eine Webseite oeffnen');},'home-current');
+        button(c,556,214,220,42,'Ohne Startseite',()=>{store.set('homepage','');note('Start ohne feste Seite');},'home-empty');
+        c.fillRect(64,281,keyboard?880:1472,1,C.line);
+        c.text('DARSTELLUNG',65,320,15,C.muted);
+        c.text('Seitenzoom',65,355,22,C.text);
+        button(c,420,324,210,42,store.data.zoom+' %',()=>{const values=[100,125,150];store.set('zoom',values[(values.indexOf(store.data.zoom)+1)%values.length]);resized='';},'zoom');
+        c.text('Leiste beim Lesen ausblenden',65,415,22,C.text);
+        button(c,620,384,156,42,store.data.autoHide?'Ein':'Aus',()=>store.set('autoHide',!store.data.autoHide),'auto-hide');
+        c.text('Controller nach links oder die kleine Leiste oben holt die Bedienung zurueck.',65,462,17,C.muted);
+        if(!keyboard)button(c,1288,bottom-60,246,42,'Fertig',()=>{panel=null;webMode=false;if(ctx.display)ctx.display.focusKey='tgt:settings';activity();},'settings-done',{primary:true});
+    }
+    function drawNetwork(c,bottom){
+        c.text('Internet / mobiler Hotspot',64,114,34,C.text);
+        const ssid=keyboard==='wifi-ssid'?draft:wifiSSID,secret=keyboard==='wifi-password'?draft:wifiPassword;
+        c.text('WLAN-Name (SSID)',65,163,18,C.muted);
+        button(c,64,178,700,42,ssid||ascii('WLAN-Namen eingeben'),()=>editURL('wifi-ssid'),'wifi-ssid',{literal:true});
+        if(!keyboard)button(c,870,178,300,42,'WLAN-Netze suchen',scanWifi,'wifi-scan',{enabled:!!wifiState.supported&&!wifiBusy&&!wifiState.joining});
+        c.text('WPA-Passwort',65,250,18,C.muted);
+        button(c,64,265,700,42,secret?'*'.repeat(Math.min(38,secret.length)):'Passwort eingeben',()=>editURL('wifi-password'),'wifi-password');
+        button(c,64,331,320,44,wifiBusy||wifiState.joining?'Verbindet ...':'Verbinden',()=>connectWifi(false),'wifi-connect',{primary:true,enabled:wifiState.supported&&!wifiBusy&&!wifiState.joining&&!!ssid&&!!secret});
+        button(c,400,331,364,44,'Gespeichertes WLAN verbinden',()=>connectWifi(true),'wifi-reconnect',{enabled:wifiState.supported&&wifiState.saved&&!wifiBusy&&!wifiState.joining});
+        const status=wifiState.message||wifiState.error||(wifiState.joining?'Verbindung wird aufgebaut ...':wifiState.connected?'WLAN verbunden: '+wifiState.ssid:'Keine WLAN-Verbindung');
+        c.text(ascii(status).slice(0,keyboard?78:145),65,412,18,C.muted);
+        c.text(wifiInternet===null?'Zugangsdaten bleiben im geschuetzten WLAN-Dienst der Headunit.':wifiInternet?'Internet erreichbar (HTTPS)':'Internet noch nicht erreichbar',65,446,17,C.muted);
+        if(!keyboard){
+            button(c,870,331,300,44,'Internet pruefen',async()=>{const r=await browser.request('network');wifiInternet=!!r.https;},'wifi-check',{enabled:!!wifiState.supported});
+            button(c,1288,bottom-52,246,42,'Zurueck',()=>{panel='settings';wifiPassword='';draft='';},'wifi-back');
+        }
+    }
+    function drawWifiList(c,bottom){
+        c.text('WLAN-Netze in der Umgebung',64,114,34,C.text);
+        if(wifiScanning)c.text('WLAN-Netze werden gesucht ...',65,164,21,C.muted);
+        else if(wifiScanError)c.text(ascii(wifiScanError).slice(0,140),65,164,19,C.muted);
+        else if(!wifiNetworks.length)c.text('Keine sichtbaren WLAN-Netze gefunden',65,164,21,C.muted);
+        else{
+            c.text('Netz auswählen, danach das Passwort eingeben.',65,154,18,C.muted);
+            wifiNetworks.slice(wifiOffset,wifiOffset+5).forEach((network,i)=>{
+                const label=network.ssid+'   '+network.signal+' dBm   '+ascii(network.secure?'Gesichert':'Offen');
+                button(c,64,170+i*51,1472,43,label,()=>{wifiSSID=network.ssid;wifiPassword='';panel='network';editURL('wifi-password');},'wifi-network-'+i,{literal:true});
+            });
+        }
+        if(!wifiScanning&&wifiNetworks.length>5){
+            button(c,64,bottom-52,150,42,'Zurueck',()=>{wifiOffset=Math.max(0,wifiOffset-5);},'wifi-list-prev');
+            button(c,230,bottom-52,150,42,'Weitere',()=>{wifiOffset=wifiOffset+5<wifiNetworks.length?wifiOffset+5:0;},'wifi-list-next');
+        }
+        button(c,400,bottom-52,240,42,'Erneut suchen',scanWifi,'wifi-list-refresh',{enabled:!wifiScanning});
+        button(c,1288,bottom-52,246,42,'Zurueck',()=>{panel='network';activity();},'wifi-list-back');
+    }
+    function drawStreaming(c,bottom){
+        c.text('Medien & Streaming',64,114,34,C.text);
+        c.text('Vollbild zeigt das ganze Video ohne Beschnitt. Drehen und Drücken bleiben aktiv.',65,164,20,C.text);
+        if(mediaCaps){
+            c.text(mediaCaps.mediaEnabled?'Videowiedergabe in dieser Laufzeit aktiviert':'Videowiedergabe auf der Headunit noch nicht freigegeben',65,219,22,C.text);
+            c.text(mediaCaps.secure===false?'Widevine-Prüfung: zuerst eine HTTPS-Seite öffnen':mediaCaps.widevine?'Widevine erkannt - Anbieterwiedergabe noch einzeln zu prüfen':'Widevine nicht verfügbar - geschützte Streams sind nicht bestätigt',65,260,20,C.muted);
+            c.text('H.264: '+(mediaCaps.h264?'Ja':'Nein')+'   VP9: '+(mediaCaps.vp9?'Ja':'Nein'),65,300,18,C.muted);
+        }
+        [['YouTube','https://www.youtube.com/'],['Netflix','https://www.netflix.com/'],['Disney+','https://www.disneyplus.com/'],['Prime Video','https://www.primevideo.com/'],['Paramount+','https://www.paramountplus.com/']].forEach((item,i)=>button(c,64+i*296,330,278,44,item[0],()=>browser.newTab(item[1]),'stream-'+i));
+        if(process.env.MGU_EMULATOR_MODE==='1')button(c,64,407,352,44,mediaBusy?'Video wird erzeugt ...':'Vollbild testen',async()=>{mediaBusy=true;try{await browser.request('mediaDemo');}finally{mediaBusy=false;}},'media-demo',{enabled:!mediaBusy,primary:true});
+        if(process.env.MGU_EMULATOR_MODE==='1')button(c,450,407,500,44,'Widevine-Test öffnen',()=>browser.newTab('https://shaka-player-demo.appspot.com/demo/'),'drm-demo');
+        button(c,1288,bottom-52,246,42,'Zurueck',()=>{panel='settings';},'streaming-back');
+    }
+    function drawKeyboard(c,bottom){
+        const x=W-SIDE;c.fillRect(x,BAR,SIDE,bottom-BAR,C.panel);c.fillRect(x,BAR,1,bottom-BAR,C.line);
+        c.text(keyboard==='homepage'?'Startseite':keyboard==='url'?'Adresse oder Suche':keyboard==='wifi-ssid'?'WLAN-Name':keyboard==='wifi-password'||password?'Passwort eingeben':'Text eingeben',x+22,96,24,C.text);
+        button(c,x+SIDE-66,70,44,34,'X',dismissKeyboard,'keyboard-close',{flat:true});
+        [['abc','ABC'],['123','123'],['symbols','#+=']].forEach((m,i)=>button(c,x+20+i*146,116,132,36,m[1],()=>{keyMode=m[0];},'mode-'+m[0],{primary:keyMode===m[0]}));
+        button(c,x+458,116,122,36,upper?'AA':'Aa',()=>{upper=!upper;},'shift');
+        const rows=keyMode==='abc'?locale.keyboard():keyMode==='123'?['1234567890','.,:;?!@-_/','()[]{}%+=']:['.,:;!?@#','%&=+_-~$','/\\|()[]{}','<>*\'"^'];
+        rows.forEach((row,r)=>row.split('').forEach((ch,i)=>{
+            const value=upper?(ch==='ß'?'ẞ':ch.toUpperCase()):ch;
+            button(c,x+20+i*56+(10-row.length)*2,168+r*48,50,40,value,()=>type(value),'key-'+r+'-'+i);
+        }));
+        if(keyboard!=='text')c.text(keyboard.indexOf('wifi-')===0?'WLAN-Daten werden nicht protokolliert.':replaceDraft?'Erstes Zeichen ersetzt die Adresse.':'HTTPS wird automatisch ergaenzt.',x+22,376,16,C.muted);
+        button(c,x+20,392,172,40,'Leerzeichen',()=>type(' '),'space');
+        button(c,x+204,392,172,40,keyboard==='text'||keyboard.indexOf('wifi-')===0?'@':'.com',()=>type(keyboard==='text'||keyboard.indexOf('wifi-')===0?'@':'.com'),'suffix');
+        button(c,x+388,392,192,40,'Loeschen',()=>{if(keyboard==='text')return browser.key('Backspace');if(replaceDraft){draft='';replaceDraft=false;}else draft=draft.slice(0,-1);},'delete');
+        button(c,x+20,444,172,44,'Abbrechen',dismissKeyboard,'cancel');
+        button(c,x+204,444,376,44,starting?'Laedt ...':keyboard==='homepage'?'Speichern':keyboard==='text'||keyboard.indexOf('wifi-')===0?'Fertig':'Oeffnen',finishKeyboard,'done',{primary:true});
+    }
+    ctx.loop('MAIN',12,()=>{
+        const cv=ctx.canvas(W,H).clear(C.bg),bottom=H+cv.extra;
+        const hidden=media.fullscreen||(!landing&&!panel&&!keyboard&&webMode&&frame&&(reading||(store.data.autoHide&&Date.now()-lastAction>6500)));
+        const top=hidden?0:BAR+TABS;tipLabels={};page=null;
+        if(!hidden){toolbar(cv);tabstrip(cv);}
+        if(panel==='wifi-list')belowTabs(cv,()=>drawWifiList(cv,bottom-TABS));
+        else if(panel==='streaming')belowTabs(cv,()=>drawStreaming(cv,bottom-TABS));
+        else if(panel==='network')belowTabs(cv,()=>drawNetwork(cv,bottom-TABS));
+        else if(panel==='settings')belowTabs(cv,()=>drawSettings(cv,bottom-TABS));
+        else if(landing||panel==='library')belowTabs(cv,()=>drawStart(cv,bottom-TABS));
+        else if(frame&&gate.check().allowed){
+            page={x:0,y:top,w:W-(keyboard?SIDE:0),h:bottom-top};
+            cv.image(IMAGE,page.x,page.y,page.w,page.h);
+            if(!keyboard&&!media.fullscreen){cv.target(page.x,page.y,page.w,page.h,enterPage,'page-controller');cv.targets[cv.targets.length-1].controllerOnly=true;tipLabels['page-controller']='Webseite steuern';}
+            if(browser.child){
+                const width=Math.round(1280*100/store.data.zoom),height=Math.max(200,Math.min(720,Math.round(width*page.h/page.w))),key=width+'x'+height;
+                if(key!==resized){resized=key;safe(()=>browser.resize(width,height));}
+            }
+        }else{cv.text(loading?'Seite wird geladen ...':'Browser bereit',W/2,280,27,C.muted,{align:'center'});}
+        if(hidden&&!media.fullscreen){
+            cv.roundRect(12,8,60,28,9,'#202833');icon(cv,'more',42,22,C.text);
+            cv.target(12,8,60,28,()=>{webMode=false;reading=false;activity();},'show-toolbar');tipLabels['show-toolbar']='Browserleiste anzeigen';
+        }
+        if(media.fullscreen)drawVideoControls(cv,bottom);
+        if(keyboard){cv.targets=cv.targets.filter(t=>t.y<BAR+TABS||t.x+t.w<=W-SIDE);belowTabs(cv,()=>drawKeyboard(cv,bottom-TABS));}
+        if(panel==='network'&&!wifiBusy&&Date.now()-wifiPoll>2500){wifiPoll=Date.now();safe(refreshWifi);}
+        const focused=ctx.display&&ctx.display.focusKey,focusedKey=focused&&focused.slice(0,4)==='tgt:'?focused.slice(4):'';
+        const hint=Date.now()<toastUntil?toast:!webMode&&!keyboard&&!panel&&!landing&&tipLabels[focusedKey];
+        if(hint){const w=Math.min(W-32,ascii(hint).length*10+42);cv.roundRect((W-w)/2,bottom-42,w,31,8,'#253243');cv.text(ascii(hint),(W-w)/2+20,bottom-20,17,C.text);}
+        cv.scroll=false;return ui.image('MAIN_GFX',cv);
+    });
+    process.once('exit',()=>{locale.close();browser.destroy();});
+}});
