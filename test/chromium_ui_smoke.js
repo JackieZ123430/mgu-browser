@@ -21,6 +21,7 @@ class FakeBrowser extends EventEmitter{
         if(op==='privacyStatus')return this.privacy||{supported:true,locked:false,rememberSessions:false,rememberCache:false,protection:'Fixture protection'};
         if(op==='privacyConfigure'){this.privacy=Object.assign(await this.request('privacyStatus'),args.prefs);return this.privacy;}
         if(op==='vaultList')return [];
+        if(op==='mediaFocus'||op==='mediaPress'){this.calls.push(op);return {};}
         if(op==='vaultUnlock'){assert.equal(args.password,'w'.repeat(12));this.privacy.locked=false;this.privacy.needsSetup=false;return this.privacy;}
         assert.equal(op,'mediaCapabilities');return {mediaEnabled:true,widevine:true,h264:true,vp9:true};
     }
@@ -88,8 +89,8 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     await press('video-toggle');await press('video-forward');await press('video-exit');assert(browser.calls.includes('video-toggle')&&browser.calls.includes('video-forward')&&browser.calls.includes('video-exit'));
     browser.emit('media',{fullscreen:true,hasSiteControls:true,paused:true});tick();
     assert(!frame.targets.some(t=>t.key==='video-toggle'),'Website controls must suppress the native fallback overlay');
-    const keyCount=browser.calls.filter(c=>c==='web-key').length;await feed(1,0);await feed(0,1);await feed(0,0);
-    assert(browser.calls.filter(c=>c==='web-key').length>=keyCount+2,'Fullscreen website controls receive rotary Tab and press Enter');
+    await feed(1,0);await feed(0,1);await feed(0,0);
+    assert(browser.calls.includes('mediaFocus')&&browser.calls.includes('mediaPress'),'Fullscreen website controls receive selection and activation');
     browser.emit('media',{fullscreen:false});tick();await press('close');
     assert(closed,'Close must leave the app MAIN state');assert.equal(browser.child,null,'Close must stop Chromium');
     console.log('SDK UI: tabs, URL keyboard, masked hotspot settings, fullscreen controls, target bounds and app close passed');

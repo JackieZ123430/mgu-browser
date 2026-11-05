@@ -5,7 +5,7 @@ Wants=persistency-fs.target mgu-browser-wifi.service
 
 [Service]
 Type=simple
-ExecStart=/var/opt/mgu-browser/backend/backend-launch
+ExecStart=/usr/bin/node /var/opt/mgu-browser/current/runtime/launch.js
 Restart=no
 KillMode=control-group
 TimeoutStopSec=20

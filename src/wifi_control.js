@@ -3,7 +3,7 @@ const net=require('net');
 module.exports=function request(message){return new Promise((resolve,reject)=>{
     const socket=net.createConnection('/run/mgu-browser-wifi/control.sock');let text='',done=false;
     const finish=(err,value)=>{if(done)return;done=true;clearTimeout(timer);socket.destroy();err?reject(err):resolve(value);};
-    const timer=setTimeout(()=>finish(new Error('WLAN-Dienst antwortet nicht')),message.op==='scan'?25000:4000);
+    const timer=setTimeout(()=>finish(new Error('WLAN-Dienst antwortet nicht')),message.op==='scan'?25000:['connect','reconnect'].includes(message.op)?12000:4000);
     socket.on('error',()=>finish(new Error('WLAN-Einstellungsdienst noch nicht installiert oder gestartet')));
     socket.on('connect',()=>{socket.write(JSON.stringify(message)+'\n');message.password=null;});
     socket.on('data',chunk=>{

@@ -3,16 +3,26 @@
   "apps": {
     "path": "apps/*",
     "manifest": "app.json",
-    "mguHmi": ["ID7"],
+    "mguHmi": [
+      "ID7"
+    ],
     "requires": {
-      "mgu-browser": "0.9.2",
+      "mgu-browser": "0.10.0",
       "mgu-uplink": "0.7.3",
       "mgu-render": "0.6.11",
-      "mgu-deploy": "0.7.17"
+      "mgu-deploy": "0.7.17",
+      "mgu-browser-engine": "0.1.0"
     },
     "build": {
       "python": "tools/build_store.py",
-      "args": ["--app", "{id}", "--version", "{version}", "--source", "{dir}"],
+      "args": [
+        "--app",
+        "{id}",
+        "--version",
+        "{version}",
+        "--source",
+        "{dir}"
+      ],
       "sdk": "oap-sdk",
       "network": true
     }

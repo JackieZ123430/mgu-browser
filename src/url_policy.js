@@ -1,6 +1,7 @@
 'use strict';
 const URL=require('url').URL;
 function allowed(value) {
+    if(typeof value!=='string'||Buffer.byteLength(value,'utf8')>4096)return false;
     let u;try { u=new URL(value); } catch(e) { return false; }
     if (u.protocol!=='https:' || u.username || u.password || (u.port && u.port!=='443')) return false;
     return !!u.hostname;

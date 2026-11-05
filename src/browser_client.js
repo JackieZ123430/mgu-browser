@@ -31,7 +31,7 @@ class BrowserClient extends EventEmitter {
         if(!this.channel)return Promise.reject(new Error('Browser-Dienst noch nicht bereit'));
         if(op!=='stop'&&!this.gate.check().allowed)return Promise.reject(new Error(this.gate.check().reason||'Browser nicht freigegeben'));
         this.state();const id=++this.next;
-        return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error('Browser-Dienst: Zeitlimit'));},['start','navigate','mediaDemo','wifiScan','vaultUnlock'].includes(op)?30000:15000);this.pending.set(id,{resolve,reject,timer});this.channel.json(Object.assign({id,op},args||{}));});
+        return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error('Browser-Dienst: Zeitlimit'));},['start','navigate','mediaDemo','wifiScan','vaultUnlock'].includes(op)?30000:15000);this.pending.set(id,{resolve,reject,timer});this.channel.json(Object.assign({},args||{},{id,op}));});
     }
     start(url){return this.request('start',{url});}navigate(url){return this.request('navigate',{url});}tap(x,y){return this.request('tap',{x,y});}
     text(text){return this.request('text',{text});}key(key,shift){return this.request('key',{key,shift});}scroll(delta){return this.request('scroll',{delta});}back(){return this.request('back');}

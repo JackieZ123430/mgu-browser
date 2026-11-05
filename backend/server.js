@@ -6,6 +6,9 @@ const wifi=require('./wifi_control');
 const {SecureBrowserData}=require('./secure_browser_data');
 const profileStore=new SecureBrowserData('/var/opt/mgu-browser/data/protected');
 const SOCKET='/var/opt/mgu-browser/data/backend.sock';
+const APP_UID=Number(process.env.MGU_BROWSER_APP_UID),SERVICE_UID=Number(process.env.MGU_BROWSER_UID);
+const ENGINE=process.env.MGU_BROWSER_ENGINE_ROOT;
+if(!Number.isInteger(APP_UID)||APP_UID<12203||SERVICE_UID!==process.getuid()||!ENGINE)throw new Error('Verified runtime identity required');
 let owner=null,allowed=false,updated=0,generation=0;
 let phase='idle';
 let lastNetwork=null;
@@ -14,7 +17,7 @@ let lastNetworkProbe=0;
 function status(){fs.writeFileSync('/var/opt/mgu-browser/data/service-state.json',JSON.stringify({uid:process.getuid(),connected:!!owner,allowed,generation,phase,pid:process.pid}));}
 const now=()=>{const t=process.hrtime();return t[0]*1000+t[1]/1e6;};
 const gate={onBlock:null,check(){return {allowed:allowed&&now()-updated>=0&&now()-updated<1500};}};
-const browser=new Browser({gate,mediaDisabled:false,binary:'/var/opt/mgu-browser/engine/browser-launch',profileRoot:'/var/opt/mgu-browser/data/profiles',profileStore,viewport:{width:1280,height:384},env:{HOME:'/var/opt/mgu-browser/data',FONTCONFIG_FILE:'/var/opt/mgu-browser/engine/fonts.conf',CHROME_DEVEL_SANDBOX:'/var/opt/mgu-browser/engine/chrome-sandbox'}});
+const browser=new Browser({gate,mediaDisabled:false,binary:'/var/opt/mgu-browser/current/browser-launch',profileRoot:'/var/opt/mgu-browser/work/profiles',profileStore,viewport:{width:1280,height:384},env:{FONTCONFIG_FILE:ENGINE+'/fonts.conf',CHROME_DEVEL_SANDBOX:ENGINE+'/chrome-sandbox'}});
 function stop(reason){allowed=false;browser.stop(reason);phase='idle';status();}
 browser.on('frame',frame=>{
     if(!owner||!gate.check().allowed||(owner.socket.writableLength||owner.socket.bufferSize||0)>2*1024*1024)return;
@@ -34,7 +37,7 @@ browser.on('diagnostic',text=>{
 try{fs.unlinkSync(SOCKET);}catch(e){if(e.code!=='ENOENT')throw e;}
 const server=net.createServer(socket=>{
     let uid;try{uid=peer.peerUid(socket._handle.fd);}catch(e){socket.destroy();return;}
-    if(uid!==12443||owner){socket.destroy();return;}
+    if(uid!==APP_UID||owner){socket.destroy();return;}
     const channel=owner=new Channel(socket);channel.json({event:'ready'});
     if(lastNetwork)channel.json({event:'network',value:lastNetwork});
     status();
@@ -43,6 +46,7 @@ const server=net.createServer(socket=>{
     channel.on('json',async message=>{
         if(!message||typeof message!=='object')return socket.destroy();
         if(message.op==='state'){
+            if(typeof message.allowed!=='boolean'||!Number.isInteger(message.generation)||message.generation<0||message.generation>0xffffffff)return socket.destroy();
             const changed=allowed!==(message.allowed===true)||generation!==(Number(message.generation)>>>0);
             const next=message.allowed===true;generation=Number(message.generation)>>>0;updated=now();
             if(allowed&&!next)stop('Browser nicht im Vordergrund');allowed=next;if(changed)status();return;
@@ -68,6 +72,8 @@ const server=net.createServer(socket=>{
                 case 'closeTab':result=await browser.closeTab(message.tabId);break;
                 case 'clearTab':result=await browser.clearTab();break;
                 case 'mediaAction':result=await browser.mediaAction(message.action);break;
+                case 'mediaFocus':result=await browser.focusMediaControl(message.delta);break;
+                case 'mediaPress':result=await browser.pressMediaControl();break;
                 case 'mediaCapabilities':result=await browser.mediaCapabilities();break;
                 case 'privacyStatus':result=await browser.privacyStatus();break;
                 case 'privacyConfigure':result=await browser.privacyConfigure(message.prefs);break;
@@ -90,8 +96,8 @@ const server=net.createServer(socket=>{
     });
 });
 server.listen(SOCKET,()=>{
-    fs.chmodSync(SOCKET,0o660);fs.chownSync(SOCKET,3911,12443);status();
-    console.log('Browser backend ready; app UID 12443 only');
+    fs.chmodSync(SOCKET,0o660);fs.chownSync(SOCKET,SERVICE_UID,APP_UID);status();
+    console.log('Browser backend ready for the registered Browser frontend');
     networkProbe().then(result=>{lastNetwork=result;fs.writeFileSync('/var/opt/mgu-browser/data/network-status.json',JSON.stringify(result));if(owner)owner.json({event:'network',value:result});});
 });
 setInterval(()=>{if(allowed&&!gate.check().allowed)stop('Browser-App antwortet nicht');},100);

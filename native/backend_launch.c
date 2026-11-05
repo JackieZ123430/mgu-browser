@@ -1,17 +1,52 @@
 #define _GNU_SOURCE
 #include <grp.h>
+#include <errno.h>
 #include <sched.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <limits.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <unistd.h>
-int main(void) {
+static int root_directory(const char *name) {
+    struct stat st;
+    return !lstat(name,&st)&&S_ISDIR(st.st_mode)&&st.st_uid==0&&!(st.st_mode&0022);
+}
+static int work_directory(const char *name,uid_t uid,gid_t gid) {
+    return !mkdir(name,0700)&&!chown(name,uid,gid);
+}
+static unsigned number(const char *text) {char *end;unsigned long n=strtoul(text,&end,10);return *text&&!*end&&n>=1000&&n<=65535?(unsigned)n:0;}
+int main(int argc,char **argv) {
     if(getuid()!=0||geteuid()!=0){fputs("backend-launch: root service only\n",stderr);return 125;}
+    const int check=argc==2&&!strcmp(argv[1],"--check");
+    unsigned uid=3911,app=3911;
+    if(!check){if(argc!=5||strcmp(argv[1],"--uid")||strcmp(argv[3],"--app-uid"))return 125;uid=number(argv[2]);app=number(argv[4]);if(uid!=3911||app<12203)return 125;}
     const char *resolver="/var/opt/mgu-browser/network/resolv.conf";
     struct stat st;if(lstat(resolver,&st)||!S_ISREG(st.st_mode)||st.st_uid!=0||(st.st_mode&0022))return 125;
+    const char *work="/var/opt/mgu-browser/work";
+    if(!root_directory("/var")||!root_directory("/var/opt")||!root_directory("/var/opt/mgu-browser")||!root_directory("/var/opt/mgu-browser/network"))return 125;
+    if(mkdir(work,0755)&&errno!=EEXIST)return 125;
+    if(!root_directory(work))return 125;
     if(unshare(CLONE_NEWNS)||mount(NULL,"/",NULL,MS_REC|MS_PRIVATE,NULL)||mount(resolver,"/etc/resolv.conf",NULL,MS_BIND,NULL)){perror("private browser resolver");return 125;}
-    gid_t groups[]={12443};
-    if(setgroups(1,groups)||setresgid(3911,3911,3911)||setresuid(3911,3911,3911)){perror("backend privilege drop");return 125;}
-    execl("/usr/bin/node","node","/var/opt/mgu-browser/backend/server.js",NULL);
+    /* A real aggregate quota, including IndexedDB, caches and temporary files.
+     * This mount exists only in the service namespace and vanishes on stop. */
+    char options[128];snprintf(options,sizeof options,"size=128m,nr_inodes=16384,mode=0700,uid=%u,gid=%u",uid,app);
+    if(mount("mgu-browser-work",work,"tmpfs",MS_NODEV|MS_NOSUID|MS_NOEXEC,options)||
+       !work_directory("/var/opt/mgu-browser/work/home",uid,app)||!work_directory("/var/opt/mgu-browser/work/tmp",uid,app)||
+       !work_directory("/var/opt/mgu-browser/work/cache",uid,app)||!work_directory("/var/opt/mgu-browser/work/profiles",uid,app)){
+        perror("bounded browser working storage");return 125;
+    }
+    if(setenv("HOME","/var/opt/mgu-browser/work/home",1)||setenv("TMPDIR","/var/opt/mgu-browser/work/tmp",1)||
+       setenv("XDG_CACHE_HOME","/var/opt/mgu-browser/work/cache",1))return 125;
+    char id[24];snprintf(id,sizeof id,"%u",uid);if(setenv("MGU_BROWSER_UID",id,1))return 125;snprintf(id,sizeof id,"%u",app);if(setenv("MGU_BROWSER_APP_UID",id,1))return 125;
+    gid_t groups[]={app};
+    if(setgroups(1,groups)||setresgid(uid,uid,uid)||setresuid(uid,uid,uid)){perror("backend privilege drop");return 125;}
+    struct statvfs capacity;
+    if(statvfs(work,&capacity)||capacity.f_blocks*capacity.f_frsize>128UL*1024*1024||
+       !(capacity.f_flag&ST_NOSUID)||!(capacity.f_flag&ST_NOEXEC))return 125;
+    if(check){printf("{\"uid\":%u,\"gid\":%u,\"workBytes\":%lu,\"noexec\":true,\"nosuid\":true}\n",(unsigned)getuid(),(unsigned)getgid(),capacity.f_blocks*capacity.f_frsize);return 0;}
+    execl("/usr/bin/node","node","/var/opt/mgu-browser/current/backend/server.js",NULL);
     perror("backend exec");return 127;
 }

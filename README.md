@@ -4,22 +4,42 @@ Ein experimenteller Browser für BMW MGU / iDrive 7: eine native, mit dem
 iDrive-Controller bedienbare Oberfläche und eine getrennte Chromium-Engine
 für echtes HTML, CSS und JavaScript.
 
-**Entwicklungsstand: 0.9.0, 5. November 2026. Dieses Repository enthält einen
-Quellcode-Vorabstand, noch keine allgemein installierbare MGU-Store-Veröffentlichung.**
-Die aktuelle Oberfläche wird im lokalen SDK-App-Emulator entwickelt. Die auf
-einer Entwicklungs-Headunit erprobte ältere Version 0.6.1 belegt nicht, dass
-alle Funktionen von 0.9.0 bereits auf realer MGU-Hardware funktionieren.
+**Version 0.10.0 – experimentelle Store-Pakete für MGU / iDrive 7, x86_64.**
+Oberfläche, native Runtime und eine private Chromium-Engine werden gemeinsam
+über einen Store-Katalog verteilt. Der eigene Code steht unter MIT.
+**Die BMW-Lautsprecherausgabe ist noch nicht angebunden. YouTube- und
+Abonnement-Streaming sind noch nicht als funktionierend bestätigt.**
+Die Veröffentlichung ist ein Entwicklungsstand, keine Freigabe für alle
+MGU-Firmwarestände. Geprüfte Bereiche und offene Punkte stehen unter [Tests](docs/TESTING.md).
 
+[Headunit-Vorbereitung](docs/HEADUNIT_READINESS.md) · [Installationsplan](docs/INSTALLATION_PLAN.md) ·
 [English overview](README.en.md) · [Roadmap](docs/ROADMAP.md) ·
 [Entwicklung](docs/DEVELOPMENT.md) · [Architektur](docs/ARCHITECTURE.md) ·
 [Credits](CREDITS.md) · [Drittanbieter](THIRD_PARTY_NOTICES.md)
 
-## Als Quelle im MGU Store
+## Installation und Updates über den MGU Store
 
-`pllanaio/mgu-browser` hinzufügen und den Branch **main** auswählen.
-Die neue `mgu-repo.json` beschreibt den Browser und seinen Store-Build.
-Der separate native Runtime ist weiterhin Voraussetzung und noch nicht als
-allgemeines Store-Paket veröffentlicht. Details: [MGU Store](docs/MGU_STORE.md).
+`pllanaio/mgu-browser` als GitHub-Quelle hinzufügen und **Releases** auswählen.
+Bei einer bereits angelegten Quelle auf `main` für die vollständigen Binärpakete
+auf **Releases** wechseln. Anschließend den Browser installieren. Der Katalog
+verknüpft die Pakete und ihre Abhängigkeiten:
+
+| Paket | Version | Inhalt |
+| --- | --- | --- |
+| Browser | 0.10.0 | Native Oberfläche, iDrive-Bedienung, Tabs, Einstellungen |
+| Browser Runtime | 0.10.0 | Backend, native IPC-/Bildmodule, begrenztes Profil-Dateisystem |
+| Chromium Engine | 0.1.0 | Debian Chromium 156.0.8078.79 mit privaten Bibliotheken und Sandbox |
+
+MGU Deploy, Renderer und Internet uplink kommen aus der offiziellen Store-Quelle.
+Für Installation/Updates ausreichend freien persistenten Speicher vorhalten
+(empfohlen mindestens 2 GiB), das Fahrzeug abstellen und stabil versorgen.
+Bei der ersten Installation kann der Store einen Headunit-Neustart verlangen.
+Details, Rückkehr und Grenzen: [MGU Store](docs/MGU_STORE.md).
+
+Keine BMW-SDK-Dateien, SSH-Schlüssel, Profile, Cookies oder Widevine-CDMs werden
+mitgeliefert. Das SDK ergänzt der Store aus der jeweiligen eigenen Headunit.
+Die Release-Datei mit korrespondierenden Drittanbieterquellen gehört zu den
+Lizenzunterlagen; sie muss nicht auf dem Fahrzeug installiert werden.
 
 ## Danke an die Projekte, die das ermöglichen
 
@@ -28,13 +48,31 @@ allgemeines Store-Paket veröffentlicht. Details: [MGU Store](docs/MGU_STORE.md)
   SDK-App-Emulator bilden die Entwicklungsgrundlage dieses Browsers.
 - **[Robert Nisipeanu, IterioDev und die Mitwirkenden von MGU-Store](https://github.com/robertnisipeanu/mgu-store)**:
   Der Store schafft die Infrastruktur für App-Verteilung, Updates, Rendering
-  und Internetzugang. Die Zusammenarbeit mit diesem Ökosystem ist ein Ziel
-  des Projekts; eine fertige Store-Integration wird hier noch nicht behauptet.
+  und Internetzugang. Die Paketinstallation verwendet dessen Deploy-/Katalogformat;
+  der Browser verwendet den gemeinsamen Internet uplink.
 
 Dies ist ein eigenständiges Community-Projekt von
 [Leon Pllana](https://github.com/pllanaio), kein offizielles BMW-Produkt.
 Die Verlinkungen bedeuten keine Freigabe oder Unterstützung durch die genannten
 Teams. Ausführliche Zuordnung und Lizenzhinweise stehen in [CREDITS.md](CREDITS.md).
+
+
+## Grundlage und Prüfstand
+
+Die Prüfung hat Profil-I/O, Lösch-/Neustart-Rennen, Prozessende, begrenzte
+Metadaten, Datenmengen und Medien-Fokus überarbeitet. Sechs historische
+Fahrzeug-Einstiegsskripte wurden stillgelegt. Die neue lokale Vorbereitung
+erzeugt weiterhin ein separates Quell-Prüfpaket. Die Store-Veröffentlichung
+hat einen eigenen Paketbau unter `release/`, SHA-256-Prüfsummen und einen
+Katalog. Die Basis 0.9.1/Runtime 0.9.2 wurde auf der eigenen ID7-Headunit mit
+Webseiten und iDrive erprobt. Die neue Paketintegration muss davon getrennt
+bewertet werden; Audio, DRM, physische Touchpad-Gesten und Fahrzeug-Lebenszyklus
+bleiben offen.
+
+Die automatisierten Ergebnisse und ihre Grenzen stehen unter
+[Tests](docs/TESTING.md). Ein Quellcode-Audit ersetzt keinen Hardwaretest und
+belegt keine Fehlerfreiheit. Die echte Chromium-Prüfung der neuen Player-Auswahl
+ist durch die zusätzliche Audit-Isolation blockiert und noch offen.
 
 ## Was der Browser heute kann
 
@@ -96,7 +134,7 @@ Mausmodell des Emulators ersetzen diesen Hardwaretest nicht.
 - Systemsprache über die SDK-Schnittstelle `CurrentVehicleUnits`, einschließlich
   Sprachwechselereignissen; im Laptop-Emulator über die Anzeigesprache des Starters.
 - App-Texte derzeit Deutsch und Englisch; andere Systemsprachen erhalten
-  englische Ersatztexte.
+  überwiegend englische Ersatztexte; noch fehlende dynamische Übersetzungen können Deutsch bleiben.
 - Tastaturlayouts für Deutsch, Englisch, Französisch, Spanisch, Italienisch und Russisch.
 - Unicode-Schriftatlanten für zusätzliche lateinische, griechische und kyrillische
   Zeichen, einschließlich ä, ö, ü und ß.
@@ -150,7 +188,7 @@ Das ist kein Nachweis der Unterstützung jedes Abonnementdienstes.
 | Öffentlicher Widevine-Teststream | Verschlüsselte Wiedergabe in isolierter lokaler Chrome-Sitzung bestätigt |
 | YouTube | Direktzugriff vorhanden; umfassender Wiedergabe- und Audiotest offen |
 | Netflix | Anmeldeseite erreichbar; allgemeiner Fehler nach E-Mail-Eingabe, noch vor dem Passwortschritt |
-| Disney+ | Anmeldung, Profil-PIN, sichtbare Videowiedergabe, echtes Vollbild und Wiedergabe/Pause per Controller im Laptop-Emulator bestätigt |
+| Disney+ | Anmeldung bleibt nach vollständigem App-/Engine-Neustart erhalten. Bild/Vollbild funktionieren. Zuverlässige Auswahl der eigenen Player-Buttons per iDrive ist noch nicht bestätigt; der letzte sichtbare Test blieb auf „Zurück“. |
 | Prime Video | Direktzugriff vorhanden; angemeldete Wiedergabe noch nicht geprüft |
 | Paramount+ | Direktzugriff vorhanden; angemeldete Wiedergabe noch nicht geprüft |
 | Fahrzeuglautsprecher | Audio-Routing und hörbare Wiedergabe auf der MGU noch nicht bestätigt |
@@ -228,7 +266,7 @@ lokale Umgebung und sind keine Fahrzeugtests.
 
 Die [Roadmap](docs/ROADMAP.md) beschreibt konkret, was geplant oder gewünscht
 ist: zuverlässiges Streaming, Fahrzeug-Audio, echte Touchpad-Gesten,
-Spracheingabe, bessere Leistung, sichere Sitzungsspeicherung und eine saubere
+Spracheingabe, bessere Leistung und weitere Hardware-Qualifikation der
 MGU-Store-Verteilung. Ideen sind keine Zusage fertiger Funktionen.
 
 Für Fehlermeldungen bitte Version, Emulator oder reale MGU, reproduzierbare
@@ -237,13 +275,12 @@ Privatschlüssel oder unbereinigten Browserprofile in Issues einstellen.
 
 ## Inhalt und Lizenzstand
 
-Veröffentlicht werden Browser-Quellen, native Hilfsprogramme, vorbereitete
-Netzwerkdienste, Tests und Build-/Emulatorwerkzeuge. Nicht enthalten sind
+Veröffentlicht werden Browser-Quellen, native Hilfsprogramme, Store-Pakete
+mit Chromium, Lizenzunterlagen, Tests und Build-/Emulatorwerkzeuge. Nicht enthalten sind
 Firmware-Dumps, BMW-SDK-Dateien, Schlüssel, WLAN-Profile, Kontodaten,
-Browsersitzungen, Diagnosemitschnitte oder fertige Binärpakete.
+Browsersitzungen, Diagnosemitschnitte oder Widevine-CDMs.
 
-Für den eigenen Projektcode wurde noch keine zusätzliche Nutzungslizenz
-festgelegt (`UNLICENSED` in `package.json`). Die öffentliche Einsicht ist
-keine pauschale Weiterverwendungslizenz. Drittanbieter behalten ihre jeweiligen
-Lizenzen; siehe [LICENSE.md](LICENSE.md) und
+Der eigene Projektcode steht unter **MIT** und darf entsprechend genutzt und
+weiterentwickelt werden. Drittanbieter behalten ihre jeweiligen
+Lizenzen; siehe [LICENSE](LICENSE), [LICENSE.md](LICENSE.md) und
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

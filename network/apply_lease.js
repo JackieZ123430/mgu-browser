@@ -16,6 +16,9 @@ const config=JSON.parse(fs.readFileSync(base+'/iproute.json','utf8'));
 if(config.command.length!==4||config.command[0]!=='/var/opt/mgu-browser/engine/lib/ld-linux-x86-64.so.2'||!config.command[3].startsWith(base+'/iproute-'))throw new Error('Unexpected private routing tool');
 const run=a=>cp.execFileSync(config.command[0],config.command.slice(1).concat(a),{encoding:'utf8',timeout:5000}).trim();
 const rules=JSON.parse(run(['-j','rule','show'])),table=JSON.parse(run(['-j','route','show','table','3911']));
+// Reject collisions before the first address/route/firewall mutation. Rule218
+// is source-scoped, so the entire lease subnet must be foreign-interface free.
+require('./lease_policy').assertIsolated(address,prefix,JSON.parse(run(['-j','address','show'])));
 let previous={};try{previous=JSON.parse(fs.readFileSync(base+'/lease-state.json','utf8'));}catch(e){}
 const own=rules.filter(r=>r.priority===219),reverse=rules.filter(r=>r.priority===218);
 if(own.some(r=>r.uid_start!==3911||r.uid_end!==3911||String(r.table)!=='3911'))throw new Error('Browser routing slot occupied');

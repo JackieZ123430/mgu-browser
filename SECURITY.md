@@ -1,9 +1,25 @@
 # Sicherheit und private Daten
 
-Dies ist ein experimenteller Quellcode-Vorabstand. Er enthält keine Firmware,
+Dies ist ein experimenteller Entwicklungsstand. Er enthält keine Firmware,
 BMW-SDK-Dateien, Kontodaten, Schlüssel, WLAN-Profile oder Fahrzeugmitschnitte.
 Die öffentliche Kopie wird aus einer ausdrücklichen Dateiliste erzeugt;
 private Arbeitsverzeichnisse und lokale Git-Historie werden nicht übernommen.
+
+## Verteilungsgrenze
+
+BMW-eigene Implementierungen, extrahierte App-Bundles, SDK-Module, Firmware,
+Schriftdateien und Schlüssel gehören weder in den Git-Baum oder seine Historie
+noch in Release-Anhänge. API-Aufrufe im eigenen Code ersetzen kein mitgeliefertes
+SDK: der Store erzeugt dieses erst lokal aus dem Donor der jeweiligen Headunit.
+Die öffentlichen Pakete werden ohne diesen Donor gebaut und geprüft.
+
+Für 0.10.0 werden Quellbaum und öffentliche `main`-Historie auf solche Pfade,
+BMW-Copyright-Kennzeichnungen und Übereinstimmungen mit dem lokalen SDK geprüft.
+Die Kit-JavaScript-Dateien im Frontend werden byteweise dem gepinnten öffentlichen
+MIT-Kit zugeordnet. Die Engine wird ausschließlich aus nachgewiesenen Debian-
+Paketen und deren korrespondierenden Quellen zusammengestellt. Ein Bericht
+liegt bei den Release-Dateien. Diese technischen Prüfungen sind keine rechtliche
+Freigabe sämtlicher Abhängigkeiten durch deren Autoren.
 
 ## Vorhandene Laufzeitgrenzen
 

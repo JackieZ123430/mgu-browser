@@ -14,6 +14,8 @@ const en={
 };
 const de={'gueltige':'gültige','auswaehlen':'auswählen','pruefen':'prüfen','Zurueck':'Zurück','Vorwaerts':'Vorwärts','schliessen':'schließen','Haeufig':'Häufig','haeufig':'häufig','Waehle':'Wähle','waehlt':'wählt','Druecken':'Drücken','bestaetigt':'bestätigt','oeffnen':'öffnen','zurueck':'zurück','geschuetzten':'geschützten','ergaenzt':'ergänzt','Loeschen':'Löschen','Laedt':'Lädt','Oeffnen':'Öffnen'};
 Object.assign(en,{
+ 'Sitzungsspeicher zurücksetzen':'Reset saved sessions','Gespeicherte Website-Anmeldungen und Cache zurücksetzen? Passwörter bleiben erhalten.':'Reset saved sign-ins and cache? Saved passwords remain.',
+ 'Browser-Einstellungen konnten nicht gespeichert werden':'Browser settings could not be saved','Speichereinstellungen beschädigt; Persistenz ist ausgeschaltet':'Storage settings are damaged; persistence is off',
  'Datenschutz & Logins':'Privacy & sign-ins','Angemeldet bleiben':'Keep signed in','HTTP-Cache behalten':'Keep HTTP cache','Verlauf aufzeichnen':'Record history',
  'Website-Daten löschen / abmelden':'Clear site data / sign out','HTTP-Cache löschen':'Clear HTTP cache','Verlauf löschen':'Clear history','Passwortverwaltung':'Password manager',
  'Geschützter Speicher wird geprüft ...':'Checking protected storage ...','Geschützter Speicher in dieser Laufzeit nicht verfügbar':'Protected storage is unavailable in this runtime',

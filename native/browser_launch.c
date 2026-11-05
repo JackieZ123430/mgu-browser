@@ -3,6 +3,8 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <limits.h>
 #include <sys/prctl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -31,10 +33,13 @@ int main(int argc, char **argv) {
     if(child<0)return 125;
     if(!child){
         signal(SIGTERM,SIG_DFL);signal(SIGINT,SIG_DFL);signal(SIGHUP,SIG_DFL);
-        argv[0]="/var/opt/mgu-browser/engine/chromium";
+        const char *engine=getenv("MGU_BROWSER_ENGINE_ROOT");char executable[PATH_MAX];
+        if(!engine||strncmp(engine,"/var/opt/mgu-browser-engine/versions/",sizeof("/var/opt/mgu-browser-engine/versions/")-1)||snprintf(executable,sizeof executable,"%s/chromium",engine)>=(int)sizeof executable)_exit(125);
+        argv[0]=executable;
         execv(argv[0],argv);perror("browser-launch exec");_exit(127);
     }
     child_pid=child;
+    if(stopping)kill(child,SIGTERM);
     close(3);close(4);
     int status;
     while(waitpid(child,&status,0)<0){if(errno!=EINTR)return 125;}

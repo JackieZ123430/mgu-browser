@@ -12,9 +12,9 @@ function serve(options){
             let message;
             try{
                 try{message=JSON.parse(buffer);}catch(e){throw new Error('Ungueltige WLAN-Anfrage');}buffer='';let result;
-                if(message.op==='status')result=adapter.status();
-                else if(message.op==='connect')result=adapter.connect(message.ssid,message.password);
-                else if(message.op==='reconnect')result=adapter.reconnect();
+                if(message.op==='status')result=await adapter.status();
+                else if(message.op==='connect'){socket.setTimeout(11000,()=>socket.destroy());result=await adapter.connect(message.ssid,message.password);}
+                else if(message.op==='reconnect'){socket.setTimeout(11000,()=>socket.destroy());result=await adapter.reconnect();}
                 else if(message.op==='scan'){socket.setTimeout(24000,()=>socket.destroy());result=await adapter.scan();}
                 else throw new Error('Unbekannter WLAN-Befehl');
                 if(message)message.password=null;socket.end(JSON.stringify({result})+'\n');
@@ -26,10 +26,15 @@ function serve(options){
 module.exports=serve;
 if(require.main===module){
     if(process.getuid()!==0)throw new Error('Root WLAN broker required');
-    const adapter=new(require('./wifi_adapter'))('/var/opt/mgu-browser/network');
-    const peer=require('/var/opt/mgu-browser/backend/peer_uid.node');
+    const setup=require('../runtime/setup');let identity;
+    function launch(){identity=setup.prepare();if(!identity.ready){setTimeout(launch,5000);return;}start(identity);}
+    function start(identity){
+    const Adapter=require('./uplink_adapter');
+    const adapter=new Adapter('/var/opt/mgu-browser/network',{group:identity.appUid});
+    const peer=require('/var/opt/mgu-browser/current/backend/peer_uid.node');
     const socket='/run/mgu-browser-wifi/control.sock';try{fs.unlinkSync(socket);}catch(e){if(e.code!=='ENOENT')throw e;}
-    const server=serve({adapter,socket,uid:3911,group:3911,peerUid:fd=>peer.peerUid(fd)});
-    if(adapter.status().saved)adapter.reconnect();
+    const server=serve({adapter,socket,uid:identity.serviceUid,group:identity.serviceUid,peerUid:fd=>peer.peerUid(fd)});
     for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{adapter.close();server.close(()=>process.exit(0));});
+    }
+    launch();
 }

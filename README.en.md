@@ -1,15 +1,18 @@
 # MGU Browser — English overview
 
 An experimental native browser UI for BMW MGU / iDrive 7, backed by a separate
-Chromium process. Version 0.9.0 is being developed in a local SDK app emulator.
-This is a **source preview, not a ready-to-install MGU-Store release**.
+Chromium process, with a local SDK app emulator for development.
+Version 0.10.0 publishes an **experimental ID7/x86_64 Store catalog** with
+the frontend, native runtime and private Chromium engine. Add
+`pllanaio/mgu-browser` as a GitHub source and select **Releases** for complete
+installation and updates. Existing `main` sources must switch to Releases
+for these binary packages. The project's own code is now MIT licensed.
+
+**BMW speaker output is not connected yet. YouTube and subscription-provider
+playback are not confirmed. No Widevine CDM or BMW SDK is distributed.**
+See [installation, dependencies and rollback](docs/MGU_STORE.md).
 
 The [full German README](README.md) describes features and verified limits.
-
-For source discovery in MGU Store, add `pllanaio/mgu-browser` and select the
-**main branch**. The root `mgu-repo.json` declares the frontend build and its
-dependencies. The separate native runtime is not yet generally distributed;
-see [MGU Store integration](docs/MGU_STORE.md).
 
 ## Implemented locally
 
@@ -32,8 +35,9 @@ Netflix currently fails before its password step. Disney+ login has reached the
 profile-PIN step and confirmed visible playback, fullscreen and controller
 play/pause in the laptop emulator. YouTube, Prime Video and
 Paramount+ require further qualification. Vehicle audio is also unconfirmed.
-The head-unit backend source now enables media; this change is not installed or
-validated on real MGU hardware. It does not provide missing codecs, a CDM or audio routing.
+Media is enabled in the backend. An earlier private build rendered muted test
+video on the author's MGU; the new packaging still needs hardware qualification.
+Chromium does not provide a CDM or BMW audio routing.
 
 Version 0.9.0 adds opt-in encrypted session and HTTP-cache persistence, separate
 site/cache/history clearing, and an explicit origin-bound password manager.
@@ -42,9 +46,9 @@ mode with PBKDF2-SHA256 and AES-256-GCM. Both share the same storage format and
 browser code. Real-MGU qualification is pending. Clean shutdown is required to
 save the latest state; sudden power loss is not fully covered. Website-provided
 video controls take precedence, with native controls used only as fallback.
-Proprietary SDK files, credentials, vehicle data, firmware dumps, CDMs and
-binary packages are excluded. An additional license for original project code
-has not yet been selected; third-party components retain their own licenses.
+Proprietary SDK files, credentials, vehicle data, firmware dumps and CDMs are
+excluded. Original code is MIT licensed; dependencies retain their licenses,
+with matching native source archives supplied beside the release binaries.
 
 ## Credits and collaboration
 
@@ -52,8 +56,13 @@ Special thanks to **[cauliflowermossgrape and idrive7-apps contributors](https:/
 for the app kit, native rendering/controller foundations and emulator, and to
 **[Robert Nisipeanu, IterioDev and MGU-Store contributors](https://github.com/robertnisipeanu/mgu-store)**
 for the store, renderer, deployment/update infrastructure and shared internet uplink.
-Store integration, including reuse of that uplink, is planned and has not been
-validated. No affiliation or endorsement is claimed.
+Store integration and shared uplink are implemented; packages were tested with
+the official deployer's isolated fixture. No affiliation or endorsement is claimed.
 
 See [credits](CREDITS.md), [roadmap](docs/ROADMAP.md),
 [development](docs/DEVELOPMENT.md) and [architecture](docs/ARCHITECTURE.md).
+
+The 0.9.1 audit foundation prepared bounded storage, metadata and shutdown.
+Version 0.10.0 adds Store package distribution. Disney sign-in survived an
+emulator restart, but provider controls and real-HU DRM remain unqualified.
+See [head-unit readiness](docs/HEADUNIT_READINESS.md).

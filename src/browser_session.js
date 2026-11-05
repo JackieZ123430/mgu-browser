@@ -1,6 +1,7 @@
 'use strict';
 const cp=require('child_process'),fs=require('fs'),path=require('path'),EventEmitter=require('events');
 const CdpPipe=require('./cdp_pipe'),PNG=require('./png_frame'),URLPolicy=require('./url_policy');
+const Metadata=require('./browser_metadata');
 let JPEG=null;try{JPEG=require('./jpeg_frame.node');}catch(e){}
 const monotonic=()=>{const t=process.hrtime();return t[0]*1000+t[1]/1e6;};
 
@@ -13,7 +14,7 @@ class BrowserSession extends EventEmitter {
         this.viewport=options.viewport||{width:960,height:540};
         this.locale=options.locale||'en-GB';
         this.tabs=[];this.tabNext=0;this.pageGeneration=0;this.tabQueue=Promise.resolve();
-        this.mediaWatch=setInterval(()=>{if(this.child)this.inspectMedia();},500);
+        this.mediaWatch=setInterval(()=>{if(this.child)this.inspectMedia();},1000);
         if(!this.gate||typeof this.gate.check!=='function')throw new Error('Vordergrundstatus fehlt');
         this.watch=setInterval(()=>{if(this.child&&!this.gate.check().allowed)this.stop('Browser nicht im Vordergrund');},100);
         this.gate.onBlock=reason=>this.stop(reason);
@@ -22,7 +23,7 @@ class BrowserSession extends EventEmitter {
     async start(url) {
         this.requireAllowed();
         if(url&&!URLPolicy.allowed(url))throw new Error('HTTPS-Adresse erforderlich');
-        await this.closing;this.requireAllowed();
+        await this.closing;await this.storageChange;this.requireAllowed();if(this.shutdownFault)throw this.shutdownFault;
         if(this.child)return this.navigate(url);
         if(process.platform!=='linux'||process.getuid()===0)throw new Error('Browser benötigt einen unprivilegierten Linux-Benutzer');
         const epoch=++this.epoch;
@@ -30,7 +31,7 @@ class BrowserSession extends EventEmitter {
         const profileStat=fs.lstatSync(this.options.profileRoot);
         if(!profileStat.isDirectory()||profileStat.isSymbolicLink()||profileStat.uid!==process.getuid())throw new Error('Profilordner gehört nicht dem Browser-Benutzer');
         const profile=this.profile=fs.mkdtempSync(path.join(this.options.profileRoot,'session-'));
-        try{if(this.options.profileStore)await this.options.profileStore.restore(profile);this.requireAllowed();if(epoch!==this.epoch||this.profile!==profile)throw new Error('Browserstart abgebrochen');}catch(e){removeProfile(profile,this.options.profileRoot);if(this.profile===profile)this.profile=null;throw e;}
+        try{if(this.options.profileStore)await this.options.profileStore.restore(profile,()=>epoch===this.epoch&&this.profile===profile&&this.gate.check().allowed);this.requireAllowed();if(epoch!==this.epoch||this.profile!==profile)throw new Error('Browserstart abgebrochen');}catch(e){removeProfile(profile,this.options.profileRoot);if(this.profile===profile)this.profile=null;throw e;}
         const args=['--headless','--disable-gpu','--remote-debugging-pipe','--no-first-run','--no-default-browser-check','--lang='+this.locale,
             '--disable-sync','--disable-background-networking','--disable-extensions','--disable-component-update',
             '--disable-breakpad','--disable-dev-shm-usage','--disk-cache-size=16777216','--media-cache-size=8388608',
@@ -68,7 +69,7 @@ class BrowserSession extends EventEmitter {
         const tab=this.tabs.find(t=>t.session===event.sessionId);
         if(!tab)return;
         const active=event.sessionId===this.session;
-        if(event.method==='Page.frameNavigated'&&!event.params.frame.parentId){tab.mainFrame=event.params.frame.id;tab.url=URLPolicy.allowed(event.params.frame.url)?event.params.frame.url:'';this.emitTabs();}
+        if(event.method==='Page.frameNavigated'&&!event.params.frame.parentId){if(active){this.pageGeneration++;this.focusedMediaControl=null;this.focusedMediaObject=null;this.lastMedia=null;this.emit('media',{fullscreen:false});}tab.mainFrame=event.params.frame.id;tab.url=URLPolicy.allowed(event.params.frame.url)?event.params.frame.url:'';this.emitTabs();}
         if(event.method==='Page.navigatedWithinDocument'&&event.params.frameId===tab.mainFrame){tab.url=URLPolicy.allowed(event.params.url)?event.params.url:'';this.emitTabs();}
         if(event.method==='Page.frameStartedLoading'&&event.params.frameId===tab.mainFrame){tab.loading=true;this.emitTabs();}
         if(event.method==='Page.loadEventFired'){tab.loading=false;this.updateTab(tab);}
@@ -79,9 +80,10 @@ class BrowserSession extends EventEmitter {
         if(event.method==='Page.frameNavigated'&&!event.params.frame.parentId&&URLPolicy.allowed(event.params.frame.url))this.emit('navigation',event.params.frame.url);
         if(event.method==='Page.navigatedWithinDocument'&&event.params.frameId===this.mainFrame&&URLPolicy.allowed(event.params.url))this.emit('navigation',event.params.url);
         if(event.method==='Page.frameNavigated'&&!event.params.frame.parentId)this.mainFrame=event.params.frame.id;
-        if(event.method==='Runtime.exceptionThrown')this.emit('diagnostic','[page] '+JSON.stringify(event.params.exceptionDetails).slice(0,1400));
-        if(event.method==='Log.entryAdded'&&event.params.entry.level==='error')this.emit('diagnostic','[page] '+event.params.entry.text.slice(0,1400));
-        if(event.method==='Network.loadingFailed')this.emit('diagnostic','[page-network] '+event.params.errorText+' '+event.params.type);
+        if(event.method==='Runtime.exceptionThrown')this.emit('diagnostic','[page] JavaScript exception (content omitted)');
+        if(event.method==='Log.entryAdded'&&event.params.entry.level==='error')this.emit('diagnostic','[page] Browser error (content omitted)');
+        if(event.method==='Network.loadingFailed')this.emit('diagnostic','[page-network] Request failed');
+        if(event.method==='Inspector.targetCrashed'){this.emit('fault',new Error('Webseite abgestürzt. Browser erneut öffnen.'));this.stop('Webseite abgestürzt');return;}
         if(event.method==='Fetch.requestPaused'&&this.options.mediaDisabled){
             const p=event.params;
             const send=(method,params)=>this.pipe.send(method,params,event.sessionId);
@@ -165,8 +167,8 @@ class BrowserSession extends EventEmitter {
         this.navigationTimer=setTimeout(async()=>{
             try{const h=await this.send('Page.getNavigationHistory'),entry=h.entries[h.currentIndex];
                 if(epoch===this.epoch&&view===this.pageGeneration&&entry){
-                    const tab=this.tabs.find(t=>t.id===this.activeTab);if(tab){tab.title=entry.title||'';tab.url=URLPolicy.allowed(entry.url)?entry.url:'';this.emitTabs();}
-                    this.emit('navigationState',{url:URLPolicy.allowed(entry.url)?entry.url:'',title:entry.title,canBack:h.entries.slice(0,h.currentIndex).some(e=>URLPolicy.allowed(e.url)),canForward:h.entries.slice(h.currentIndex+1).some(e=>URLPolicy.allowed(e.url))});
+                    const tab=this.tabs.find(t=>t.id===this.activeTab);if(tab){tab.title=Metadata.title(entry.title);tab.url=URLPolicy.allowed(entry.url)?entry.url:'';this.emitTabs();}
+                    this.emit('navigationState',{url:URLPolicy.allowed(entry.url)?entry.url:'',title:Metadata.title(entry.title),canBack:h.entries.slice(0,h.currentIndex).some(e=>URLPolicy.allowed(e.url)),canForward:h.entries.slice(h.currentIndex+1).some(e=>URLPolicy.allowed(e.url))});
                 }
             }catch(e){}
         },100);
@@ -181,7 +183,7 @@ class BrowserSession extends EventEmitter {
         },120);
     }
     async pageInfo(){
-        return this.send('Runtime.evaluate',{expression:'JSON.stringify({url:location.origin+location.pathname,title:document.title,ready:document.readyState,visible:document.visibilityState,mains:Array.from(document.querySelectorAll("main")).map(m=>({display:getComputedStyle(m).display,text:m.innerText.slice(0,120)})),scripts:document.scripts.length,resources:performance.getEntriesByType("resource").length})',returnByValue:true});
+        return this.send('Runtime.evaluate',{expression:'JSON.stringify({ready:document.readyState,visible:document.visibilityState,scripts:document.scripts.length,resources:performance.getEntriesByType("resource").length})',returnByValue:true});
     }
     stop(reason) {
         this.tabs=[];this.activeTab=null;this.pageGeneration++;this.emitTabs();
@@ -194,13 +196,14 @@ class BrowserSession extends EventEmitter {
             // Avoid an unconditional SIGKILL, which is unsuitable on this MGU.
             this.emit('blocked',reason||'Browser geschlossen');
             if(pipe&&!pipe.closed)pipe.send('Browser.close',{},null,2000).catch(()=>{});
-            let exited=child.exitCode!==null||child.signalCode!==null;
+            let exited=child.exitCode!==null||child.signalCode!==null,forced=false,interrupted=false,cleaned=false,termTimer,killTimer,deadline;
             this.closing=new Promise(resolve=>{
-                const cleanup=()=>setTimeout(async()=>{try{if(this.options.profileStore)await this.options.profileStore.capture(profile);}catch(e){this.emit('diagnostic','Geschützte Sitzung konnte nicht gespeichert werden');}finally{try{removeProfile(profile,this.options.profileRoot);}catch(e){this.emit('diagnostic','Profile cleanup failed: '+e.code);}resolve();}},500);
+                const cleanup=()=>{if(cleaned)return;cleaned=true;clearTimeout(termTimer);clearTimeout(killTimer);clearTimeout(deadline);setTimeout(async()=>{try{if(this.options.profileStore&&!forced&&!interrupted&&child.exitCode===0&&!child.signalCode)await this.options.profileStore.capture(profile);else if(this.options.profileStore)this.options.profileStore.skipCapture=false;}catch(e){this.emit('diagnostic','Geschützte Sitzung konnte nicht gespeichert werden');}finally{try{removeProfile(profile,this.options.profileRoot);}catch(e){this.emit('diagnostic','Profile cleanup failed');}this.shutdownFault=null;resolve();}},500);};
                 if(exited)cleanup();else child.once('close',()=>{exited=true;cleanup();});
+                if(!exited)deadline=setTimeout(()=>{this.shutdownFault=new Error('Browser-Prozess nicht beendet. Backend-Neustart erforderlich.');this.emit('fault',this.shutdownFault);resolve();},9000);
             });
-            const timer=setTimeout(()=>{if(!exited&&child.pid){try{process.kill(-child.pid,'SIGTERM');}catch(e){try{child.kill('SIGTERM');}catch(ignore){}}}},2500);
-            timer.unref&&timer.unref();
+            const signal=name=>{if(!exited&&child.pid){interrupted=true;try{process.kill(-child.pid,name);}catch(e){try{child.kill(name);}catch(ignore){}}}};
+            if(!exited){termTimer=setTimeout(()=>signal('SIGTERM'),2500);killTimer=setTimeout(()=>{if(!exited){forced=true;this.emit('diagnostic','Browser reagiert nicht; eigene Prozessgruppe wird beendet');signal('SIGKILL');}},5500);}
         }
         if(pipe)pipe.close(new Error(reason||'Browser geschlossen'));
     }

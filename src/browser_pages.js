@@ -1,6 +1,7 @@
 'use strict';
 // Independent Chromium targets share one engine and one active profile.
 const Policy=require('./url_policy');
+const Metadata=require('./browser_metadata');
 module.exports={
     async setLocale(locale){
         this.requireAllowed();if(typeof locale!=='string'||!(/^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$/.test(locale)))throw new Error('Invalid browser locale');
@@ -11,13 +12,13 @@ module.exports={
         await this.pipe.send('Network.setUserAgentOverride',{userAgent:this.userAgent,acceptLanguage:this.locale+','+language+';q=0.9',platform:'Linux x86_64'},session);
         await this.pipe.send('Emulation.setLocaleOverride',{locale:this.locale},session);
     },
-    emitTabs(){this.emit('tabs',this.tabs.map(t=>({id:t.id,url:t.url,title:t.title||'',loading:!!t.loading,active:t.id===this.activeTab})));},
+    emitTabs(){this.emit('tabs',this.tabs.map(t=>({id:t.id,url:Policy.allowed(t.url)?t.url:'',title:Metadata.title(t.title),loading:!!t.loading,active:t.id===this.activeTab})));},
     async updateTab(tab){
         const pipe=this.pipe;if(!pipe)return;
         try{
             const h=await pipe.send('Page.getNavigationHistory',{},tab.session),e=h.entries[h.currentIndex];
             if(!this.tabs.includes(tab))return;
-            if(e){tab.url=Policy.allowed(e.url)?e.url:'';tab.title=e.title||'';}this.emitTabs();
+            if(e){tab.url=Policy.allowed(e.url)?e.url:'';tab.title=Metadata.title(e.title);}this.emitTabs();
         }catch(e){}
     },
     tabTask(fn){const work=this.tabQueue.catch(()=>{}).then(fn);this.tabQueue=work;return work;},

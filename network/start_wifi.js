@@ -16,7 +16,7 @@ try{
     const radio=JSON.parse(fs.readFileSync(base+'/radio.json','utf8')).command;
     if(radio[0]!=='/var/opt/mgu-browser/engine/lib/ld-linux-x86-64.so.2'||radio[3]!==base+'/radio-tools/iw')throw new Error('Unexpected station power tool');
     cp.execFileSync(radio[0],radio.slice(1).concat(['dev','wlan0','set','power_save','off']),{timeout:5000});
-    const lease=cp.spawnSync('/sbin/udhcpc',['-i','wlan0','-n','-q','-t','3','-T','4','-s',base+'/lease-hook.sh'],{encoding:'utf8',timeout:18000});
+    const lease=cp.spawnSync('/sbin/udhcpc',['-i','wlan0','-n','-q','-t','3','-T','4','-s',require('path').join(__dirname,'lease-hook.sh')],{encoding:'utf8',timeout:18000});
     const actual=JSON.parse(fs.readFileSync(state,'utf8'));
     if(lease.status!==0||!actual.connected)throw new Error('WLAN DHCP/routing unavailable');
     // Applying the station address can reapply driver power settings. Set it

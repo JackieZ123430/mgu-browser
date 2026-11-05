@@ -5,6 +5,7 @@ public idrive7-apps kit is downloaded; no BMW SDK or Chromium is downloaded.
 Exactly one frontend .tgz is written to MGU_OUT. Native runtime is separate.
 """
 import argparse
+import gzip
 import hashlib
 import importlib.util
 import json
@@ -76,6 +77,7 @@ def main():
     parser.add_argument('--app', required=True)
     parser.add_argument('--version', required=True)
     parser.add_argument('--source', required=True)
+    parser.add_argument('--release-package', action='store_true', help='Build without a donor and omit oap-sdk; the Store supplies it on install')
     args = parser.parse_args()
     if hasattr(os, 'geteuid') and os.geteuid() == 0:
         raise SystemExit('Run the Store build as an unprivileged user')
@@ -90,7 +92,7 @@ def main():
     if spec.get('id') != args.app or spec.get('version') != args.version:
         raise SystemExit('Store identity differs from app.json')
     sdk = ROOT / 'oap-sdk'
-    if not all((sdk / name).is_file() for name in ('index.js', 'package.json')):
+    if not args.release_package and not all((sdk / name).is_file() for name in ('index.js', 'package.json')):
         raise SystemExit('MGU Store must supply the local donor SDK with build.sdk')
     if not os.environ.get('MGU_OUT'):
         raise SystemExit('MGU_OUT must name the Store output folder')
@@ -100,10 +102,19 @@ def main():
         raise SystemExit('MGU_OUT must be empty')
     with tempfile.TemporaryDirectory(prefix='mgu-browser-store-') as temporary:
         work = Path(temporary)
+        if args.release_package:
+            sdk = work / 'sdk-placeholder'
+            sdk.mkdir()
+            (sdk / 'index.js').write_text('/* Build placeholder; never shipped. */\n', encoding='utf-8')
+            (sdk / 'package.json').write_text('{"name":"oap-sdk","version":"0.0.0"}\n', encoding='utf-8')
         archive = work / 'kit.tar.gz'
         kit_archive(archive)
         extract_kit(archive, work)
         archive.unlink()
+        fonts = ROOT / 'assets' / 'ui-fonts'
+        if fonts.is_dir():
+            for name in ('label.json', 'bold.json', 'light.json', 'LICENSE.txt', 'COPYRIGHT.txt'):
+                shutil.copyfile(fonts / name, work / 'kit' / 'runtime' / 'fonts' / ('UFL-' + name if name.endswith('.txt') else name))
         target = work / 'apps' / args.app
         target.mkdir(parents=True)
         for name in ('app.json', 'main.js', 'chromium_frontend.js'):
@@ -125,12 +136,26 @@ def main():
         manifest = package / 'package.json'
         metadata = json.loads(manifest.read_text(encoding='utf-8'))
         metadata['mguHmi'] = ['ID7']
+        metadata['license'] = 'MIT'
         manifest.write_text(json.dumps(metadata, indent=2) + '\n', encoding='utf-8')
+        if args.release_package:
+            shutil.rmtree(package / 'node_modules' / 'oap-sdk')
         shutil.copyfile(work / 'LICENSE', package / 'javascript' / 'kit' / 'LICENSE.idrive7-apps')
+        if (ROOT / 'LICENSE').is_file():
+            shutil.copyfile(ROOT / 'LICENSE', package / 'LICENSE')
         artifact = output / (args.app + '@' + args.version + '.tgz')
-        with tarfile.open(artifact, 'w:gz') as result:
-            for entry in sorted(package.iterdir()):
-                result.add(entry, arcname=entry.name)
+        with artifact.open('wb') as raw, gzip.GzipFile(fileobj=raw, filename='', mode='wb', mtime=0) as zipped, tarfile.open(fileobj=zipped, mode='w') as result:
+            for entry in sorted(package.rglob('*')):
+                if entry.is_symlink():
+                    raise RuntimeError('Symlink in frontend package')
+                if not entry.is_file():
+                    continue
+                item = tarfile.TarInfo(entry.relative_to(package).as_posix())
+                item.size = entry.stat().st_size
+                item.uid = item.gid = item.mtime = 0
+                item.mode = 0o644
+                with entry.open('rb') as source:
+                    result.addfile(item, source)
         print('Store frontend package: ' + artifact.name)
 
 

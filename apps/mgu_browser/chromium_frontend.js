@@ -35,6 +35,7 @@ mgu.run({async start(ctx){
     };
     const activity=()=>{lastAction=Date.now();};
     const note=message=>{toast=message;toastUntil=Date.now()+3300;};
+    store.onError=note;
     const safe=task=>Promise.resolve().then(typeof task==='function'?task:()=>task).catch(e=>{note(e.message);log.warn(e.message);});
     async function navigate(value){
         const url=inputURL(value);if(!url){note('Bitte eine gueltige HTTPS-Adresse eingeben');return;}
@@ -147,11 +148,11 @@ mgu.run({async start(ctx){
         press:()=>{showMedia();safe(()=>browser.mediaAction(videoActions[mediaIndex]));}
     };
     const siteMediaActions={
-        toolbar:()=>safe(()=>browser.mediaAction('exit')),
+        toolbar:()=>media.fullscreen?safe(()=>browser.mediaAction('exit')):webActions.toolbar(),
         keyboard:()=>safe(()=>browser.key('ArrowRight')),
         scroll:()=>safe(()=>browser.mediaAction('reveal')),
-        focus:d=>safe(async()=>{await browser.mediaAction('reveal');for(let n=0;n<Math.abs(d);n++)await browser.key('Tab',d<0);}),
-        press:()=>safe(()=>browser.key('Enter'))
+        focus:d=>safe(()=>browser.request('mediaFocus',{delta:d})),
+        press:()=>safe(()=>browser.request('mediaPress'))
     };
     function focusUI(delta){
         const display=ctx.display,targets=display&&display.pageTargets||[];if(!targets.length)return;
@@ -169,7 +170,7 @@ mgu.run({async start(ctx){
         focus:focusUI,toolbar:()=>tiltUI('W'),keyboard:()=>tiltUI('E'),scroll:d=>tiltUI(d<0?'N':'S'),
         press:()=>{const display=ctx.display,target=display&&(display.pageTargets||[]).find(t=>'tgt:'+t.key===display.focusKey);if(target)safe(()=>target.run());}
     };
-    const actions=()=>media.fullscreen?(media.hasSiteControls?siteMediaActions:mediaActions):webMode&&!keyboard&&!panel&&!landing&&browser.child?webActions:uiActions;
+    const actions=()=>media.fullscreen?(media.hasSiteControls?siteMediaActions:mediaActions):webMode&&!keyboard&&!panel&&!landing&&browser.child?(media.playerMode&&media.hasSiteControls?siteMediaActions:webActions):uiActions;
     const controller=new Controller({focus:d=>actions().focus(d),toolbar:()=>actions().toolbar(),keyboard:()=>actions().keyboard(),scroll:d=>actions().scroll(d),press:()=>actions().press()});
     const input=v=>{if(!gate.check().allowed)return false;controller.feed(v);return true;};
     nativeBridge.setControllerHandler(input);ctx.controller.onInput(input);
@@ -338,7 +339,7 @@ mgu.run({async start(ctx){
     function drawPrivacy(c,bottom){
         c.text('Datenschutz & Logins',64,114,34,C.text);
         const enabled=!!privacyState&&privacyState.supported&&!privacyState.locked&&!privacyBusy;
-        c.text(privacyBusy?'Geschützter Speicher wird geprüft ...':privacyState&&privacyState.supported?privacyState.locked?'Masterpasswort: Speicher zuerst entsperren':privacyState.protection:'Geschützter Speicher in dieser Laufzeit nicht verfügbar',65,157,18,C.muted);
+        c.text(privacyBusy?'Geschützter Speicher wird geprüft ...':privacyState&&privacyState.error?privacyState.error:privacyState&&privacyState.supported?privacyState.locked?'Masterpasswort: Speicher zuerst entsperren':privacyState.protection:'Geschützter Speicher in dieser Laufzeit nicht verfügbar',65,157,18,C.muted);
         if(privacyState&&privacyState.supported&&privacyState.locked&&!keyboard)button(c,1170,178,364,42,privacyState.needsSetup?'Masterpasswort einrichten':'Speicher entsperren',()=>{keyboard=privacyState.needsSetup?'vault-create':'vault-unlock';draft='';vaultSetup='';replaceDraft=false;keyMode='abc';upper=false;},'vault-unlock');
         c.text('Angemeldet bleiben',65,211,23,C.text);
         button(c,850,178,294,42,privacyState&&privacyState.rememberSessions?'Ein':'Aus',()=>changePrivacy('rememberSessions'),'remember-sessions',{enabled});
@@ -351,6 +352,7 @@ mgu.run({async start(ctx){
         button(c,776,354,290,42,'Verlauf löschen',()=>confirmPrivacy('Den lokalen Browser-Verlauf löschen?',async()=>store.clearHistory()),'clear-history');
         button(c,1082,354,452,42,'Passwortverwaltung',openPasswords,'passwords',{enabled});
         c.text('Speichern erfolgt beim Beenden. Ohne Sitzungen bleiben Logins nur bis zum Schließen.',65,439,17,C.muted);
+        button(c,64,bottom-52,680,42,'Sitzungsspeicher zurücksetzen',()=>confirmPrivacy('Gespeicherte Website-Anmeldungen und Cache zurücksetzen? Passwörter bleiben erhalten.',async()=>{privacyState=await browser.request('clearBrowserData',{kind:'sessions-reset'});landing=true;currentURL='';title='';}),'reset-sessions',{enabled});
         button(c,1288,bottom-52,246,42,'Zurueck',()=>{panel='settings';},'privacy-back');
     }
     function drawPasswords(c,bottom){

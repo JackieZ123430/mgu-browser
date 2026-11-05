@@ -5,11 +5,15 @@ module.exports={
     async privacyStatus(){this.requireAllowed();return this.options.profileStore?this.options.profileStore.status():{supported:false,rememberSessions:false,rememberCache:false};},
     async privacyConfigure(prefs){this.requireAllowed();if(!this.options.profileStore)throw new Error('Geschützter Speicher nicht verfügbar');return this.options.profileStore.configure(prefs||{});},
     async vaultUnlock(password){this.requireAllowed();if(!this.options.profileStore)throw new Error('Geschützter Speicher nicht verfügbar');return this.options.profileStore.unlock(password);},
-    async clearBrowserData(kind){
+    clearBrowserData(kind){
         this.requireAllowed();const store=this.options.profileStore;if(!store)throw new Error('Geschützter Speicher nicht verfügbar');
-        if(kind==='cache'){if(this.session)await this.send('Network.clearBrowserCache');await store.clear('cache');}
-        else if(kind==='sites'){store.skipCapture=!!this.child;this.stop('Website-Daten werden gelöscht');await this.closing;await store.clear('sites');}
-        else throw new Error('Unbekannte Datenkategorie');return store.status();
+        if(!['cache','sites','sessions-reset'].includes(kind))return Promise.reject(new Error('Unbekannte Datenkategorie'));
+        const work=(this.storageChange||Promise.resolve()).catch(()=>{}).then(async()=>{
+            if(kind==='cache'){if(this.session)await this.send('Network.clearBrowserCache');await store.clear('cache');}
+            else {store.skipCapture=!!this.child;this.stop('Website-Daten werden gelöscht');await this.closing;if(this.shutdownFault)throw this.shutdownFault;if(kind==='sessions-reset')await store.resetSessions();else await store.clear('sites');}
+            return store.status();
+        });
+        this.storageChange=work;return work;
     },
     async vaultList(){this.requireAllowed();if(!this.options.profileStore)throw new Error('Passwortspeicher nicht verfügbar');return this.options.profileStore.listLogins();},
     async vaultSave(){

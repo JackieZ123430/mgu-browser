@@ -12,6 +12,7 @@ test('Portable encrypted storage preserves selected profile data and never resto
         await store.capture(profile);assert(!fs.readFileSync(root+'/protected/sessions.bin').includes(Buffer.from('fixture-cookie-only')));
         const reopened=new SecureBrowserData(root+'/protected');await assert.rejects(()=>reopened.restore(root+'/session-locked'),/entsperren/);
         await assert.rejects(()=>reopened.unlock('incorrect fixture password'),/ungültig/);await reopened.unlock('fixture master phrase 2468');
+        await assert.rejects(()=>reopened.restore(root+'/session-cancelled',()=>false),/abgebrochen/);assert.equal(fs.readdirSync(root+'/session-cancelled').length,0);
         const restored=root+'/session-restored';await reopened.restore(restored);assert.equal(fs.readFileSync(restored+'/Default/Cookies','utf8'),'fixture-cookie-only');
         assert(!fs.existsSync(restored+'/Default/History'));assert(!fs.existsSync(restored+'/Default/Login Data'));
         await reopened.clear('cache');assert(reopened.archive().every(e=>!e.name.includes('/Cache/')));

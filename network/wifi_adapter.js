@@ -19,7 +19,7 @@ class WifiAdapter{
         if(!profile.ssid(this.base))throw new Error('Zuerst WLAN-Name und Passwort eingeben');
         if(this.child)this.child.kill('SIGTERM');
         this.joining=true;this.error='';
-        const child=this.child=cp.spawn('/usr/bin/node',[this.base+'/start_wifi.js'],{stdio:['ignore','pipe','ignore']});
+        const child=this.child=cp.spawn('/usr/bin/node',[require('path').join(__dirname,'start_wifi.js')],{stdio:['ignore','pipe','ignore']});
         let output='';
         const timer=setTimeout(()=>{if(this.child===child&&this.joining){this.error='WLAN-Zeitlimit erreicht';this.joining=false;child.kill('SIGTERM');}},80000);
         child.stdout.on('data',b=>{output=(output+b.toString('utf8')).slice(-512);if(output.includes('Browser WLAN startup complete')){this.joining=false;clearTimeout(timer);}});

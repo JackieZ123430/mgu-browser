@@ -35,12 +35,14 @@ bleiben bei einer späteren tatsächlichen Übernahme gesondert zu beachten.
 - Google Widevine: separat installierte DRM-Komponente des offiziellen
   Desktop-Chrome; nicht Bestandteil dieses Repositorys.
 - Shaka Player und der öffentliche Sintel-Teststream: DRM-Integrationstest.
-- libjpeg-turbo: lokaler nativer JPEG-Decoder; Bibliothek und Lizenz werden
-  nur in privaten Build-Ausgaben bereitgestellt.
+- libjpeg-turbo: nativer JPEG-Decoder; Runtime-Paket mit Lizenz und passenden
+  Quellen in der Veröffentlichung.
 - parse5 / Ivan Nikulin: MIT-lizenzierter HTML-Parser für den früheren
   Lesemodus; Lizenz und Herkunftsnachweis liegen bei.
-- Ubuntu-Schriftfamilie und Google Fonts: separat bereitgestellte Schriftdateien
-  für die privat erzeugten Unicode-Atlanten.
+- Ubuntu-Schriftfamilie / Canonical und Google Fonts als Bezugsquelle:
+  Unicode-Atlanten und originale TTFs unter Ubuntu Font Licence 1.0.
+- Debian und die Chromium-/Bibliotheks-Mitwirkenden: Engine-Binärpakete,
+  Quellen, Sicherheitsaktualisierungen und zugehörige Lizenzunterlagen.
 
 Die eigene Browser-Integration und Oberfläche werden von
 [Leon Pllana](https://github.com/pllanaio) entwickelt.
