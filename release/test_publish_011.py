@@ -1,5 +1,6 @@
 """Offline publisher regression tests. No GitHub calls or token access."""
 import copy
+import gzip
 import hashlib
 import json
 from pathlib import Path
@@ -87,6 +88,29 @@ class PublisherTest(unittest.TestCase):
         with patch.object(publisher, 'run', return_value=result):
             with self.assertRaisesRegex(RuntimeError, 'Audited asset differs'):
                 publisher.verify(self.output, self.output, conf)
+
+    def test_gzip_normalization_keeps_audited_payload_and_ignores_host_encoder(self):
+        payload = bytes(range(256)) * 600 + b'final partial block'
+        sha = hashlib.sha256(payload).hexdigest()
+        a, b = self.output / 'a.tgz', self.output / 'b.tgz'
+        a.write_bytes(gzip.compress(payload, compresslevel=1, mtime=100))
+        b.write_bytes(gzip.compress(payload, compresslevel=9, mtime=200))
+        self.assertNotEqual(a.read_bytes(), b.read_bytes())
+        publisher.normalize_package(a, sha, len(payload))
+        publisher.normalize_package(b, sha, len(payload))
+        self.assertEqual(a.read_bytes(), b.read_bytes())
+        self.assertEqual(gzip.decompress(a.read_bytes()), payload)
+        before = a.read_bytes()
+        publisher.normalize_package(a, sha, len(payload))
+        self.assertEqual(a.read_bytes(), before)
+
+    def test_changed_tar_payload_is_rejected_before_rewrapping(self):
+        file = self.output / 'changed.tgz'
+        file.write_bytes(gzip.compress(b'changed tar'))
+        before = file.read_bytes()
+        with self.assertRaisesRegex(RuntimeError, 'Audited tar payload differs'):
+            publisher.normalize_package(file, hashlib.sha256(b'audited tar').hexdigest(), len(b'audited tar'))
+        self.assertEqual(file.read_bytes(), before)
 
 
 if __name__ == '__main__':

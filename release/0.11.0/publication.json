@@ -9,13 +9,17 @@
   "assets": [
     {
       "name": "mgu_browser@0.11.0.tgz",
-      "size": 1816632,
-      "sha256": "59acded89e7d6521fe29dd7748781c98de8b452ba2d02fb787b17c355134540e"
+      "size": 3236108,
+      "sha256": "cb8d4a50e63e572633a5867558806ff7bfcf8fc626ab1782cc1483f62526ed32",
+      "tarSize": 3235840,
+      "tarSha256": "f67e6aab963595559b8110df2996b577298948d80a61605480f3056037b4d581"
     },
     {
       "name": "mgu-browser@0.11.0.tgz",
-      "size": 284556,
-      "sha256": "1df2a3ce9933f0e71425683f2a8c8c31420fadaecf82dba72b342a5ef3849771"
+      "size": 993378,
+      "sha256": "ecec4c1bbb5820c96f4aead2580effc377bf302335337919c0941191d7a514bd",
+      "tarSize": 993280,
+      "tarSha256": "0ffc47227e7789f5c0fb84bba1a3c08461cc97af7fe552fea541012ac0ce3eaf"
     },
     {
       "name": "runtime-provenance.json",
@@ -24,18 +28,18 @@
     },
     {
       "name": "package-verification.json",
-      "size": 643,
-      "sha256": "617979058a6dd3b543e59d63ef6f9193f25c25998816ba2d279a32315c153643"
+      "size": 1077,
+      "sha256": "f38cdab2b96ebf045be416429a084aeacd4106176f4d0651cb5179076a86fb8b"
     },
     {
       "name": "test-results.json",
-      "size": 2468,
-      "sha256": "d4f85d8a916b3c3a9b2067b502be74d8f3df149c5924d706a5739b88bd46305b"
+      "size": 2924,
+      "sha256": "fcbbda8eeaebb21e79b40166d7a15f9ea489d1a798a8114aabdc1f27e18ad030"
     },
     {
       "name": "catalog.json",
       "size": 2250,
-      "sha256": "a639a3b0e896d80b17fa3ed26ee0ce3cda499d766cd560b78b2234d3b95e2c7b"
+      "sha256": "eb6dac7577d61d3a8e9e38e9a7721d7f798e0b30b490733fe453108a5d28a842"
     }
   ]
 }

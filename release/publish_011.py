@@ -5,11 +5,14 @@ accepts replacement bytes for the versioned release. Catalog publication happens
 last, after every versioned asset was downloaded and checked again.
 """
 import argparse
+import binascii
+import gzip
 import hashlib
 import json
 from pathlib import Path
 import re
 import shutil
+import struct
 import subprocess
 import tempfile
 
@@ -18,6 +21,27 @@ METADATA = Path(__file__).resolve().parent / '0.11.0'
 
 def digest(file):
     return hashlib.sha256(Path(file).read_bytes()).hexdigest()
+
+
+def normalize_package(file, tar_sha256, tar_size):
+    """Wrap the exact audited tar in zlib-independent gzip stored blocks.
+
+    Different zlib versions can encode identical input differently. RFC 1951
+    stored blocks have no compression decisions, so this envelope is identical
+    on every build host. The larger download does not change extracted bytes.
+    """
+    with gzip.open(file, 'rb') as package:
+        data = package.read(tar_size + 1)
+    if len(data) != tar_size or hashlib.sha256(data).hexdigest() != tar_sha256:
+        raise RuntimeError('Audited tar payload differs: ' + file.name)
+    chunks = [data[start:start + 65535] for start in range(0, len(data), 65535)] or [b'']
+    result = bytearray(b'\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff')
+    for index, chunk in enumerate(chunks):
+        result += b'\x01' if index == len(chunks) - 1 else b'\x00'
+        result += struct.pack('<HH', len(chunk), len(chunk) ^ 0xffff)
+        result += chunk
+    result += struct.pack('<II', binascii.crc32(data) & 0xffffffff, len(data) & 0xffffffff)
+    file.write_bytes(result)
 
 
 def run(args, check=True):
@@ -54,6 +78,9 @@ def verify(source, output, conf):
 
 
 def prepare(source, output, conf):
+    for asset in conf['assets']:
+        if asset['name'].endswith('.tgz'):
+            normalize_package(output / asset['name'], asset['tarSha256'], asset['tarSize'])
     # Never replace rebuilt runtime provenance with the committed copy: verify it.
     for name in ['catalog.json', 'test-results.json', 'package-verification.json', 'SHA256SUMS']:
         shutil.copyfile(METADATA / name, output / name)

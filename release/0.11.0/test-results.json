@@ -45,7 +45,18 @@
     "limits": [
       "No installation, systemd or vehicle behavior is exercised by this artifact validation",
       "BMW speaker output remains unconfirmed"
-    ]
+    ],
+    "gzipEnvelope": "RFC 1951 stored blocks with fixed gzip header/trailer; independent of build-host zlib version",
+    "auditedTarPayloads": {
+      "mgu_browser@0.11.0.tgz": {
+        "size": 3235840,
+        "sha256": "f67e6aab963595559b8110df2996b577298948d80a61605480f3056037b4d581"
+      },
+      "mgu-browser@0.11.0.tgz": {
+        "size": 993280,
+        "sha256": "0ffc47227e7789f5c0fb84bba1a3c08461cc97af7fe552fea541012ac0ce3eaf"
+      }
+    }
   },
   "limits": [
     "No real headunit installation/update/rollback performed for 0.11.0",

@@ -31,8 +31,8 @@
       ],
       "artifact": {
         "name": "mgu-browser@0.11.0.tgz",
-        "size": 284556,
-        "sha256": "1df2a3ce9933f0e71425683f2a8c8c31420fadaecf82dba72b342a5ef3849771",
+        "size": 993378,
+        "sha256": "ecec4c1bbb5820c96f4aead2580effc377bf302335337919c0941191d7a514bd",
         "url": "https://github.com/pllanaio/mgu-browser/releases/download/v0.11.0/mgu-browser%400.11.0.tgz"
       },
       "requires": {
@@ -62,8 +62,8 @@
       },
       "artifact": {
         "name": "mgu_browser@0.11.0.tgz",
-        "size": 1816632,
-        "sha256": "59acded89e7d6521fe29dd7748781c98de8b452ba2d02fb787b17c355134540e",
+        "size": 3236108,
+        "sha256": "cb8d4a50e63e572633a5867558806ff7bfcf8fc626ab1782cc1483f62526ed32",
         "url": "https://github.com/pllanaio/mgu-browser/releases/download/v0.11.0/mgu_browser%400.11.0.tgz"
       },
       "author": "Leon Pllana"
