@@ -6,6 +6,9 @@ function start(){
     if(stopping)return;
     let identity;try{identity=setup.prepare();}catch(e){console.error(e.message);process.exitCode=1;return;}
     if(!identity.ready){console.log('Waiting for the Browser frontend to be installed');timer=setTimeout(start,5000);return;}
+    // Phone remote control: open its port in the WLAN before dropping root.
+    try{const r=require('./remote_firewall').apply();console.log('Remote control firewall: '+JSON.stringify(r));}
+    catch(e){console.error('Remote control firewall not applied: '+e.message);}
     const args=['--uid',String(identity.serviceUid),'--app-uid',String(identity.appUid)];
     if(identity.audio)args.push('--audio-gid',String(identity.audio.gid));
     child=cp.spawn('/var/opt/mgu-browser/current/backend-launch',args,{stdio:'inherit',env:Object.assign({},process.env,{MGU_BROWSER_ENGINE_ROOT:identity.engineRoot})});

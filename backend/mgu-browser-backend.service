@@ -12,9 +12,9 @@ TimeoutStopSec=20
 MemoryAccounting=yes
 MemoryLimit=768M
 CPUAccounting=yes
-CPUQuota=200%
-CPUShares=128
-Nice=10
+CPUQuota=300%
+CPUShares=512
+Nice=0
 TasksMax=256
 OOMScoreAdjust=500
 Environment=HOME=/var/opt/mgu-browser/data

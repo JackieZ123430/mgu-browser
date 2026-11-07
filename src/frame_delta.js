@@ -45,6 +45,13 @@ FrameDelta.sender=function(options){
             const gen=options.generation()>>>0;
             if(owner!==channel||gen!==generation){channel=owner;generation=gen;delta.reset();}
             if(owner.pending()>(options.maxPending||2*1024*1024))return false;
+            // A 0.12 frontend does not announce protocol 2 and gets the old
+            // full-frame format, so updating runtime and app in either order
+            // never shows a black page.
+            if(owner.frameProtocol!==2){
+                const h=Buffer.alloc(12);h.writeUInt32LE(gen,0);h.writeUInt32LE(frame.width,4);h.writeUInt32LE(frame.height,8);
+                owner.sendParts(2,[h,frame.rgba]);return true;
+            }
             const band=delta.diff(frame);if(!band)return false;
             owner.sendParts(2,[FrameDelta.header(gen,frame,band),FrameDelta.band(frame,band)]);delta.commit(frame);return true;
         }

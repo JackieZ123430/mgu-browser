@@ -16,6 +16,16 @@ The frontend requires runtime 0.12.0, engine 0.1.0, `mgu-uplink` 0.7.3,
 source enabled for the last three. The Store installs dependencies automatically.
 This release targets **ID7 / Linux x86_64**, not ID8 or other architectures.
 
+## Update to 0.13.0
+
+Refresh the Releases source and update **Browser** (the Store installs Browser
+Runtime 0.13.0 first). The engine stays 0.1.0. New: about 30 fps with
+changed-region updates, cookies and consent survive ignition-off without a
+master password, ad/tracker blocking, frozen background tabs and the phone
+remote control ([REMOTE.md](REMOTE.md)). Frontend and runtime negotiate the
+frame format, so an update in either order never shows a black page.
+The runtime opens TCP 39123 on the WLAN interfaces for the phone remote.
+
 ## Update to 0.12.0
 
 Close Browser, refresh the Releases source and update both Browser and Browser

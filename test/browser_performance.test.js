@@ -20,7 +20,7 @@ test('Frame delta sends full frames first, nothing for identical frames and only
 });
 
 test('Frame sender writes bands without concatenation and the client reassembles the surface',()=>{
-    const socket=new PassThrough(),server=new Channel(socket);let generation=5;
+    const socket=new PassThrough(),server=new Channel(socket);server.frameProtocol=2;let generation=5;
     const sender=FrameDelta.sender({owner:()=>server,allowed:()=>true,generation:()=>generation});
     const BrowserClient=require('../src/browser_client');
     const client=Object.assign(Object.create(BrowserClient.prototype),EE.prototype);EE.call(client);
@@ -93,4 +93,16 @@ test('Version-1 preferences with the old default turn cookie persistence on',asy
     try{fs.mkdirSync(root+'/protected',{mode:0o700});fs.writeFileSync(root+'/protected/preferences.json',JSON.stringify({rememberSessions:false,rememberCache:true}),{mode:0o600});
         const store=new SecureBrowserData(root+'/protected');await store.ready;assert.deepEqual(store.prefs,{rememberSessions:true,rememberCache:true});
     }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('Old and new frontend/runtime combinations both show pictures during a Store update',()=>{
+    const BrowserClient=require('../src/browser_client');
+    const make=()=>{const c=Object.assign(Object.create(BrowserClient.prototype),EE.prototype);EE.call(c);Object.assign(c,{gate:{check:()=>({allowed:true})},generation:3,channel:{json:()=>{}}});return c;};
+    // New runtime, frontend 0.12 (no protocol announcement): legacy full frames.
+    const socket=new PassThrough(),server=new Channel(socket),parts=[];server.sendParts=(type,p)=>{parts.push(Buffer.concat(p));return true;};
+    const sender=FrameDelta.sender({owner:()=>server,allowed:()=>true,generation:()=>3});
+    sender.send(frame(16,16,9));assert.equal(parts[0].length,12+16*16*4,'legacy 12-byte header + full frame');
+    // New frontend, runtime 0.12: accepts the legacy frame.
+    const client=make(),seen=[];client.on('frame',f=>seen.push(f));client.frame(parts[0]);
+    assert.equal(seen.length,1);assert.deepEqual(seen[0].dirty,{y:0,rows:16});
 });

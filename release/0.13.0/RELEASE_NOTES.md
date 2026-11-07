@@ -1,4 +1,4 @@
-# MGU Browser 0.13.0 – Performance und dauerhafte Cookies
+# MGU Browser 0.13.0 – Performance, dauerhafte Cookies und Handy-Fernbedienung
 
 Noch nicht veröffentlicht. Die Store-Pakete entstehen wie bisher über
 `release/build.py` und den Publish-Workflow; dieser Quellstand enthält keine
@@ -16,7 +16,21 @@ gebauten Artefakte.
   bei einer kleinen Animation.
 - Keine Pufferkopien mehr pro Frame (IPC-Schreiben ohne `Buffer.concat`,
   CDP-Empfang ohne wiederholtes Zusammenfügen großer Nachrichten).
-- Nativer JPEG-Decoder ohne „fancy upsampling“: ~1,3 ms pro 1280×384-Frame.
+- Native JPEG-Dekodierung: ~1,2–1,3 ms pro 1280×384-Frame (unveränderter, geprüfter Decoder aus 0.10.0).
+- Werbe- und Trackerblocker (Einstellungen, standardmäßig ein): bekannte
+  Werbe-/Analyse-Hosts werden gar nicht geladen.
+- Hintergrund-Tabs werden eingefroren (Skripte/Timer stehen), außer sie
+  spielten beim Verlassen Audio/Video. Seiten erhalten
+  `prefers-reduced-motion`, was Animationen und Bildaktualisierungen spart.
+- Backend-Dienst: CPUQuota 300 %, Nice 0 (vorher 200 %, Nice 10).
+- Frontend und Laufzeit handeln das Bildformat aus: Ein Update in beliebiger
+  Reihenfolge zeigt nie ein schwarzes Bild.
+
+## Handy-Fernbedienung
+
+Einstellungen → „Mit Handy steuern (QR)“. Live-Bild, Tippen, Scrollen,
+Text/Passwörter eingeben, Links senden, Tabs wechseln. Details und
+Sicherheitsmodell: [docs/REMOTE.md](../../docs/REMOTE.md).
 - Touch-Scrollen fasst Bewegungen zusammen statt Dutzende CDP-Aufrufe zu
   stapeln; Smooth-Scrolling ist abgeschaltet (keine Zwischenframes).
 - Größerer Disk-/Medien-Cache, weniger unnötige Chromium-Hintergrunddienste,
@@ -46,3 +60,8 @@ gebauten Artefakte.
   CDP-Parser und Cookie-Persistenz.
 - `test/chromium_persistence_smoke.js`: echter Chromium-Lauf mit hartem
   Engine-Abbruch und Bildratenmessung.
+- `test/chromium_remote_smoke.js`: echter Chromium-Lauf der Handy-Fernbedienung
+  (Token, Live-Bild, Tippen, Unicode-Text, nur HTTPS), eingefrorene
+  Hintergrund-Tabs und Werbeblocker.
+- QR-Codes der Versionen 1–10 wurden mit einem unabhängigen Decoder (OpenCV)
+  geprüft, auch aus dem gerenderten iDrive-Panel.

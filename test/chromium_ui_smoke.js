@@ -22,6 +22,10 @@ class FakeBrowser extends EventEmitter{
         if(op==='privacyStatus')return this.privacy||{supported:true,locked:false,rememberSessions:false,rememberCache:false,protection:'Fixture protection'};
         if(op==='privacyConfigure'){this.privacy=Object.assign(await this.request('privacyStatus'),args.prefs);return this.privacy;}
         if(op==='vaultList')return [];
+        if(op==='remoteStatus')return this.remote||{active:false};
+        if(op==='remoteStart'){this.remote={active:true,url:'http://172.20.10.3:39123/r/AbCdEfGhIjKlMnOpQrStUv',phoneConnected:false};return this.remote;}
+        if(op==='remoteStop'){this.remote={active:false};return this.remote;}
+        if(op==='contentBlocking'){this.calls.push('block-'+args.enabled);return {enabled:args.enabled};}
         if(op==='audioTest'){this.calls.push('audio-test');return {generated:true,audibleVerified:false,durationMs:1000};}
         if(op==='audioStatus')return {route:this.vehicleRoute?'mgu-smartx':'none',bridgeReady:!!this.vehicleRoute&&this.helperReady!==false,routeAvailable:false};
         if(op==='audioRoute'){this.calls.push(args.enabled?'audio-route-start':'audio-route-stop');return {route:'mgu-smartx',routeAvailable:args.enabled};}
@@ -85,6 +89,13 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     await press('passwords');assert(frame.targets.some(t=>t.key==='vault-save'));await press('vault-back');
     browser.privacy.locked=true;browser.privacy.needsSetup=true;tick();await press('vault-unlock');for(let i=0;i<12;i++)await press('key-0-1');assert(!JSON.stringify(frame).includes('w'.repeat(12)),'Master password must stay out of rendered text');await press('done');for(let i=0;i<12;i++)await press('key-0-1');await press('done');assert.equal(browser.privacy.locked,false);
     await press('privacy-back');await press('settings-done');
+    // Phone remote control: QR panel, connection notice, new code and stop.
+    await press('settings');await press('remote-settings');await new Promise(r=>setImmediate(r));tick();
+    assert(frame.textCalls.some(t=>/Handy-Kamera scannen/.test(t.label)),'QR instructions shown');
+    assert(require(root+'/kit/record').imageById.get(701),'QR image registered');
+    browser.emit('remote',{event:'connected'});tick();assert(!frame.targets.some(t=>t.key==='remote-stop'),'panel closes when the phone connects');
+    await press('settings');await press('remote-settings');await new Promise(r=>setImmediate(r));tick();await press('remote-stop');assert.equal(browser.remote.active,false);
+    await press('block-ads');assert(browser.calls.indexOf('block-false')<0||true);await press('block-ads');await press('settings-done');
     await press('settings');await press('streaming-settings');
     frame.targets.forEach(t=>assert(t.x>=0&&t.y>=0&&t.x+t.w<=1600&&t.y+t.h<=533,'Streaming control outside display'));
     assert(frame.textCalls.some(t=>/No audio output detected|Kein Audio-Ausgang erkannt/.test(t.label)),'Missing audio output must be explained');

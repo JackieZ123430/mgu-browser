@@ -142,7 +142,9 @@ class BrowserSession extends EventEmitter {
         if(p.epoch!==this.epoch||p.view!==this.pageGeneration||!this.gate.check().allowed)return;
         this.decoding=true;this.lastDecodeStart=monotonic();
         const epoch=p.epoch,view=p.view,started=this.lastDecodeStart;
-        Promise.resolve().then(()=>{const encoded=Buffer.from(p.params.data,'base64');this.performance.encodedBytes+=encoded.length;return JPEG?JPEG.decode(encoded):PNG.decode(encoded);}).then(frame=>{
+        Promise.resolve().then(()=>{const encoded=Buffer.from(p.params.data,'base64');this.performance.encodedBytes+=encoded.length;
+            // The phone remote control shows this exact picture; no second encode.
+            if(this.listenerCount('screencastJpeg'))this.emit('screencastJpeg',{data:encoded,type:JPEG?'image/jpeg':'image/png'});return JPEG?JPEG.decode(encoded):PNG.decode(encoded);}).then(frame=>{
             this.performance.frames++;this.performance.decodeMs+=monotonic()-started;
             if(this.performance.frames===1||this.performance.frames%60===0)this.emit('performance',this.performance);
             if(epoch===this.epoch&&view===this.pageGeneration&&this.gate.check().allowed){this.lastFrame=monotonic();this.emit('frame',frame);}
@@ -253,6 +255,7 @@ Object.assign(BrowserSession.prototype,require('./browser_media'));
 Object.assign(BrowserSession.prototype,Audio.methods);
 Object.assign(BrowserSession.prototype,require('./browser_privacy'));
 Object.assign(BrowserSession.prototype,require('./browser_cookies'));
+Object.assign(BrowserSession.prototype,require('./browser_performance'));
 // Node 8 has no recursive rm. Never follow links when clearing our temporary
 // profile, and accept only the direct session directory we created ourselves.
 function removeProfile(profile,root){

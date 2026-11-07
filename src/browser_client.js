@@ -15,7 +15,7 @@ class BrowserClient extends EventEmitter {
     state(){
         const allowed=this.gate.check().allowed;
         if(allowed!==this.lastAllowed){this.generation++;this.lastAllowed=allowed;if(!allowed){this.child=null;this.emit('blocked','Browser nicht im Vordergrund');}}
-        if(this.channel)this.channel.json({op:'state',allowed,generation:this.generation});
+        if(this.channel)this.channel.json({op:'state',allowed,generation:this.generation,frames:2});
     }
     receive(m){
         if(m.id){const p=this.pending.get(m.id);if(p){clearTimeout(p.timer);this.pending.delete(m.id);m.error?p.reject(new Error(m.error)):p.resolve(m.result||{});}return;}
@@ -26,7 +26,14 @@ class BrowserClient extends EventEmitter {
     // client keeps one persistent surface and patches bands into it, so the
     // renderer only uploads the rows that really changed.
     frame(b){
-        if(b.length<20||!this.gate.check().allowed||b.readUInt32LE(0)!==this.generation)return;
+        if(b.length<12||!this.gate.check().allowed||b.readUInt32LE(0)!==this.generation)return;
+        const lw=b.readUInt32LE(4),lh=b.readUInt32LE(8);
+        // Full frame from a 0.12 runtime (12-byte header) while the runtime update is pending.
+        if(lw>=16&&lh>=16&&lw<=1280&&lh<=720&&b.length===12+lw*lh*4){
+            this.surface={width:lw,height:lh,generation:this.generation,rgba:b.slice(12)};
+            this.emit('frame',{width:lw,height:lh,rgba:this.surface.rgba,dirty:{y:0,rows:lh}});return;
+        }
+        if(b.length<20)return;
         const w=b.readUInt32LE(4),h=b.readUInt32LE(8),y=b.readUInt32LE(12),rows=b.readUInt32LE(16);
         if(w>1280||h>720||!w||!h||!rows||y+rows>h||b.length!==20+w*rows*4)return;
         const s=this.surface,full=y===0&&rows===h;
