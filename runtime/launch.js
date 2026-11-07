@@ -6,6 +6,9 @@ function start(){
     if(stopping)return;
     let identity;try{identity=setup.prepare();}catch(e){console.error(e.message);process.exitCode=1;return;}
     if(!identity.ready){console.log('Waiting for the Browser frontend to be installed');timer=setTimeout(start,5000);return;}
+    // Leftovers of the private 0.9.x installation (old engine folder).
+    try{const r=require('./legacy_cleanup').cleanup();if(r.removed)console.log('Removed the unused 0.9.x Chromium engine folder');}
+    catch(e){console.error('Legacy cleanup skipped: '+e.message);}
     // Phone remote control: open its port in the WLAN before dropping root.
     try{const r=require('./remote_firewall').apply();console.log('Remote control firewall: '+JSON.stringify(r));}
     catch(e){console.error('Remote control firewall not applied: '+e.message);}
