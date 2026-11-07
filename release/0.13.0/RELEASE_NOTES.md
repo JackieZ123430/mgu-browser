@@ -1,8 +1,9 @@
 # MGU Browser 0.13.0 – Performance, dauerhafte Cookies und Handy-Fernbedienung
 
-Noch nicht veröffentlicht. Die Store-Pakete entstehen wie bisher über
-`release/build.py` und den Publish-Workflow; dieser Quellstand enthält keine
-gebauten Artefakte.
+Die Eingaben sind auf Commit `9c1433a` gesperrt (`publication.json`,
+`source-inputs.json`). Sobald dieser Ordner auf `main` landet, baut, prüft und
+veröffentlicht der Workflow „Publish audited Browser release“ die Pakete und
+schaltet danach den Store-Katalog um. Vorher ist im Store nichts zu sehen.
 
 ## Darstellung und Bedienung
 

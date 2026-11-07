@@ -4,13 +4,13 @@ on:
   push:
     branches: [main]
     paths:
-      - release/0.12.0/**
+      - release/0.13.0/**
   workflow_dispatch:
     inputs:
       version:
         description: Audited release metadata version
         required: true
-        default: '0.12.0'
+        default: '0.13.0'
 
 permissions:
   contents: read
@@ -27,7 +27,7 @@ jobs:
     permissions:
       contents: write
     env:
-      RELEASE_VERSION: ${{ inputs.version || '0.12.0' }}
+      RELEASE_VERSION: ${{ inputs.version || '0.13.0' }}
     steps:
       - name: Check out publication controls
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
