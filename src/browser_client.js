@@ -58,7 +58,7 @@ class BrowserClient extends EventEmitter {
         return work;
     }
     request(op,args){
-        if(!this.channel)return Promise.reject(new Error('Browser-Dienst noch nicht bereit'));
+        if(!this.channel)return Promise.reject(new Error(require('./browser_service_status').explain()||'Browser-Dienst noch nicht bereit'));
         if(op!=='stop'&&!this.gate.check().allowed)return Promise.reject(new Error(this.gate.check().reason||'Browser nicht freigegeben'));
         this.state();const id=++this.next;
         return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error('Browser-Dienst: Zeitlimit'));},['start','navigate','mediaDemo','wifiScan','vaultUnlock'].includes(op)?30000:15000);this.pending.set(id,{resolve,reject,timer});this.channel.json(Object.assign({},args||{},{id,op}));});
