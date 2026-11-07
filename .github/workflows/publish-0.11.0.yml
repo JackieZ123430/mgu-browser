@@ -47,6 +47,8 @@ jobs:
         env:
           MGU_OUT: ${{ runner.temp }}/frontend
         run: |
+          # Match the audited runtime manifest/provenance file modes.
+          umask 077
           python3 release/build.py --out "$RUNNER_TEMP/packages" --runtime-only --runtime-base "$RUNNER_TEMP/base/mgu-browser@0.10.0.tgz"
           python3 tools/build_store.py --app mgu_browser --version 0.11.0 --source apps/mgu_browser --release-package
           cp "$RUNNER_TEMP/frontend/mgu_browser@0.11.0.tgz" "$RUNNER_TEMP/packages/"
