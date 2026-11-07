@@ -8,7 +8,7 @@ Install compiler dependencies separately:
 sudo apt-get install python3 nodejs libnode-dev gcc musl-tools patchelf \
   chromium chromium-common chromium-sandbox fonts-dejavu-core libjpeg62-turbo-dev
 MGU_OUT=/path/to/empty-frontend-output python3 tools/build_store.py \
-  --app mgu_browser --version 0.12.0 --source apps/mgu_browser --release-package
+  --app mgu_browser --version 0.14.0 --source apps/mgu_browser --release-package
 ```
 
 Published engine: Chromium `156.0.8078.79-1~deb12u1`. Signed Debian repositories
@@ -100,12 +100,12 @@ file against source, and generates exact archive/catalog hashes from that CI
 build. It does not claim byte-identical native output across different compilers.
 
 After committing and testing the source, save the current public catalog in
-`release/0.13.3/previous-catalog.json`, add the release notes and local test report,
+`release/0.14.0/previous-catalog.json`, add the release notes and local test report,
 then lock inputs:
 
 ```sh
-python3 release/publish.py lock-inputs --source . --metadata release/0.13.3 \
-  --version 0.13.3
+python3 release/publish.py lock-inputs --source . --metadata release/0.14.0 \
+  --version 0.14.0
 ```
 
 The generic Actions workflow reads that descriptor's complete source SHA,
@@ -122,7 +122,7 @@ an independently checked-out Store source tree:
 
 ```sh
 node test/store_package_smoke.js /path/to/mgu-store \
-  /path/to/mgu_browser@0.13.3.tgz /path/to/mgu-browser@0.13.3.tgz \
+  /path/to/mgu_browser@0.14.0.tgz /path/to/mgu-browser@0.14.0.tgz \
   /path/to/catalog.json
 ```
 
@@ -140,10 +140,10 @@ native exit before IPC starts.
 
 ```sh
 python3 test/runtime_service_smoke.py \
-  --runtime /path/to/mgu-browser@0.13.3.tgz \
+  --runtime /path/to/mgu-browser@0.14.0.tgz \
   --engine /path/to/mgu-browser-engine@0.1.0.tgz
 node test/store_service_activation_smoke.js /path/to/mgu-store \
-  /path/to/mgu-browser@0.13.3.tgz
+  /path/to/mgu-browser@0.14.0.tgz
 ```
 
 The first command uses local Linux Docker, a digest-pinned Ubuntu 18 image and
@@ -161,6 +161,31 @@ were proven present in recmgr's current list and boot-loaded list. A new install
 keeps the Store's mandatory first-reboot gate. The final runtime check waits up
 to 15 seconds for protected, fresh status from the exact installed version and
 the correctly owned backend socket; an old version's status is insufficient.
+
+## Packaged video and fullscreen gate, 0.14.0
+
+```sh
+python3 test/fullscreen_audio_package_smoke.py \
+  --runtime /path/to/mgu-browser@0.14.0.tgz \
+  --engine /path/to/mgu-browser-engine@0.1.0.tgz
+```
+
+The host needs FFmpeg for a bounded, originally generated VP8/Opus clip; the
+workflow explicitly checks availability and installs it only when absent.
+The driver shares the startup fixture's pinned Ubuntu 18/Node 8/engine inputs
+and verifies the public old ALSA archive by size and SHA-256. It extracts the
+actual runtime inside the disposable container, then runs both fullscreen
+tests and the controller/video ordering test as UID 3911 using its native JPEG
+addon and audio helper. It accepts no native/source override, exposes no
+host-write bind and keeps Chromium sandboxed.
+
+The gate requires near-real-time video/PCM pacing, new nonblack frames through
+large-DOM/fullscreen/resize/exit transitions, zero sink writes after releasing
+audio, and preserved site-control/nested-player/iframe/shadow geometry. These
+authored fixtures also require the same final control for 16 raw versus one
+coalesced focus request while video advances. Controller timings are reported
+without a speed-ratio threshold. They do not certify live YouTube, other
+providers or BMW speakers.
 
 ## Publication
 

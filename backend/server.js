@@ -17,14 +17,14 @@ let lastNetworkProbe=0;
 function status(){fs.writeFileSync('/var/opt/mgu-browser/data/service-state.json',JSON.stringify({uid:process.getuid(),connected:!!owner,allowed,generation,phase,pid:process.pid}));}
 const now=()=>{const t=process.hrtime();return t[0]*1000+t[1]/1e6;};
 const gate={onBlock:null,check(){return {allowed:allowed&&now()-updated>=0&&now()-updated<1500};}};
+const frameSender=require('./frame_delta').sender({owner:()=>owner,allowed:()=>gate.check().allowed,generation:()=>generation});
 const audioGid=Number(process.env.MGU_BROWSER_AUDIO_GID);
 const vehicleAudio=Number.isInteger(audioGid)&&audioGid>0&&audioGid<=65535?{binary:'/var/opt/mgu-browser/current/audio-bridge',gid:audioGid}:null;
-const browser=new Browser({gate,mediaDisabled:false,cdmConfig:'/var/opt/mgu-browser/cdm.json',binary:'/var/opt/mgu-browser/current/browser-launch',profileRoot:'/var/opt/mgu-browser/work/profiles',profileStore,viewport:{width:1280,height:384},vehicleAudio,env:{FONTCONFIG_FILE:ENGINE+'/fonts.conf',CHROME_DEVEL_SANDBOX:ENGINE+'/chrome-sandbox'}});
+const browser=new Browser({gate,frameReady:()=>frameSender.canSend(),mediaDisabled:false,cdmConfig:'/var/opt/mgu-browser/cdm.json',binary:'/var/opt/mgu-browser/current/browser-launch',profileRoot:'/var/opt/mgu-browser/work/profiles',profileStore,viewport:{width:1280,height:384},vehicleAudio,env:{FONTCONFIG_FILE:ENGINE+'/fonts.conf',CHROME_DEVEL_SANDBOX:ENGINE+'/chrome-sandbox'}});
 function stop(reason){allowed=false;browser.stop(reason);phase='idle';status();}
 const {RemoteControl}=require('./remote_control');
 const remote=new RemoteControl({browser});
 remote.on('remote',value=>{if(owner)owner.json({event:'remote',value});});
-const frameSender=require('./frame_delta').sender({owner:()=>owner,allowed:()=>gate.check().allowed,generation:()=>generation});
 browser.on('frame',frame=>frameSender.send(frame));
 ['started','blocked','fault','version','navigation','navigationState','loading','input','tabs','tabSelected','media'].forEach(event=>browser.on(event,value=>{if(owner)owner.json({event,value:value&&value.message||value});}));
 browser.on('performance',value=>fs.writeFileSync('/var/opt/mgu-browser/data/render-performance.json',JSON.stringify(value)));

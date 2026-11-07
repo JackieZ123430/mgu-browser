@@ -166,10 +166,14 @@ static int open_pcm(const char *device, const char *lock, gid_t gid, int fixture
 }
 
 static void consume_tick(int64_t now) {
-    unsigned char chunk[CHUNK];
-    ssize_t count = read(input_fd, chunk, sizeof(chunk));
+    /* Chromium writes atomic 4096-byte blocks into our 4096-byte pipe. Reading
+     * only CHUNK here left 256 bytes on every third tick, holding the writer
+     * until the pipe became completely empty: 4096 bytes per 30 ms instead of
+     * 5760, slowing its audio/video clock to 71%. Buffer a complete producer
+     * block when needed, then consume at most one 10-ms chunk per tick. */
+    unsigned char chunk[4096];
+    ssize_t count = queued < CHUNK ? read(input_fd, chunk, sizeof(chunk)) : 0;
     if (count < 0 && errno != EAGAIN && errno != EINTR) { ++errors; report("ERROR fifo-read"); stopping = 1; return; }
-    if (!pcm) { if (count > 0) dropped_bytes += (uint64_t)count; dropped_bytes += queued; queued = 0; return; }
     if (queued && now - queued_at >= MAX_WAIT_NS) { dropped_bytes += queued; queued = 0; }
     if (count > 0) {
         size_t bytes = (size_t)count;
@@ -185,9 +189,19 @@ static void consume_tick(int64_t now) {
         queued += bytes;
     }
     if (queued < 4) return;
+    const size_t available = (queued < CHUNK ? queued : CHUNK) / 4U * 4U;
+    if (!pcm) {
+        /* Keep the producer clock at real time while disconnected, without
+         * sending samples to output. open_pcm discards this bounded remainder. */
+        dropped_bytes += available;
+        memmove(queue, queue + available, queued - available);
+        queued -= available;
+        queued_at += (int64_t)available * 1000000000LL / 192000LL;
+        return;
+    }
     long delay = 0;
     if (alsa.delay(pcm, &delay) >= 0 && delay > 4320) { dropped_bytes += queued; queued = 0; return; }
-    long written = alsa.writei(pcm, queue, (unsigned long)(queued / 4));
+    long written = alsa.writei(pcm, queue, (unsigned long)(available / 4));
     if (written == -EAGAIN || written == -EINTR) return;
     if (written < 0) {
         ++errors; dropped_bytes += queued; queued = 0;

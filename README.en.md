@@ -2,7 +2,7 @@
 
 An experimental native browser UI for BMW MGU / iDrive 7, backed by a separate
 Chromium process, with a local SDK app emulator for development.
-Version 0.13.3 publishes an **experimental ID7/x86_64 Store catalog** with
+Version 0.14.0 publishes an **experimental ID7/x86_64 Store catalog** with
 the frontend, native runtime and private Chromium engine. Add
 `pllanaio/mgu-browser` as a GitHub source and select **Releases** for complete
 installation and updates. Existing `main` sources must switch to Releases
@@ -15,12 +15,36 @@ See [installation, dependencies and rollback](docs/MGU_STORE.md).
 
 The [full German README](README.md) describes features and verified limits.
 
+## Video timing and fullscreen in 0.14.0
+
+The audio bridge now accepts complete PCM blocks at the required real-time
+rate. Media discovery reaches players behind large page templates, fullscreen
+preserves the site's nested layout, and render backpressure discards obsolete
+frames before decoding them.
+
+Rotary bursts coalesce without an added debounce delay, and presses follow the
+preceding detents. A merged rotary job is capped at 64 detents and the pending
+queue at 32 jobs including press barriers. Excess or stale navigation input is
+cancelled; unlimited bursts are not buffered in full.
+
+With the same engine and only the native audio helper changed, an isolated
+2.002-second test advanced the media clock by 1.996 seconds instead of 1.430,
+with 60 delivered frames instead of 43. A separate artificial 70% consumer-pressure
+test kept 89 delivered frames while Node CPU time fell from 389 to 252 ms.
+These are scoped local comparisons, not universal website or MGU frame-rate claims.
+See [test evidence and limits](docs/TESTING.md).
+
+Update **both Browser and Browser Runtime to 0.14.0**; Engine remains **0.1.0**.
+The startup fix, migration, iDrive and phone-remote features remain included.
+Live YouTube testing was blocked by a proxy HTTP 403 in this environment.
+Physical BMW audio and protected provider playback still need separate qualification.
+
 ## Startup fix in 0.13.3
 
 Versions 0.13.0–0.13.2 mounted a 384 MiB working filesystem but still rejected
 anything above 128 MiB after dropping privileges. The backend exited 125
 before opening its socket. Mount and validation now share one limit. Updating
-Browser and Runtime to 0.13.3 also recovers a stopped service where the current
+Browser and Runtime to 0.14.0 also recovers a stopped service where the current
 boot registration permits it; otherwise Store requests a reboot. The engine
 remains 0.1.0. Readiness now requires an actual backend notification.
 

@@ -3,24 +3,33 @@ const DRM=require('./browser_drm');
 // Fixed expressions only: no page-provided scripts, selectors or input values.
 // Search open shadow roots and same-origin frames with a fixed work budget.
 const playerLocate=`
-const deepBudgets=new Map();
+const deepRootCache=new Map();
 const deep=(scope,selector)=>{
-    let budget=deepBudgets.has(selector)?deepBudgets.get(selector):6000;
-    const queue=[scope],seen=new Set(),found=[];
-    let roots=0;
-    while(queue.length&&roots++<16&&budget>0&&found.length<64){
-        const root=queue.shift();if(!root||seen.has(root))continue;seen.add(root);
-        const visit=e=>{
-            if(e.matches&&e.matches(selector))found.push(e);
-            if(e.shadowRoot)queue.push(e.shadowRoot);
-            if(e.tagName==="IFRAME"){try{if(e.contentDocument)queue.push(e.contentDocument);}catch(ignore){}}
-        };
-        if(root.nodeType===1)visit(root);
-        const walker=(root.ownerDocument||root).createTreeWalker(root,1);
-        let e,visited=0;
-        while((e=walker.nextNode())&&visited++<3000&&budget-->0&&found.length<64)visit(e);
+    let roots=deepRootCache.get(scope);
+    if(!roots){
+        const queue=[scope],seen=new Set();roots=[];let budget=6000;
+        while(queue.length&&roots.length<16){
+            const root=queue.shift();if(!root||seen.has(root))continue;seen.add(root);roots.push(root);
+            // Native selectors find media/frames even after a large page's
+            // skeleton or recommendations. Only shadow-host discovery has a
+            // JavaScript walk budget; it must never truncate HTML media.
+            const frame=e=>{try{if(e.contentDocument)queue.push(e.contentDocument);}catch(ignore){}};
+            if(root.tagName==="IFRAME")frame(root);
+            const frames=root.querySelectorAll("iframe");for(let i=0;i<frames.length&&i<16;i++)frame(frames[i]);
+            if(root.shadowRoot)queue.push(root.shadowRoot);
+            const walker=(root.ownerDocument||root).createTreeWalker(root,1);let e,visited=0;
+            while((e=walker.nextNode())&&visited++<3000&&budget-->0){if(e.shadowRoot)queue.push(e.shadowRoot);}
+        }
+        deepRootCache.set(scope,roots);
     }
-    deepBudgets.set(selector,budget);return found;
+    const found=[];
+    for(const root of roots){
+        if(root.nodeType===1&&root.matches(selector))found.push(root);
+        const matches=root.querySelectorAll(selector);
+        for(let i=0;i<matches.length&&found.length<64;i++)found.push(matches[i]);
+        if(found.length>=64)break;
+    }
+    return found;
 };
 const visible=e=>{
     if(!e||!e.isConnected||!e.getClientRects().length)return false;
@@ -29,7 +38,13 @@ const visible=e=>{
 };
 const enabled=e=>visible(e)&&!e.disabled&&e.getAttribute("aria-disabled")!=="true"&&!e.closest("[inert],[hidden],[aria-hidden=true]");
 const controlSelector="button,[role=button],[tabindex],input[type=range]";
-const f=document.fullscreenElement,scope=f||document;
+let f=document.fullscreenElement;
+for(let i=0;f&&i<8;i++){
+    let inner=f.shadowRoot&&f.shadowRoot.fullscreenElement;
+    try{inner=inner||f.contentDocument&&f.contentDocument.fullscreenElement;}catch(ignore){}
+    if(!inner)break;f=inner;
+}
+const scope=f||document;
 const hosts=deep(scope,"disney-web-player,disney-web-player-ui,hive-video"),customRoot=hosts.find(visible);
 const vs=deep(scope,"video"),v=vs.filter(visible).sort((a,b)=>{
     const ar=a.getBoundingClientRect(),br=b.getBoundingClientRect();
@@ -43,22 +58,48 @@ const controls=root?deep(root,controlSelector).filter(e=>e!==v&&enabled(e)&&!(e.
 // Inspect only activity in background tabs; retain no page text or addresses.
 const activityScript=`JSON.stringify((()=>{
     const queue=[document],seen=new Set();let budget=6000,roots=0,playing=false,audible=false;
-    while(queue.length&&roots++<16&&budget>0){
+    while(queue.length&&roots++<16){
         const root=queue.shift();if(!root||seen.has(root))continue;seen.add(root);
+        const media=root.querySelectorAll("video,audio");
+        for(let i=0;i<media.length&&i<64;i++){const e=media[i],active=!e.paused&&!e.ended;playing=playing||active;audible=audible||active&&!e.muted&&e.volume>0;}
+        if(playing&&audible)return {playing,audible};
+        const frames=root.querySelectorAll("iframe");for(let i=0;i<frames.length&&i<16;i++){try{if(frames[i].contentDocument)queue.push(frames[i].contentDocument);}catch(ignore){}}
         const walker=(root.ownerDocument||root).createTreeWalker(root,1);let e;
         while((e=walker.nextNode())&&budget-->0){
-            if(e.tagName==="VIDEO"||e.tagName==="AUDIO"){const active=!e.paused&&!e.ended;playing=playing||active;audible=audible||active&&!e.muted&&e.volume>0;}
             if(e.shadowRoot)queue.push(e.shadowRoot);
-            if(e.tagName==="IFRAME"){try{if(e.contentDocument)queue.push(e.contentDocument);}catch(ignore){}}
         }
     }
     return {playing,audible};
 })())`;
 const snapshot='JSON.stringify((()=>{'+playerLocate+'const media=v||customRoot,rect=media&&media.getBoundingClientRect(),playerMode=!!media&&(!!f||rect.width*rect.height>innerWidth*innerHeight*0.3),buttons=controls,mediaButtons=buttons.filter(b=>/play|pause|wiederg|abspiel|mute|stumm|fullscreen|vollbild|seek|rewind|forward/i.test([b.getAttribute("aria-label"),b.title,b.getAttribute("data-testid")].join(" "))),dedicatedPlayer=!!root&&root!==v&&!/^(BODY|HTML)$/.test(root.tagName),customSiteControls=!!media&&((dedicatedPlayer&&buttons.length>=2)||mediaButtons.length>=2||(mediaButtons.length>0&&!!root.querySelector("input[type=range],[role=slider]"))),hasSiteControls=!!media&&((v&&v.controls)||customSiteControls),elements=deep(document,"video,audio"),playing=elements.some(e=>!e.paused&&!e.ended),audible=elements.some(e=>!e.paused&&!e.ended&&!e.muted&&e.volume>0);return {hasMedia:elements.length>0||!!customRoot,playing,audible,fullscreen:!!f&&!!media,customPlayer:!!customRoot,rootTag:root&&root.tagName||"",playerMode,hasSiteControls,customSiteControls,controlCount:buttons.length,paused:v?!!v.paused:true,muted:v?!!v.muted:false,currentTime:v&&Number.isFinite(v.currentTime)?v.currentTime:0,duration:v&&Number.isFinite(v.duration)?v.duration:0};})())';
-const fitScript='if(!document.__mguVideoFitInstalled){document.__mguVideoFitInstalled=true;document.addEventListener("fullscreenchange",()=>{if(document.getElementById("mgu-video-fit"))return;const s=document.createElement("style");s.id="mgu-video-fit";s.textContent=":fullscreen video,video:fullscreen{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;object-position:center!important;transform:none!important;}:fullscreen button:focus,:fullscreen [role=button]:focus,:fullscreen [tabindex]:focus{outline:3px solid #78bfff!important;outline-offset:3px!important;}";document.documentElement.appendChild(s);});}';
+// Keep a site's own video/container geometry. Forcing every nested video to
+// absolute 100% dimensions can collapse its zero-height inner layout in native
+// player fullscreen. Only a video which is itself fullscreen needs viewport fit.
+const fitScript='if(!document.__mguVideoFitInstalled){document.__mguVideoFitInstalled=true;document.addEventListener("fullscreenchange",()=>{if(document.getElementById("mgu-video-fit"))return;const s=document.createElement("style");s.id="mgu-video-fit";s.textContent=":fullscreen video{object-fit:contain!important;object-position:center!important;}video:fullscreen{width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;object-fit:contain!important;object-position:center!important;}:fullscreen button:focus,:fullscreen [role=button]:focus,:fullscreen [tabindex]:focus{outline:3px solid #78bfff!important;outline-offset:3px!important;}";document.documentElement.appendChild(s);});}';
+const fullscreenScript='(async()=>{'+playerLocate+`
+    if(!v)return false;if(f)return true;
+    const doc=v.ownerDocument;
+    const known=v.closest("#movie_player,.html5-video-player,.video-js,.jwplayer,.plyr,[data-player]");
+    const component=v.getRootNode().host;
+    const container=known||root&&root!==doc.body&&root!==doc.documentElement&&root.contains(v)&&root||component||v;
+    // Let the provider update its own player state and keep its controls.
+    // A video-only request bypasses YouTube's fullscreen mode and overlays.
+    const button=deep(container,".ytp-fullscreen-button,.vjs-fullscreen-control,.jw-icon-fullscreen,[data-plyr=fullscreen]").find(enabled);
+    if(button){
+        button.click();
+        for(let i=0;i<5&&!doc.fullscreenElement;i++)await new Promise(resolve=>setTimeout(resolve,40));
+        if(doc.fullscreenElement)return true;
+    }
+    const target=v.controls&&!known&&!component?v:container;
+    if(!target||typeof target.requestFullscreen!=="function")return false;
+    await target.requestFullscreen();return !!doc.fullscreenElement;
+})()`;
 module.exports={
     async mediaActivity(context){
-        const tabs=(this.tabs||[]).slice(0,8),cache=this.tabMediaActivity||(this.tabMediaActivity=new Map()),pipe=this.pipe;
+        // The foreground snapshot already includes its HTML media. Only query
+        // other tabs here; avoid a second full DOM scan and CDP roundtrip for
+        // the visible player on every activity poll.
+        const tabs=(this.tabs||[]).filter(tab=>tab.session!==context.session).slice(0,7),cache=this.tabMediaActivity||(this.tabMediaActivity=new Map()),pipe=this.pipe;
         await Promise.all(tabs.map(async tab=>{
             try{const r=await pipe.send('Runtime.evaluate',{expression:activityScript,returnByValue:true},tab.session,1500);
                 if(context.valid()&&this.tabs.indexOf(tab)>=0&&!r.exceptionDetails)cache.set(tab.session,JSON.parse(r.result.value));
@@ -105,7 +146,7 @@ module.exports={
         try{const r=await context.send('Runtime.evaluate',{expression:snapshot,returnByValue:true});
             if(view!==this.pageGeneration||session!==this.session)return;
             const state=JSON.parse(r.result.value),activity=this.webAudioActivity(),htmlActivity=await this.mediaActivity(context);
-            state.webAudioRunning=activity.running;state.playing=htmlActivity.playing||activity.running>0;state.audible=htmlActivity.audible||activity.running>0;state.hasMedia=state.hasMedia||state.playing;
+            state.webAudioRunning=activity.running;state.playing=state.playing||htmlActivity.playing||activity.running>0;state.audible=state.audible||htmlActivity.audible||activity.running>0;state.hasMedia=state.hasMedia||state.playing;
             if(state.playerMode&&state.customPlayer&&!state.hasSiteControls){
                 const stamp=Date.now();if(!this.mediaAXStamp||stamp-this.mediaAXStamp>3000){this.mediaAXStamp=stamp;this.mediaAXCache=await this.accessibleMediaControls(context);}const candidates=this.mediaAXCache||[];if(view!==this.pageGeneration||session!==this.session)return;
                 state.accessibleControls=candidates.length;
@@ -130,7 +171,7 @@ module.exports={
     },
     async focusAccessibleMediaControl(delta,context){
         context=context||this.mediaContext();const candidates=await this.accessibleMediaControls(context);if(!candidates.length)throw new Error('Video-Steuerung noch nicht auswählbar');
-        let index=candidates.findIndex(c=>this.focusedMediaControl&&c.node===this.focusedMediaControl.node);index=index<0?(delta<0?candidates.length-1:0):(index+delta%candidates.length+candidates.length)%candidates.length;
+        let index=candidates.findIndex(c=>this.focusedMediaControl&&c.node===this.focusedMediaControl.node);index=index<0?(delta>0?(delta-1)%candidates.length:(delta%candidates.length+candidates.length)%candidates.length):(index+delta%candidates.length+candidates.length)%candidates.length;
         if(this.focusedMediaObject){try{await context.send('Runtime.callFunctionOn',{objectId:this.focusedMediaObject,functionDeclaration:'function(){this.removeAttribute("data-mgu-media-focus");}'});await context.send('Runtime.releaseObject',{objectId:this.focusedMediaObject});}catch(e){}}
         const chosen=candidates[index],resolved=await context.send('DOM.resolveNode',{backendNodeId:chosen.node}),objectId=resolved.object.objectId;
         await context.send('Runtime.callFunctionOn',{objectId,functionDeclaration:'function(){this.focus({preventScroll:true});this.setAttribute("data-mgu-media-focus","");const r=this.getRootNode();if(!r.querySelector("#mgu-control-focus")){const s=document.createElement("style");s.id="mgu-control-focus";s.textContent="[data-mgu-media-focus]{outline:3px solid #78bfff!important;outline-offset:3px!important;}";(r.nodeType===9?r.documentElement:r).appendChild(s);}}'});
@@ -140,7 +181,7 @@ module.exports={
     async _focusMediaControl(delta,context){
         this.requireAllowed();await this.mediaAction('reveal');
         const step=Math.max(-20,Math.min(20,Math.trunc(Number(delta)||1)));
-        const r=await context.send('Runtime.evaluate',{expression:'(async()=>{await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));'+playerLocate+'if(!root||(!v&&!customRoot))return false;if(v&&v.controls&&!controls.length){if(document.activeElement!==v)v.focus();return "native";}if(!controls.length)return false;let active=document.activeElement;for(let i=0;active&&i<12;i++){const next=active.shadowRoot&&active.shadowRoot.activeElement||active.tagName==="IFRAME"&&active.contentDocument&&active.contentDocument.activeElement;if(!next)break;active=next;}let index=controls.findIndex(e=>e.hasAttribute("data-mgu-media-focus"));if(index<0)index=controls.findIndex(e=>e===active);if(index<0)index=controls.findIndex(e=>e.contains(active));index=index<0?('+step+'<0?controls.length-1:0):(index+'+step+'%controls.length+controls.length)%controls.length;const e=controls[index];if(e.tabIndex<0)e.tabIndex=0;e.focus({preventScroll:true});controls.forEach(n=>n.removeAttribute("data-mgu-media-focus"));e.setAttribute("data-mgu-media-focus","");const styleRoot=e.getRootNode();if(!styleRoot.querySelector("#mgu-control-focus")){const style=document.createElement("style");style.id="mgu-control-focus";style.textContent="[data-mgu-media-focus]{outline:3px solid #78bfff!important;outline-offset:3px!important;}";(styleRoot.nodeType===9?styleRoot.documentElement:styleRoot).appendChild(style);}return true;})()',awaitPromise:true,returnByValue:true});
+        const r=await context.send('Runtime.evaluate',{expression:'(async()=>{await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));'+playerLocate+'if(!root||(!v&&!customRoot))return false;if(v&&v.controls&&!controls.length){if(document.activeElement!==v)v.focus();return "native";}if(!controls.length)return false;let active=document.activeElement;for(let i=0;active&&i<12;i++){const next=active.shadowRoot&&active.shadowRoot.activeElement||active.tagName==="IFRAME"&&active.contentDocument&&active.contentDocument.activeElement;if(!next)break;active=next;}let index=controls.findIndex(e=>e.hasAttribute("data-mgu-media-focus"));if(index<0)index=controls.findIndex(e=>e===active);if(index<0)index=controls.findIndex(e=>e.contains(active));index=index<0?('+step+'>0?('+step+'-1)%controls.length:('+step+'%controls.length+controls.length)%controls.length):(index+'+step+'%controls.length+controls.length)%controls.length;const e=controls[index];if(e.tabIndex<0)e.tabIndex=0;e.focus({preventScroll:true});controls.forEach(n=>n.removeAttribute("data-mgu-media-focus"));e.setAttribute("data-mgu-media-focus","");const styleRoot=e.getRootNode();if(!styleRoot.querySelector("#mgu-control-focus")){const style=document.createElement("style");style.id="mgu-control-focus";style.textContent="[data-mgu-media-focus]{outline:3px solid #78bfff!important;outline-offset:3px!important;}";(styleRoot.nodeType===9?styleRoot.documentElement:styleRoot).appendChild(style);}return true;})()',awaitPromise:true,returnByValue:true});
         if(!context.valid())throw new Error('Webseite hat gewechselt');
         if(r.result.value==='native'){for(let i=0;i<Math.abs(step);i++)await this.key('Tab',step<0);return {focused:true};}
         if(r.result.value!==true)return this.focusAccessibleMediaControl(step,context);
@@ -162,10 +203,10 @@ module.exports={
     async mediaAction(action){
         const context=this.mediaContext();this.requireAllowed();
         if(action==='reveal')return context.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:this.viewport.width/2,y:Math.max(1,this.viewport.height-50)});
-        const actions={fullscreen:'if(v.tagName!=="VIDEO")return false;await v.requestFullscreen();',play:'await v.play();',pause:'v.pause();',unmute:'v.muted=false;if(v.volume===0)v.volume=1;',toggle:'if(v.paused)await v.play();else v.pause();',back:'v.currentTime=Math.max(0,v.currentTime-10);',forward:'const end=Number.isFinite(v.duration)?v.duration:v.seekable.length?v.seekable.end(v.seekable.length-1):v.currentTime;v.currentTime=Math.max(0,Math.min(Math.max(0,end-0.05),v.currentTime+10));',mute:'v.muted=!v.muted;',exit:'await document.exitFullscreen();'};
+        const actions={fullscreen:'',play:'await v.play();',pause:'v.pause();',unmute:'v.muted=false;if(v.volume===0)v.volume=1;',toggle:'if(v.paused)await v.play();else v.pause();',back:'v.currentTime=Math.max(0,v.currentTime-10);',forward:'const end=Number.isFinite(v.duration)?v.duration:v.seekable.length?v.seekable.end(v.seekable.length-1):v.currentTime;v.currentTime=Math.max(0,Math.min(Math.max(0,end-0.05),v.currentTime+10));',mute:'v.muted=!v.muted;',exit:'await document.exitFullscreen();'};
         if(!Object.prototype.hasOwnProperty.call(actions,action))throw new Error('Unbekannte Videoaktion');
         if(this.options.mediaDisabled&&action!=='exit')throw new Error('Medienwiedergabe ist derzeit deaktiviert');
-        const expression=action==='exit'?'(async()=>{if(!document.fullscreenElement)return false;await document.exitFullscreen();return true;})()':'(async()=>{'+playerLocate+'const a=v||deep(document,"audio").find(e=>!e.paused)||deep(document,"audio")[0];if(!a)return false;return await(async(v)=>{'+actions[action]+'return true;})(a);})()';
+        const expression=action==='fullscreen'?fullscreenScript:action==='exit'?'(async()=>{if(!document.fullscreenElement)return false;await document.exitFullscreen();return true;})()':'(async()=>{'+playerLocate+'const a=v||deep(document,"audio").find(e=>!e.paused)||deep(document,"audio")[0];if(!a)return false;return await(async(v)=>{'+actions[action]+'return true;})(a);})()';
         const result=await context.send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true,userGesture:true});
         if(result.exceptionDetails||!result.result||result.result.value!==true)throw new Error('Videoaktion auf dieser Seite nicht verfuegbar');
         await this.inspectMedia();

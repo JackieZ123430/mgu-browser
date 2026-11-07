@@ -100,16 +100,18 @@ mgu.run({async start(ctx){
         finally{starting=false;}
     }
     function editURL(purpose){
+        browser.cancelController();
         keyboard=purpose||'url';draft=keyboard==='homepage'?store.data.homepage:keyboard==='wifi-ssid'?wifiSSID:keyboard==='wifi-password'?wifiPassword:currentURL;
         replaceDraft=true;keyMode='abc';upper=false;webMode=false;reading=false;activity();
         if(ctx.display)ctx.display.focusKey='tgt:key-0-0';
     }
     function openText(){
         if(!browser.child||!editable){note('Zuerst ein Textfeld auf der Webseite auswaehlen');return;}
+        browser.cancelController();
         keyboard='text';panel=null;keyMode='abc';webMode=false;reading=false;activity();
         if(ctx.display)ctx.display.focusKey='tgt:key-0-0';
     }
-    function dismissKeyboard(){if(keyboard==='wifi-password'||String(keyboard).indexOf('vault-')===0){draft='';vaultSetup='';}keyboard=null;replaceDraft=false;webMode=false;if(ctx.display)ctx.display.focusKey='tgt:urlbar';activity();}
+    function dismissKeyboard(){browser.cancelController();if(keyboard==='wifi-password'||String(keyboard).indexOf('vault-')===0){draft='';vaultSetup='';}keyboard=null;replaceDraft=false;webMode=false;if(ctx.display)ctx.display.focusKey='tgt:urlbar';activity();}
     async function type(value){
         activity();if(keyboard==='text')return browser.text(value);
         if(replaceDraft){draft='';replaceDraft=false;}draft=(draft+value).slice(0,2048);
@@ -176,6 +178,7 @@ mgu.run({async start(ctx){
         const changed=!!state.fullscreen!==!!media.fullscreen;media=state;
         syncAudio();
         if(changed){
+            browser.cancelController();
             if(ctx.display&&ctx.display.browserSetFullscreen)ctx.display.browserSetFullscreen(!!state.fullscreen);
             resized='';reading=false;keyboard=null;panel=null;webMode=false;mediaIndex=1;mediaUntil=Date.now()+5000;
             if(state.fullscreen){landing=false;webMode=true;}
@@ -199,7 +202,7 @@ mgu.run({async start(ctx){
     for(const id of ['BTN_OPEN','BTN_BACK','BTN_STOP'])ctx.hideButton(id);
     ui.onClick('BTN_OPEN',()=>safe(home));ui.onClick('BTN_BACK',()=>safe(()=>media.fullscreen?browser.mediaAction('exit'):browser.child?browser.back():home()));ui.onClick('BTN_STOP',()=>safe(closeApp));
     const webActions={
-        toolbar:()=>{safe(()=>browser.leavePage());webMode=false;reading=false;if(ctx.display&&activeTab)ctx.display.focusKey='tgt:tab-'+activeTab;activity();},
+        toolbar:()=>{browser.cancelController();safe(()=>browser.leavePage());webMode=false;reading=false;if(ctx.display&&activeTab)ctx.display.focusKey='tgt:tab-'+activeTab;activity();},
         keyboard:openText,
         scroll:d=>{activity();safe(()=>browser.scroll(d));},
         press:()=>{activity();safe(()=>browser.pressPage());},
@@ -217,8 +220,8 @@ mgu.run({async start(ctx){
         toolbar:()=>media.fullscreen?safe(()=>browser.mediaAction('exit')):webActions.toolbar(),
         keyboard:()=>safe(()=>browser.key('ArrowRight')),
         scroll:()=>safe(()=>browser.mediaAction('reveal')),
-        focus:d=>safe(()=>browser.request('mediaFocus',{delta:d})),
-        press:()=>safe(()=>browser.request('mediaPress'))
+        focus:d=>safe(()=>browser.focusMedia(d)),
+        press:()=>safe(()=>browser.pressMedia())
     };
     function focusUI(delta){
         const display=ctx.display,targets=display&&display.pageTargets||[];if(!targets.length)return;
@@ -337,13 +340,13 @@ mgu.run({async start(ctx){
         const o=options||{},enabled=o.enabled!==false;
         if(!o.flat)c.roundRect(x,y,w,h,7,o.primary?'#315d84':C.field);
         c.text(o.literal?String(label):ascii(label),x+w/2,y+h/2+7,19,enabled?C.text:'#566171',{align:'center',literal:!!o.literal});
-        if(enabled)c.target(x,y,w,h,()=>{activity();return safe(fn);},key);
+        if(enabled)c.target(x,y,w,h,()=>{browser.cancelController();activity();return safe(fn);},key);
         tipLabels[key]=o.tip||label;
     }
     function tool(c,x,name,fn,key,enabled,selected){
         if(selected)c.roundRect(x,7,42,42,7,'#293b4d');
         icon(c,name,x+21,28,enabled===false?'#566171':selected?C.accent:C.text);
-        if(enabled!==false)c.target(x,6,42,44,()=>{activity();return safe(fn);},key);
+        if(enabled!==false)c.target(x,6,42,44,()=>{browser.cancelController();activity();return safe(fn);},key);
         tipLabels[key]=({back:'Zurueck',forward:'Vorwaerts',home:'Startseite',reload:'Neu laden',stop:'Laden abbrechen',star:'Lesezeichen',history:'Verlauf und Lesezeichen',keyboard:'Tastatur',settings:'Einstellungen',expand:'Lesemodus',close:'Browser schliessen'})[name]||name;
     }
     function toolbar(c){
@@ -593,7 +596,7 @@ mgu.run({async start(ctx){
         }else{cv.text(loading?'Seite wird geladen ...':'Browser bereit',W/2,280,27,C.muted,{align:'center'});}
         if(hidden&&!media.fullscreen){
             cv.roundRect(12,8,60,28,9,'#202833');icon(cv,'more',42,22,C.text);
-            cv.target(12,8,60,28,()=>{webMode=false;reading=false;activity();},'show-toolbar');tipLabels['show-toolbar']='Browserleiste anzeigen';
+            cv.target(12,8,60,28,()=>{browser.cancelController();webMode=false;reading=false;activity();},'show-toolbar');tipLabels['show-toolbar']='Browserleiste anzeigen';
         }
         if(media.fullscreen&&!media.hasSiteControls)drawVideoControls(cv,bottom);
         if(keyboard){cv.targets=cv.targets.filter(t=>t.y<BAR+TABS||t.x+t.w<=W-SIDE);belowTabs(cv,()=>drawKeyboard(cv,bottom-TABS));}

@@ -136,6 +136,14 @@ class BrowserSession extends EventEmitter {
     }
     pumpFrames(){
         if(this.decoding||!this.pendingFrame||this.frameTimer)return;
+        // Keep the newest compressed picture while the frontend socket is
+        // congested. Decoding it now would allocate a full RGBA surface only
+        // for the sender to discard it. Retry even for a static final frame;
+        // Chromium need not produce another frame after the socket drains.
+        if(this.options.frameReady&&!this.options.frameReady()){
+            this.frameTimer=setTimeout(()=>{this.frameTimer=null;this.pumpFrames();},this.frameInterval);
+            return;
+        }
         const wait=this.frameInterval-(monotonic()-this.lastDecodeStart);
         if(wait>1){this.frameTimer=setTimeout(()=>{this.frameTimer=null;this.pumpFrames();},wait);return;}
         const p=this.pendingFrame;this.pendingFrame=null;p.ack();

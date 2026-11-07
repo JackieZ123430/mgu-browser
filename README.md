@@ -4,7 +4,7 @@ Ein experimenteller Browser für BMW MGU / iDrive 7: eine native, mit dem
 iDrive-Controller bedienbare Oberfläche und eine getrennte Chromium-Engine
 für echtes HTML, CSS und JavaScript.
 
-**Version 0.13.3 – experimentelle Store-Pakete für MGU / iDrive 7, x86_64.**
+**Version 0.14.0 – experimentelle Store-Pakete für MGU / iDrive 7, x86_64.**
 Oberfläche, native Runtime und eine private Chromium-Engine werden gemeinsam
 über einen Store-Katalog verteilt. Der eigene Code steht unter MIT.
 **Die BMW-Audioanbindung ist implementiert, aber mit diesem Browserstand noch
@@ -28,8 +28,8 @@ verknüpft die Pakete und ihre Abhängigkeiten:
 
 | Paket | Version | Inhalt |
 | --- | --- | --- |
-| Browser | 0.13.3 | Native Oberfläche, iDrive-Bedienung, Tabs, Einstellungen |
-| Browser Runtime | 0.13.3 | Backend, native IPC-/Bildmodule, begrenztes Profil-Dateisystem |
+| Browser | 0.14.0 | Native Oberfläche, iDrive-Bedienung, Tabs, Einstellungen |
+| Browser Runtime | 0.14.0 | Backend, native IPC-/Bildmodule, begrenztes Profil-Dateisystem |
 | Chromium Engine | 0.1.0 | Debian Chromium 156.0.8078.79 mit privaten Bibliotheken und Sandbox |
 
 MGU Deploy, Renderer und Internet uplink kommen aus der offiziellen Store-Quelle.
@@ -75,7 +75,34 @@ Die automatisierten Ergebnisse und ihre Grenzen stehen unter
 [Tests](docs/TESTING.md). Ein Quellcode-Audit ersetzt keinen Hardwaretest und
 belegt keine Fehlerfreiheit. Die neue Prüfung verwendet eine echte sandboxed Chromium-Sitzung für Eingabe,
 Pop-ups, Video und Audio-Ausgabe in einen lokalen Testsink. Der genaue Umfang
-und die Grenzen stehen im [Testbericht für 0.11.0](docs/TESTING.md).
+und die Grenzen stehen im [aktuellen Testbericht](docs/TESTING.md).
+
+## 0.14.0: Videotakt, Vollbild und weniger Renderarbeit
+
+Die Audio-Bridge verarbeitet vollständige PCM-Blöcke im richtigen Echtzeittakt.
+Die Mediensuche erreicht Player auch hinter großen Seitenvorlagen und meldet
+eine laufende Tonspur zuverlässig. Vollbild erhält das Layout der Website;
+verschachtelte Player werden nicht mehr durch eine globale Höhenregel unsichtbar.
+Bei ausgelasteter Bildübertragung wird das neueste Bild bevorzugt und überholtes
+Material vor dem Dekodieren verworfen.
+
+Schnelle iDrive-Drehfolgen werden ohne zusätzliche Wartefrist zusammengefasst;
+Drücken folgt den vorherigen Drehschritten. Ein zusammengefasster Auftrag ist
+auf 64 Drehschritte, die Warteschlange auf 32 Aufträge einschließlich
+Druckbarrieren begrenzt. Überzählige oder durch Navigation veraltete Eingaben
+werden verworfen; eine unbegrenzte Eingabefolge wird nicht vollständig gepuffert.
+
+Im isolierten Test mit derselben Engine und allein korrigiertem Audio-Helfer
+lief die Videouhr in 2,002 Sekunden von zuvor 1,430 auf 1,996 Sekunden;
+43 wurden zu 60 gelieferten Bildern. Ein separater Test mit künstlich 70 %
+Verbraucherdruck lieferte weiterhin 89 Bilder bei 389 → 252 ms Node-CPU-Zeit.
+Das sind lokale Vergleichswerte, keine Bildratenzusage für jede Website oder MGU.
+Details und Grenzen stehen unter [Tests](docs/TESTING.md).
+
+**Browser und Browser Runtime gemeinsam auf 0.14.0 aktualisieren.** Engine bleibt
+**0.1.0**. Die Start-, Migrations-, iDrive- und Handy-Funktionen aus 0.13 bleiben
+enthalten. Live-YouTube konnte hier wegen eines Proxy-403 nicht geprüft werden;
+Fahrzeugton und geschützte Anbieterwiedergabe bleiben gesondert zu testen.
 
 ## 0.13.3: „Browser-Dienst noch nicht bereit“
 
@@ -85,7 +112,7 @@ Backend-Start mit Code 125, bevor die Oberfläche eine Verbindung aufbauen konnt
 Ab 0.13.3 verwenden Mount und Prüfung denselben Grenzwert. Die Isolation und
 Speichergrenze bleiben erhalten.
 
-Browser und Runtime auf **0.13.3** aktualisieren; Chromium Engine bleibt
+Die Korrektur bleibt in **0.14.0** enthalten; Chromium Engine bleibt
 **0.1.0**. Ein bereits ausgefallener Dienst wird beim Update erneut gestartet,
 wenn seine Registrierung für diesen Boot nachgewiesen ist. Andernfalls fordert
 der Store den nötigen Headunit-Neustart an. Die Diagnose meldet „läuft“ erst

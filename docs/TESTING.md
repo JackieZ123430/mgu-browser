@@ -1,5 +1,70 @@
 # Teststand
 
+## 0.14.0 — Videotakt und Vollbild
+
+Ein Vergleich mit derselben veröffentlichten Engine 0.1.0, Node 8.16.2,
+Ubuntu 18, nativer JPEG-Dekodierung und ALSA 1.1.3 isoliert den Audiofehler:
+Nur der native Audio-Helfer wurde zwischen den Läufen geändert.
+
+| Messung bei jeweils 2,002 s Echtzeit | Bisheriger Helfer | Korrigierter Helfer |
+| --- | ---: | ---: |
+| Fortschritt der Videouhr | 1,429786 s | 1,996097 s |
+| Geschriebene PCM-Daten | 274.176 Byte | 385.920 Byte |
+| Frische nichtschwarze Bilder | 43 | 60 |
+
+Der bisherige Leser nahm pro Zeitschritt weniger PCM als der Produzentenblock
+auf und verlangsamte dadurch die Medienuhr. Der korrigierte Helfer puffert den
+vollständigen Block und taktet Ausgabe beziehungsweise Verwerfen weiter in
+begrenzten Abschnitten. Auch bei freigegebenem Audiokanal muss die Videouhr
+nahe an Echtzeit bleiben, ohne Daten in die Ausgabesink zu schreiben.
+
+Ein separater Vergleich mit künstlich 70 % Verbraucherdruck lieferte in beiden
+Läufen 89 Bilder. Das Bevorzugen des neuesten codierten Bildes vor der Dekodierung
+senkte dabei Node-CPU-Zeit von 389 auf 252 ms (etwa 35 %) und Dekodierungen von
+241 auf 89 (etwa 63 %). Dies ist ein definierter lokaler Lastvergleich, keine
+allgemeine Bildraten-, Hardwarebeschleunigungs- oder Websitezusage.
+
+`test/chromium_fullscreen_audio_smoke.js` prüft gleichzeitig tatsächliche neue,
+nichtschwarze Pixel, Fortschritt der Videouhr, nichtstilles PCM und den
+Audiozustand: inline, hinter 7.000 Vorlagenelementen, im Vollbild, nach
+Viewport-Wechsel, nach Verlassen des Vollbilds sowie mit freigegebener Ausgabe.
+Der erste Abschnitt prüft die Echtzeitrate über zwei Sekunden statt nur
+„Wiedergabe läuft“ aus dem DOM abzulesen. Der bisherige Stand scheiterte zudem
+hinter den vielen Vorlagenelementen an einer falschen `audible=false`-Meldung.
+
+`test/media_fullscreen_smoke.js` reproduziert mit eigenem Farbvideo einen
+verschachtelten Player mit zulässigem nullhohem Zwischencontainer. Die alte
+globale Vollbildregel machte dessen Video unsichtbar. Geprüft werden die native
+Website-Schaltfläche und Browser-Aktion, Bild-/Viewport-Geometrie, bewegte
+farbige Projektionsbilder, Verlassen des Vollbilds sowie iframe-/Shadow-Player.
+Providerähnliche Klassennamen sind eigene DOM-Fixtures, kein Live-YouTube-Test.
+
+`test/controller_video_smoke.js` vergleicht 16 Drehschritte und anschließendes
+Drücken über echtes Unix-IPC, während das eigene Video läuft. Ungebündelt sind
+16 Fokus-Anfragen, gebündelt eine nötig; beide Wege müssen dieselbe abschließende
+Schaltfläche aktivieren. Videofortschritt und native JPEG-Dekodierung werden
+mitgeprüft. Die Zeit bis zur Aktivierung wird gemeldet; ein fragiles Verhältnis
+zwischen den Laufzeiten ist keine Bestehensbedingung. Die Queue hält höchstens
+32 wartende Aufträge einschließlich Druckbarrieren; pro zusammengefasstem
+Drehauftrag werden maximal 64 Schritte behalten. Tests prüfen Grenzfälle,
+Richtungswechsel, Druckreihenfolge und Abbruch veralteter Tab-/Navigationsarbeit.
+Unbegrenzte Eingabefolgen werden ausdrücklich nicht vollständig gespeichert.
+
+Der Pakettreiber `test/fullscreen_audio_package_smoke.py` verwendet den
+gebauten Backend-Code, dessen echtes natives JPEG-Modul und Audio-Helfer,
+gepinnte Engine 0.1.0, Node 8 und öffentliche alte ALSA in einem isolierten
+Ubuntu-18-Container. Er hält Chromium sandboxed, bindet Eingaben nur lesbar ein
+und braucht keine BMW-Bibliotheken oder externen Streamingkonten. FFmpeg
+erzeugt das eigene begrenzte Testvideo auf dem Host. Endgültiger Quellcommit,
+Paketlauf und Testanzahlen werden im Release-Bericht nach dem Quellfreeze
+festgehalten; vorläufige Messungen ersetzen diesen Abschluss nicht.
+
+**Grenzen:** Live-YouTube war durch HTTP 403 des Test-Proxys blockiert. Die
+lokalen Tests bestätigen weder alle fremden Player noch reale MGU-Lautsprecher,
+Firmware-Fokuswechsel oder geschützte Anbieterwiedergabe. Die Start- und
+Sicherheitsprüfungen aus 0.13.3 bleiben Teil der Veröffentlichung.
+
+
 ## 0.13.3 — vollständiger Backend-Start
 
 Die veröffentlichten Runtime-Pakete 0.13.1 und 0.13.2 wurden mit echtem

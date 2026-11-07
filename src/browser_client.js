@@ -5,20 +5,24 @@ class BrowserClient extends EventEmitter {
         super();this.gate=options.gate;this.channel=null;this.child=null;this.pending=new Map();this.next=0;this.generation=1;this.lastAllowed=false;
         this.socketPath=options.socketPath||(process.env.MGU_EMULATOR_MODE==='1'&&process.env.MGU_BROWSER_SOCKET)||'/var/opt/mgu-browser/data/backend.sock';
         this.connect();this.timer=setInterval(()=>this.state(),300);
-        this.gate.onBlock=reason=>{this.generation++;this.child=null;this.emit('blocked',reason);this.state();};
+        this.gate.onBlock=reason=>{this.cancelController();this.generation++;this.child=null;this.emit('blocked',reason);this.state();};
     }
     connect(){
         const socket=net.createConnection(this.socketPath);
-        socket.on('error',e=>{this.emit('diagnostic','Browser-Verbindung: '+e.code);});socket.on('connect',()=>{this.surface=null;this.channel=new Channel(socket);this.channel.on('json',m=>this.receive(m));this.channel.on('frame',b=>this.frame(b));this.state();});
-        socket.on('close',()=>{this.channel=null;this.child=null;this.pending.forEach(p=>{clearTimeout(p.timer);p.reject(new Error('Browser-Dienst getrennt'));});this.pending.clear();if(!this.closed)this.retry=setTimeout(()=>this.connect(),2000);});
+        socket.on('error',e=>{this.emit('diagnostic','Browser-Verbindung: '+e.code);});socket.on('connect',()=>{this.cancelController();this.surface=null;this.channel=new Channel(socket);this.channel.on('json',m=>this.receive(m));this.channel.on('frame',b=>this.frame(b));this.state();});
+        socket.on('close',()=>{this.cancelController();this.channel=null;this.child=null;this.pending.forEach(p=>{clearTimeout(p.timer);p.reject(new Error('Browser-Dienst getrennt'));});this.pending.clear();if(!this.closed)this.retry=setTimeout(()=>this.connect(),2000);});
     }
     state(){
         const allowed=this.gate.check().allowed;
-        if(allowed!==this.lastAllowed){this.generation++;this.lastAllowed=allowed;if(!allowed){this.child=null;this.emit('blocked','Browser nicht im Vordergrund');}}
+        if(allowed!==this.lastAllowed){this.cancelController();this.generation++;this.lastAllowed=allowed;if(!allowed){this.child=null;this.emit('blocked','Browser nicht im Vordergrund');}}
         if(this.channel)this.channel.json({op:'state',allowed,generation:this.generation,frames:2});
     }
     receive(m){
         if(m.id){const p=this.pending.get(m.id);if(p){clearTimeout(p.timer);this.pending.delete(m.id);m.error?p.reject(new Error(m.error)):p.resolve(m.result||{});}return;}
+        if(['ready','tabSelected','navigation','blocked'].includes(m.event))this.cancelController();
+        if(m.event==='media'){
+            const fullscreen=!!(m.value&&m.value.fullscreen);if(this.controllerFullscreen!==undefined&&this.controllerFullscreen!==fullscreen)this.cancelController();this.controllerFullscreen=fullscreen;
+        }
         if(m.event==='started')this.child=true;if(m.event==='blocked')this.child=null;
         if(m.event==='fault')this.emit('fault',new Error(m.value));else if(m.event)this.emit(m.event,m.value);
     }
@@ -46,6 +50,48 @@ class BrowserClient extends EventEmitter {
         // Ask for a full picture at most every 500 ms when a band cannot be applied.
         const t=Date.now();if(this.channel&&t-(this.lastKeyframe||0)>500){this.lastKeyframe=t;this.channel.json({op:'keyframe'});}
     }
+    // Merge rotary detents waiting behind a slow page, without a debounce
+    // delay. A press is a barrier: it follows all preceding focus movement,
+    // and turns received after it cannot move its selected control first.
+    cancelController(){
+        this.controllerEpoch=(this.controllerEpoch||0)+1;
+        if(this.controllerActive){this.controllerActive.cancelled=true;this.controllerActive.resolve({cancelled:true});}
+        (this.controllerQueue||[]).forEach(job=>{job.cancelled=true;job.resolve({cancelled:true});});
+        this.controllerQueue=[];this.controllerMode=null;
+    }
+    controller(op,delta,mode){
+        const focus=delta!==null;
+        if(focus&&(!Number.isInteger(delta)||!delta||Math.abs(delta)>16))return Promise.reject(new Error('Ungueltige Controller-Drehung'));
+        if(!this.channel||!this.gate.check().allowed)return Promise.reject(new Error('Browser nicht freigegeben'));
+        if(this.lastAllowed!==true)this.state();
+        if(this.controllerMode&&this.controllerMode!==mode)this.cancelController();this.controllerMode=mode;
+        const queue=this.controllerQueue||(this.controllerQueue=[]),last=queue[queue.length-1];
+        if(focus&&last&&last.op===op&&!last.cancelled&&Math.sign(last.delta)===Math.sign(delta)){last.delta=Math.max(-64,Math.min(64,last.delta+delta));return last.promise;}
+        if(queue.length>=32)return Promise.resolve({cancelled:true});
+        const job={op,delta,mode,channel:this.channel,generation:this.generation,epoch:this.controllerEpoch||0};
+        job.promise=new Promise((resolve,reject)=>{job.resolve=resolve;job.reject=reject;});queue.push(job);this.pumpController();return job.promise;
+    }
+    pumpController(){
+        if(this.controllerPumping)return;this.controllerPumping=true;
+        const valid=job=>!job.cancelled&&job.channel===this.channel&&job.generation===this.generation&&job.epoch===(this.controllerEpoch||0)&&this.gate.check().allowed;
+        const work=Promise.resolve().then(async()=>{
+            while(this.controllerQueue&&this.controllerQueue.length){
+                const job=this.controllerQueue.shift();this.controllerActive=job;
+                if(!valid(job)){job.resolve({cancelled:true});continue;}
+                try{
+                    let result={coalesced:true};
+                    if(job.delta===null)result=await this.request(job.op);
+                    else while(job.delta&&valid(job)){
+                        const limit=job.mode==='media'?20:16,step=Math.sign(job.delta)*Math.min(limit,Math.abs(job.delta));job.delta-=step;
+                        result=await this.request(job.op,{delta:step});
+                    }
+                    job.resolve(valid(job)?result:{cancelled:true});
+                }catch(error){if(valid(job)){job.reject(error);this.cancelController();}else job.resolve({cancelled:true});}
+                this.controllerActive=null;
+            }
+        });
+        const done=()=>{this.controllerActive=null;this.controllerPumping=false;if(this.controllerQueue&&this.controllerQueue.length)this.pumpController();};work.then(done,done);
+    }
     // Touch drags produce many small moves; send one wheel event at a time and
     // merge the rest, instead of queueing dozens of CDP round trips.
     scroll(delta){
@@ -63,17 +109,18 @@ class BrowserClient extends EventEmitter {
         this.state();const id=++this.next;
         return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error('Browser-Dienst: Zeitlimit'));},['start','navigate','mediaDemo','wifiScan','vaultUnlock'].includes(op)?30000:15000);this.pending.set(id,{resolve,reject,timer});this.channel.json(Object.assign({},args||{},{id,op}));});
     }
-    start(url){return this.request('start',{url});}navigate(url){return this.request('navigate',{url});}tap(x,y){return this.request('tap',{x,y});}
-    text(text){return this.request('text',{text});}key(key,shift){return this.request('key',{key,shift});}back(){return this.request('back');}
-    forward(){return this.request('forward');}reload(){return this.request('reload');}stopLoading(){return this.request('stopLoading');}resize(width,height){return this.request('resize',{width,height});}
-    newTab(url){return this.request('newTab',{url:url||''});}selectTab(tabId){return this.request('selectTab',{tabId});}closeTab(tabId){return this.request('closeTab',{tabId});}
-    clearTab(){return this.request('clearTab');}
-    focusPage(delta){return this.request('pageFocus',{delta});}pressPage(){return this.request('pagePress');}leavePage(){return this.request('pageLeave');}
-    mediaAction(action){return this.request('mediaAction',{action});}
+    start(url){this.cancelController();return this.request('start',{url});}navigate(url){this.cancelController();return this.request('navigate',{url});}tap(x,y){this.cancelController();return this.request('tap',{x,y});}
+    text(text){return this.request('text',{text});}key(key,shift){return this.request('key',{key,shift});}back(){this.cancelController();return this.request('back');}
+    forward(){this.cancelController();return this.request('forward');}reload(){this.cancelController();return this.request('reload');}stopLoading(){return this.request('stopLoading');}resize(width,height){return this.request('resize',{width,height});}
+    newTab(url){this.cancelController();return this.request('newTab',{url:url||''});}selectTab(tabId){this.cancelController();return this.request('selectTab',{tabId});}closeTab(tabId){this.cancelController();return this.request('closeTab',{tabId});}
+    clearTab(){this.cancelController();return this.request('clearTab');}
+    focusPage(delta){return this.controller('pageFocus',delta,'page');}pressPage(){return this.controller('pagePress',null,'page');}leavePage(){this.cancelController();return this.request('pageLeave');}
+    focusMedia(delta){return this.controller('mediaFocus',delta,'media');}pressMedia(){return this.controller('mediaPress',null,'media');}
+    mediaAction(action){if(action==='fullscreen'||action==='exit')this.cancelController();return this.request('mediaAction',{action});}
     setLocale(locale){return this.request('locale',{locale});}
     wifiStatus(){return this.request('wifiStatus');}wifiConnect(ssid,password){return this.request('wifiConnect',{ssid,password});}wifiReconnect(){return this.request('wifiReconnect');}
     wifiScan(){return this.request('wifiScan');}
-    stop(reason){this.child=null;this.emit('blocked',reason||'Browser geschlossen');return this.request('stop').catch(()=>{});}
-    destroy(){this.closed=true;clearInterval(this.timer);clearTimeout(this.retry);if(this.channel)this.channel.socket.destroy();}
+    stop(reason){this.cancelController();this.child=null;this.emit('blocked',reason||'Browser geschlossen');return this.request('stop').catch(()=>{});}
+    destroy(){this.cancelController();this.closed=true;clearInterval(this.timer);clearTimeout(this.retry);if(this.channel)this.channel.socket.destroy();}
 }
 module.exports=BrowserClient;

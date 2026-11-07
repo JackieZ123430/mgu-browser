@@ -38,13 +38,17 @@ module.exports=FrameDelta;
 // (new connection, new foreground generation, keyframe request).
 FrameDelta.sender=function(options){
     const delta=new FrameDelta();let channel=null,generation=null;
+    const maxPending=options.maxPending||2*1024*1024;
+    // Let the decoder wait before allocating an RGBA frame when the frontend
+    // socket is already backed up. send() rechecks this after decoding too.
+    const canSend=owner=>!!owner&&options.allowed()&&owner.pending()<=maxPending;
     return {
         reset(){delta.reset();},
+        canSend(){return canSend(options.owner());},
         send(frame){
-            const owner=options.owner();if(!owner||!options.allowed())return false;
+            const owner=options.owner();if(!canSend(owner))return false;
             const gen=options.generation()>>>0;
             if(owner!==channel||gen!==generation){channel=owner;generation=gen;delta.reset();}
-            if(owner.pending()>(options.maxPending||2*1024*1024))return false;
             // A 0.12 frontend does not announce protocol 2 and gets the old
             // full-frame format, so updating runtime and app in either order
             // never shows a black page.

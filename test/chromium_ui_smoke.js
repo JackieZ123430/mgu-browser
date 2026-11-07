@@ -5,6 +5,7 @@ fs.mkdirSync(data,{recursive:true});const storeFile=path.join(data,'browser-stat
 assert(fs.readFileSync(root+'/kit/mgu.js','utf8').includes("require('../browser_shutdown').run(() => process.exit(0))"),'Packaged kit must await bounded Browser shutdown cleanup');
 if(fs.existsSync(storeFile))fs.unlinkSync(storeFile);
 const {Recorder,play}=require(root+'/kit/record'),{Canvas}=require(root+'/kit/canvas');
+const RealBrowserClient=require(root+'/browser_client');
 let browser,ready,tick,frame,closed=false,controllerInput,recorder;const timers=[];
 class FakeBrowser extends EventEmitter{
     constructor(){super();browser=this;this.calls=[];this.tabs=[];}
@@ -35,6 +36,9 @@ class FakeBrowser extends EventEmitter{
     }
     async text(){}async key(){this.calls.push('web-key');}async tap(){}async scroll(delta){this.scrollDelta=delta;}
     async focusPage(delta){this.calls.push('web-focus');this.focusDelta=delta;}async pressPage(){this.calls.push('web-press');}async leavePage(){this.calls.push('web-leave');}
+    async focusMedia(delta){return this.request('mediaFocus',{delta});}async pressMedia(){return this.request('mediaPress');}
+    cancelController(){this.calls.push('controller-cancel');return RealBrowserClient.prototype.cancelController.call(this);}
+    controller(op,delta,mode){return RealBrowserClient.prototype.controller.call(this,op,delta,mode);}pumpController(){return RealBrowserClient.prototype.pumpController.call(this);}
     async back(){this.calls.push('back');}async forward(){this.calls.push('forward');}async reload(){this.calls.push('reload');}
     async stopLoading(){}async resize(w,h){this.size=[w,h];}
     async stop(){this.child=null;this.calls.push('stop');this.emit('blocked','Browser geschlossen');}destroy(){}
@@ -130,9 +134,22 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     assert(Number.isFinite(browser.scrollDelta)&&browser.scrollDelta>0,'Released drag must retain its queued scroll delta');
     await feed(1,0);await feed(0,1);await feed(0,0);
     assert(browser.calls.includes('web-focus')&&browser.calls.includes('web-press'),'Active webpages receive rotary selection and activation');
+    // A native keyboard must cancel held page-controller work, while keeping
+    // the webpage's text-field focus available for subsequent typing.
+    const originalRequest=browser.request,controllerCalls=[];let finishController;
+    Object.assign(browser,{channel:{},generation:1,lastAllowed:true,gate:{check:()=>({allowed:true})}});
+    browser.request=function(op,args){if(op==='pageFocus'){controllerCalls.push(op);return new Promise(resolve=>finishController=resolve);}if(op==='pagePress'){controllerCalls.push(op);return Promise.resolve({});}return originalRequest.call(this,op,args);};
+    const heldTurn=RealBrowserClient.prototype.focusPage.call(browser,1);await new Promise(r=>setImmediate(r));
+    const queuedTurn=RealBrowserClient.prototype.focusPage.call(browser,2),queuedPress=RealBrowserClient.prototype.pressPage.call(browser);
+    browser.emit('input',{editable:true,password:false});tick();assert(frame.targets.some(t=>t.key==='keyboard-close'),'Editable input opens the native keyboard');
+    assert((await Promise.all([heldTurn,queuedTurn,queuedPress])).every(r=>r.cancelled),'Opening the keyboard cancels old page turns and activation');
+    finishController({});await new Promise(r=>setImmediate(r));assert.deepEqual(controllerCalls,['pageFocus'],'No hidden webpage focus or activation follows the keyboard transition');browser.request=originalRequest;
+    await press('keyboard-close');browser.emit('input',{editable:false});
     browser.emit('input',{editable:false,adjusting:true});tick();
     assert(frame.textCalls.some(t=>/Turn: change value|Drehen: Wert ändern/.test(t.label)),'Rotary form editing explains how to finish');
+    const beforeFullscreenCancel=browser.calls.filter(c=>c==='controller-cancel').length;
     browser.emit('frame',{width:1280,height:380,rgba:Buffer.alloc(1280*380*4)});browser.emit('media',{fullscreen:true,paused:true,currentTime:10,duration:120});tick();
+    assert(browser.calls.filter(c=>c==='controller-cancel').length>beforeFullscreenCancel,'Fullscreen transition cancels pending controller work before switching UI');
     await press('video-toggle');await press('video-forward');await press('video-exit');assert(browser.calls.includes('video-toggle')&&browser.calls.includes('video-forward')&&browser.calls.includes('video-exit'));
     browser.emit('media',{fullscreen:true,hasSiteControls:true,paused:true});tick();
     assert(!frame.targets.some(t=>t.key==='video-toggle'),'Website controls must suppress the native fallback overlay');

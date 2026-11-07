@@ -7,14 +7,32 @@ URLs, byte sizes and SHA-256 values.
 
 | Component | Version | Purpose |
 | --- | --- | --- |
-| `mgu_browser` | 0.13.3 | SDK-free OAP frontend and iDrive UI |
-| `mgu-browser` | 0.13.3 | Native backend, IPC and uplink broker |
+| `mgu_browser` | 0.14.0 | SDK-free OAP frontend and iDrive UI |
+| `mgu-browser` | 0.14.0 | Native backend, IPC and uplink broker |
 | `mgu-browser-engine` | 0.1.0 | Debian Chromium 156.0.8078.79 and private libraries |
 
-The frontend requires runtime 0.13.3, engine 0.1.0, `mgu-uplink` 0.7.3,
+The frontend requires runtime 0.14.0, engine 0.1.0, `mgu-uplink` 0.7.3,
 `mgu-render` 0.6.11 and `mgu-deploy` 0.7.17 or newer. Keep the official Store
 source enabled for the last three. The Store installs dependencies automatically.
 This release targets **ID7 / Linux x86_64**, not ID8 or other architectures.
+
+## Update to 0.14.0: video and fullscreen
+
+Close Browser, refresh the Releases source and update **both Browser and
+Browser Runtime to 0.14.0**. Engine remains **0.1.0**; no replacement engine,
+firmware ALSA library or CDM is distributed. The new audio helper fixes slow
+PCM producer pacing. Fullscreen keeps site-player geometry, large pages retain
+playing-media detection, and overloaded frame delivery avoids obsolete decodes.
+
+After reopening, compare ordinary inline video, site/full-browser fullscreen,
+resize/exit and audible playback separately. Local exact-engine/native-JPEG/PCM
+tests are described in [TESTING.md](TESTING.md); they do not qualify every
+provider or actual BMW speakers. Existing startup recovery, legacy migration,
+controller input and phone-remote features remain included. Rotary requests
+coalesce while preserving press ordering; the queue is bounded to 32 pending
+jobs and 64 detents per merged rotary job, with excess/stale work cancelled.
+Follow a Store
+headunit-restart request after fresh recmgr registration.
 
 ## From a private 0.9.x installation or the `branch:main` channel
 
@@ -37,7 +55,7 @@ post-drop check refuses the mount. No backend socket can be created. A shared
 native constant now defines both the mount size and its maximum check. The
 384 MiB quota and noexec/nosuid/nodev isolation are retained.
 
-Refresh Releases and update **both Browser and Browser Runtime to 0.13.3**.
+Refresh Releases and update **both Browser and Browser Runtime to 0.14.0**.
 Engine stays **0.1.0**. Activation can recover stopped services only after
 trusted current-boot recmgr evidence proves both Browser service names were
 loaded. Fresh registration or unavailable evidence produces a Store reboot
