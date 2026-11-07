@@ -1,0 +1,77 @@
+name: Publish audited Browser 0.11.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-0.11.0.yml
+      - release/0.11.0/**
+      - release/publish_011.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-mgu-browser-0.11.0
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'pllanaio/mgu-browser'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out publication metadata
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: publish-control
+          persist-credentials: false
+      - name: Check out audited application source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 9b1a8555ab83d1fc682bc71d16a5ddce0c9387d2
+          path: source
+          persist-credentials: false
+      - name: Download immutable native runtime base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release download v0.10.0 --repo pllanaio/mgu-browser
+          --pattern 'mgu-browser@0.10.0.tgz' --dir "$RUNNER_TEMP/base"
+      - name: Rebuild exact audited package bytes
+        working-directory: source
+        env:
+          MGU_OUT: ${{ runner.temp }}/frontend
+        run: |
+          python3 release/build.py --out "$RUNNER_TEMP/packages" --runtime-only --runtime-base "$RUNNER_TEMP/base/mgu-browser@0.10.0.tgz"
+          python3 tools/build_store.py --app mgu_browser --version 0.11.0 --source apps/mgu_browser --release-package
+          cp "$RUNNER_TEMP/frontend/mgu_browser@0.11.0.tgz" "$RUNNER_TEMP/packages/"
+          python3 ../publish-control/release/publish_011.py prepare --source "$PWD" --out "$RUNNER_TEMP/packages"
+      - name: Run core regressions
+        working-directory: source
+        run: node --test test/*.test.js
+      - name: Check publication ordering without network access
+        run: python3 publish-control/release/test_publish_011.py
+      - name: Check out pinned Store validator
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: robertnisipeanu/mgu-store
+          ref: 8cfae23db27e51d86f84e65b13ce0592668d8df9
+          path: store
+          persist-credentials: false
+      - name: Validate packages and catalog with the actual Store
+        run: >-
+          node source/test/store_package_smoke.js "$GITHUB_WORKSPACE/store"
+          "$RUNNER_TEMP/packages/mgu_browser@0.11.0.tgz"
+          "$RUNNER_TEMP/packages/mgu-browser@0.11.0.tgz"
+          "$RUNNER_TEMP/packages/catalog.json"
+      - name: Publish verified release, then update Store catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 publish-control/release/publish_011.py publish
+          --source "$GITHUB_WORKSPACE/source" --out "$RUNNER_TEMP/packages"

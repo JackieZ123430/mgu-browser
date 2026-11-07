@@ -1,0 +1,57 @@
+{
+  "version": "0.11.0",
+  "sourceCommit": "9b1a8555ab83d1fc682bc71d16a5ddce0c9387d2",
+  "date": "2026-11-07",
+  "environment": {
+    "platform": "unprivileged Linux x86_64",
+    "node": "24.22.1",
+    "chromium": "156.0.8078.79 Debian 13",
+    "sandbox": "enabled",
+    "tlsVerification": "enabled"
+  },
+  "core": {
+    "command": "node --test test/*.test.js",
+    "passed": 49,
+    "failed": 0,
+    "skipped": 0
+  },
+  "realChromium": {
+    "offline_input_smoke.js": "passed",
+    "chromium_tabs_smoke.js": "passed",
+    "media_engine_smoke.js": "passed",
+    "offline_engine_smoke.js": "passed",
+    "emulator_media_smoke.js": "passed",
+    "chromium_audio_smoke.js": "passed",
+    "chromium_restore_smoke.js": "passed"
+  },
+  "audioEvidence": "Nonzero PCM samples captured from explicit 1-second Chromium WebAudio tone through a local ALSA FIFO sink; physical speakers not exercised",
+  "videoEvidence": "Authored VP8/Opus and H.264/AAC clips: decoded video frames and AAC decoded bytes; inline actions, native and custom controls, fullscreen containment and exit",
+  "node8": {
+    "version": "8.16.2",
+    "syntax": "all distributed JavaScript checked",
+    "actualEngine": "sandboxed Chromium startup, page focus/press and explicit AudioContext tone passed"
+  },
+  "frontend": "final packaged SDK-free frontend UI smoke passed; streaming screenshot inspected",
+  "store": {
+    "version": "0.11.0",
+    "storeSourceCommit": "8cfae23db27e51d86f84e65b13ce0592668d8df9",
+    "deployValidatorVersion": "0.8.4",
+    "artifactValidation": "passed",
+    "catalogParser": "passed",
+    "sourceByteEquality": "all distributed JavaScript modules and frontend UI match final checkout",
+    "nativeAddons": "both loaded successfully",
+    "syntheticDonorPreparation": "passed; proprietary SDK omitted from uploaded frontend",
+    "engine": "0.1.0 retained exactly from v0.10.0 catalog",
+    "limits": [
+      "No installation, systemd or vehicle behavior is exercised by this artifact validation",
+      "BMW speaker output remains unconfirmed"
+    ]
+  },
+  "limits": [
+    "No real headunit installation/update/rollback performed for 0.11.0",
+    "BMW AVB/speaker routing and audio focus are not implemented",
+    "Subscription playback, DRM and real provider accounts not tested",
+    "Physical controller touchpad and power/standby lifecycle not tested",
+    "Cross-origin/closed-shadow form inspection, downloads and browser permission dialogs remain incomplete"
+  ]
+}

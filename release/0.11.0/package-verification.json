@@ -1,0 +1,15 @@
+{
+  "version": "0.11.0",
+  "storeSourceCommit": "8cfae23db27e51d86f84e65b13ce0592668d8df9",
+  "deployValidatorVersion": "0.8.4",
+  "artifactValidation": "passed",
+  "catalogParser": "passed",
+  "sourceByteEquality": "all distributed JavaScript modules and frontend UI match final checkout",
+  "nativeAddons": "both loaded successfully",
+  "syntheticDonorPreparation": "passed; proprietary SDK omitted from uploaded frontend",
+  "engine": "0.1.0 retained exactly from v0.10.0 catalog",
+  "limits": [
+    "No installation, systemd or vehicle behavior is exercised by this artifact validation",
+    "BMW speaker output remains unconfirmed"
+  ]
+}

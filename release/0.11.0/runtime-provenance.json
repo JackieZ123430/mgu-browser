@@ -1,0 +1,21 @@
+{
+  "version": "0.11.0",
+  "nativeSources": {
+    "backend_launch.c": "b8d3fa2e0cddb4b7c4c0844f0c17ce78ef794a66ff3004948981353f58bd1f3a",
+    "browser_launch.c": "ddf4c9d8839586d63a7aab47ce9deb183fb807f9016bc30f8e72e3f5e7391143",
+    "peer_uid.c": "bc32019bc92632d2938da3dbb7d3f9991460f6c6ed42258604ddcedfd016d239",
+    "jpeg_frame.c": "a32bc9b7d8080708418e7c7fdb7eeb8955f84ccd76833de6513beca03d8fdd61"
+  },
+  "engineComponent": "0.1.0",
+  "reusedNative": {
+    "baseUrl": "https://github.com/pllanaio/mgu-browser/releases/download/v0.10.0/mgu-browser%400.10.0.tgz",
+    "baseSha256": "b2fb09e1747bf0db52d0b8004b7421ddeb56c27830fab10d927c4cd2511eb42f",
+    "nativeSources": {
+      "backend_launch.c": "b8d3fa2e0cddb4b7c4c0844f0c17ce78ef794a66ff3004948981353f58bd1f3a",
+      "browser_launch.c": "ddf4c9d8839586d63a7aab47ce9deb183fb807f9016bc30f8e72e3f5e7391143",
+      "peer_uid.c": "bc32019bc92632d2938da3dbb7d3f9991460f6c6ed42258604ddcedfd016d239",
+      "jpeg_frame.c": "a32bc9b7d8080708418e7c7fdb7eeb8955f84ccd76833de6513beca03d8fdd61"
+    },
+    "nativeSourceCommit": "3c01fdfb600c38125ce2a874b77c1918521d7bf7"
+  }
+}

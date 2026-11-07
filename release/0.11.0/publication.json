@@ -1,0 +1,41 @@
+{
+  "repository": "pllanaio/mgu-browser",
+  "tag": "v0.11.0",
+  "version": "0.11.0",
+  "sourceCommit": "9b1a8555ab83d1fc682bc71d16a5ddce0c9387d2",
+  "storeCommit": "8cfae23db27e51d86f84e65b13ce0592668d8df9",
+  "title": "MGU Browser 0.11.0 \u2014 experimental iDrive and media update",
+  "previousCatalogSha256": "f3f187660f2ae8e67c50ac9701e637398ffaff5c1a208329575a0ddb12874920",
+  "assets": [
+    {
+      "name": "mgu_browser@0.11.0.tgz",
+      "size": 1816632,
+      "sha256": "59acded89e7d6521fe29dd7748781c98de8b452ba2d02fb787b17c355134540e"
+    },
+    {
+      "name": "mgu-browser@0.11.0.tgz",
+      "size": 284556,
+      "sha256": "1df2a3ce9933f0e71425683f2a8c8c31420fadaecf82dba72b342a5ef3849771"
+    },
+    {
+      "name": "runtime-provenance.json",
+      "size": 1123,
+      "sha256": "b8cb4f3768b5231f9c5bca6541a0e74a60d0030c455b73e1d32d7d983267fea0"
+    },
+    {
+      "name": "package-verification.json",
+      "size": 643,
+      "sha256": "617979058a6dd3b543e59d63ef6f9193f25c25998816ba2d279a32315c153643"
+    },
+    {
+      "name": "test-results.json",
+      "size": 2468,
+      "sha256": "d4f85d8a916b3c3a9b2067b502be74d8f3df149c5924d706a5739b88bd46305b"
+    },
+    {
+      "name": "catalog.json",
+      "size": 2250,
+      "sha256": "a639a3b0e896d80b17fa3ed26ee0ce3cda499d766cd560b78b2234d3b95e2c7b"
+    }
+  ]
+}

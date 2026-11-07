@@ -1,0 +1,73 @@
+{
+  "schema": 2,
+  "components": [
+    {
+      "id": "mgu-browser-engine",
+      "kind": "tool",
+      "version": "0.1.0",
+      "title": "Browser Chromium engine (experimental)",
+      "mguHmi": [
+        "ID7"
+      ],
+      "artifact": {
+        "name": "mgu-browser-engine@0.1.0.tgz",
+        "size": 181048639,
+        "sha256": "0b6a73c964354214262d01f2d9bec2d0ab253cac8d27de04708912e804ef0874",
+        "url": "https://github.com/pllanaio/mgu-browser/releases/download/v0.10.0/mgu-browser-engine%400.1.0.tgz"
+      },
+      "requires": {
+        "mgu-deploy": "0.7.17"
+      },
+      "uninstallable": true,
+      "author": "Leon Pllana"
+    },
+    {
+      "id": "mgu-browser",
+      "kind": "tool",
+      "version": "0.11.0",
+      "title": "Browser runtime (experimental)",
+      "mguHmi": [
+        "ID7"
+      ],
+      "artifact": {
+        "name": "mgu-browser@0.11.0.tgz",
+        "size": 284556,
+        "sha256": "1df2a3ce9933f0e71425683f2a8c8c31420fadaecf82dba72b342a5ef3849771",
+        "url": "https://github.com/pllanaio/mgu-browser/releases/download/v0.11.0/mgu-browser%400.11.0.tgz"
+      },
+      "requires": {
+        "mgu-browser-engine": "0.1.0",
+        "mgu-uplink": "0.7.3",
+        "mgu-deploy": "0.7.17"
+      },
+      "uninstallable": true,
+      "author": "Leon Pllana"
+    },
+    {
+      "id": "mgu_browser",
+      "kind": "app",
+      "version": "0.11.0",
+      "title": "Browser (experimental)",
+      "description": "Native iDrive 7 browser with improved website navigation, video controls and Linux audio diagnostics. BMW speaker routing remains unconfirmed.",
+      "mguHmi": [
+        "ID7"
+      ],
+      "uninstallable": true,
+      "requires": {
+        "mgu-browser": "0.11.0",
+        "mgu-browser-engine": "0.1.0",
+        "mgu-uplink": "0.7.3",
+        "mgu-render": "0.6.11",
+        "mgu-deploy": "0.7.17"
+      },
+      "artifact": {
+        "name": "mgu_browser@0.11.0.tgz",
+        "size": 1816632,
+        "sha256": "59acded89e7d6521fe29dd7748781c98de8b452ba2d02fb787b17c355134540e",
+        "url": "https://github.com/pllanaio/mgu-browser/releases/download/v0.11.0/mgu_browser%400.11.0.tgz"
+      },
+      "author": "Leon Pllana"
+    }
+  ],
+  "commit": "9b1a8555ab83d1fc682bc71d16a5ddce0c9387d2"
+}
