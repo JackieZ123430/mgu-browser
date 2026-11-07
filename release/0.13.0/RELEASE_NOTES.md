@@ -1,6 +1,6 @@
 # MGU Browser 0.13.0 – Performance, dauerhafte Cookies und Handy-Fernbedienung
 
-Die Eingaben sind auf Commit `7d96c29` gesperrt (`publication.json`,
+Die Eingaben sind auf Commit `511c5c9` gesperrt (`publication.json`,
 `source-inputs.json`). Sobald dieser Ordner auf `main` landet, baut, prüft und
 veröffentlicht der Workflow „Publish audited Browser release“ die Pakete und
 schaltet danach den Store-Katalog um. Vorher ist im Store nichts zu sehen.
