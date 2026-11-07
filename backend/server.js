@@ -21,10 +21,8 @@ const audioGid=Number(process.env.MGU_BROWSER_AUDIO_GID);
 const vehicleAudio=Number.isInteger(audioGid)&&audioGid>0&&audioGid<=65535?{binary:'/var/opt/mgu-browser/current/audio-bridge',gid:audioGid}:null;
 const browser=new Browser({gate,mediaDisabled:false,cdmConfig:'/var/opt/mgu-browser/cdm.json',binary:'/var/opt/mgu-browser/current/browser-launch',profileRoot:'/var/opt/mgu-browser/work/profiles',profileStore,viewport:{width:1280,height:384},vehicleAudio,env:{FONTCONFIG_FILE:ENGINE+'/fonts.conf',CHROME_DEVEL_SANDBOX:ENGINE+'/chrome-sandbox'}});
 function stop(reason){allowed=false;browser.stop(reason);phase='idle';status();}
-browser.on('frame',frame=>{
-    if(!owner||!gate.check().allowed||(owner.socket.writableLength||owner.socket.bufferSize||0)>2*1024*1024)return;
-    const header=Buffer.alloc(12);header.writeUInt32LE(generation);header.writeUInt32LE(frame.width,4);header.writeUInt32LE(frame.height,8);owner.send(2,Buffer.concat([header,frame.rgba]));
-});
+const frameSender=require('./frame_delta').sender({owner:()=>owner,allowed:()=>gate.check().allowed,generation:()=>generation});
+browser.on('frame',frame=>frameSender.send(frame));
 ['started','blocked','fault','version','navigation','navigationState','loading','input','tabs','tabSelected','media'].forEach(event=>browser.on(event,value=>{if(owner)owner.json({event,value:value&&value.message||value});}));
 browser.on('performance',value=>fs.writeFileSync('/var/opt/mgu-browser/data/render-performance.json',JSON.stringify(value)));
 browser.on('started',()=>{phase='running';status();[3000,12000,25000].forEach(ms=>setTimeout(()=>{if(browser.child)browser.pageInfo().then(r=>fs.writeFileSync('/var/opt/mgu-browser/data/page-diagnostic.json',r.result.value)).catch(()=>{});},ms));});
@@ -47,6 +45,7 @@ const server=net.createServer(socket=>{
     channel.on('frame',()=>socket.destroy());
     channel.on('json',async message=>{
         if(!message||typeof message!=='object')return socket.destroy();
+        if(message.op==='keyframe'){frameSender.reset();return;}
         if(message.op==='state'){
             if(typeof message.allowed!=='boolean'||!Number.isInteger(message.generation)||message.generation<0||message.generation>0xffffffff)return socket.destroy();
             const changed=allowed!==(message.allowed===true)||generation!==(Number(message.generation)>>>0);

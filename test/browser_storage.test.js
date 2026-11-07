@@ -13,7 +13,8 @@ test('Portable encrypted storage preserves selected profile data and never resto
         fs.mkdirSync(profile+'/WidevineCdm');fs.writeFileSync(profile+'/WidevineCdm/latest-component-updated-widevine-cdm','temporary native module selection');
         await store.capture(profile);assert(!fs.readFileSync(root+'/protected/sessions.bin').includes(Buffer.from('fixture-cookie-only')));
         assert(!store.archive().some(e=>/^(mgu-audio|WidevineCdm)\//.test(e.name)),'Session archives must exclude runtime audio and native module configuration');
-        const reopened=new SecureBrowserData(root+'/protected');await assert.rejects(()=>reopened.restore(root+'/session-locked'),/entsperren/);
+        // Site data uses the device-bound key: restoring needs no master password.
+        const reopened=new SecureBrowserData(root+'/protected');await reopened.restore(root+'/session-locked');assert.equal(fs.readFileSync(root+'/session-locked/Default/Cookies','utf8'),'fixture-cookie-only');
         await assert.rejects(()=>reopened.unlock('incorrect fixture password'),/ungültig/);await reopened.unlock('fixture master phrase 2468');
         await assert.rejects(()=>reopened.restore(root+'/session-cancelled',()=>false),/abgebrochen/);assert.equal(fs.readdirSync(root+'/session-cancelled').length,0);
         const restored=root+'/session-restored';await reopened.restore(restored);assert.equal(fs.readFileSync(restored+'/Default/Cookies','utf8'),'fixture-cookie-only');

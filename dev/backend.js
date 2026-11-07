@@ -14,10 +14,8 @@ const gate={check:()=>({allowed:allowed&&now()-updated<1500})};
 const browser=new Browser({gate,mediaDisabled:false,cdmDirectory:process.env.MGU_BROWSER_CDM_DIRECTORY,binary:process.env.MGU_CHROMIUM,profileRoot:path.join(base,'profiles'),profileStore,viewport:{width:1280,height:384},env:{HOME:process.env.HOME}});
 function status(){fs.writeFileSync(path.join(base,'service-state.json'),JSON.stringify({laptop:true,uid:process.getuid(),pid:process.pid,connected:!!owner,allowed:gate.check().allowed,phase,url:lastURL,frames,codec:browser.performance.codec}));}
 function stop(reason){allowed=false;browser.stop(reason);phase='idle';status();}
-browser.on('frame',frame=>{
-    if(!owner||!gate.check().allowed||(owner.socket.writableLength||0)>2*1024*1024)return;
-    const h=Buffer.alloc(12);h.writeUInt32LE(generation);h.writeUInt32LE(frame.width,4);h.writeUInt32LE(frame.height,8);owner.send(2,Buffer.concat([h,frame.rgba]));frames++;if(frames===1||frames%20===0)status();
-});
+const frameSender=require('./frame_delta').sender({owner:()=>owner,allowed:()=>gate.check().allowed,generation:()=>generation});
+browser.on('frame',frame=>{if(frameSender.send(frame)){frames++;if(frames===1||frames%20===0)status();}});
 for(const event of ['started','blocked','fault','version','navigation','navigationState','loading','input','tabs','tabSelected','media'])browser.on(event,value=>{
     if(event==='started')phase='running';if(event==='blocked')phase='idle';
     if(event==='navigation')lastURL=value;
@@ -34,6 +32,7 @@ const server=net.createServer(socket=>{
     ch.on('frame',()=>socket.destroy());
     ch.on('json',async m=>{
         if(!m||typeof m!=='object')return socket.destroy();
+        if(m.op==='keyframe'){frameSender.reset();return;}
         if(m.op==='state'){
             const next=m.allowed===true;if(allowed&&!next)stop('App nicht im Vordergrund');
             allowed=next;generation=Number(m.generation)>>>0;updated=now();status();return;

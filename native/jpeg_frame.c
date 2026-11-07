@@ -21,6 +21,9 @@ static napi_value decode(napi_env env,napi_callback_info info) {
     jpeg_mem_src(&d->jpeg,input,size);jpeg_read_header(&d->jpeg,TRUE);
     if(!d->jpeg.image_width||!d->jpeg.image_height||d->jpeg.image_width>1280||d->jpeg.image_height>720)fail((j_common_ptr)&d->jpeg);
     d->jpeg.out_color_space=JCS_EXT_RGBA;d->jpeg.dct_method=JDCT_IFAST;
+    /* Screencast frames are decoded at up to 30 fps on the head unit CPU:
+       plain chroma upsampling is about a quarter faster and visually equal. */
+    d->jpeg.do_fancy_upsampling=FALSE;d->jpeg.do_block_smoothing=FALSE;
     jpeg_start_decompress(&d->jpeg);
     const unsigned width=d->jpeg.output_width,height=d->jpeg.output_height;
     if(d->jpeg.output_components!=4||napi_create_buffer(env,(size_t)width*height*4,&pixels,&buffer)!=napi_ok){jpeg_destroy_decompress(&d->jpeg);free(d);napi_throw_error(env,NULL,"JPEG output allocation failed");return NULL;}

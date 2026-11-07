@@ -58,7 +58,11 @@ function unpack(data){
 }
 class SecureBrowserData{
     constructor(directory,protector){
-        this.directory=directory;this.protector=protector;this.key=null;this.supported=false;this.prefs={rememberSessions:false,rememberCache:false};this.skipCapture=false;
+        // `key` protects the password vault (master password or Windows DPAPI).
+        // `siteKey` protects cookies and site storage. It is bound to this device
+        // and service account so "stay signed in" and cookie consent survive a
+        // restart without typing the master password on every start.
+        this.directory=directory;this.protector=protector;this.key=null;this.siteKey=null;this.supported=false;this.prefs={rememberSessions:true,rememberCache:false};this.skipCapture=false;
         this.operation=Promise.resolve();this.error='';
         this.ready=this.initialize().catch(()=>{this.supported=false;this.error='Geschützten Speicher und Dateirechte prüfen';});
     }
@@ -71,17 +75,30 @@ class SecureBrowserData{
     capture(profile){return this.task(()=>this._capture(profile));}
     async initialize(){
         privateDirectory(this.directory);
-        if(!this.protector){if(fs.existsSync(path.join(this.directory,'key.dpapi')))throw new Error('Existing Windows protection requires its helper');this.supported=true;this.loadPreferences();return;}
+        if(!this.protector){if(fs.existsSync(path.join(this.directory,'key.dpapi')))throw new Error('Existing Windows protection requires its helper');this.siteKey=this.deviceKey();this.supported=true;this.loadPreferences();return;}
         const keyFile=path.join(this.directory,'key.dpapi');
         if(fs.existsSync(keyFile))this.key=await this.protector('unprotect',readFile(keyFile,16384));
         else {this.key=crypto.randomBytes(32);atomic(keyFile,await this.protector('protect',this.key));}
         if(this.key.length!==32)throw new Error('Invalid protected key');
-        this.loadPreferences();this.supported=true;
+        this.siteKey=this.key;this.loadPreferences();this.supported=true;
+    }
+    deviceKey(){
+        const file=path.join(this.directory,'site-key.bin');
+        if(fs.existsSync(file)){const key=readFile(file,64);if(key.length!==32)throw new Error('Invalid site data key');return key;}
+        const key=crypto.randomBytes(32);
+        try{fs.writeFileSync(file,key,{mode:0o600,flag:'wx'});}catch(e){if(e.code!=='EEXIST')throw e;return this.deviceKey();}
+        return key;
     }
     loadPreferences(){
         const prefsFile=path.join(this.directory,'preferences.json');
-        if(fs.existsSync(prefsFile)){try{const p=JSON.parse(readFile(prefsFile,8192));this.prefs={rememberSessions:p.rememberSessions===true,rememberCache:p.rememberCache===true};}catch(e){this.error='Speichereinstellungen beschädigt; Persistenz ist ausgeschaltet';}}
+        if(fs.existsSync(prefsFile)){try{const p=JSON.parse(readFile(prefsFile,8192));
+            // Version 1 stored "off" as the factory default because enabling it
+            // required the master password. Version 2 makes cookies persistent
+            // by default; only an explicit choice made in version 2 turns it off.
+            this.prefs={rememberSessions:p.version===2?p.rememberSessions===true:true,rememberCache:p.rememberCache===true};
+        }catch(e){this.error='Speichereinstellungen beschädigt; Standardwerte aktiv';}}
     }
+    async requireSiteStorage(){await this.ready;if(!this.supported||!this.siteKey)throw new Error('Geschützter Speicher ist in dieser Laufzeit nicht verfügbar');}
     async requireReady(){await this.ready;if(!this.supported)throw new Error('Geschützter Speicher ist in dieser Laufzeit nicht verfügbar');if(!this.key)throw new Error('Geschützten Speicher zuerst entsperren');}
     async _unlock(password){
         await this.ready;if(this.protector)throw new Error('Windows-Kontoschutz entsperrt diesen Speicher');
@@ -94,30 +111,58 @@ class SecureBrowserData{
         catch(e){this.key=null;throw new Error('Masterpasswort oder geschützter Speicher ungültig');}finally{derived.fill(0);}
         return this.status();
     }
-    seal(purpose,data){
-        if(data.length>LIMIT)throw new Error('Storage limit exceeded');const iv=crypto.randomBytes(12),cipher=crypto.createCipheriv('aes-256-gcm',this.key,iv);cipher.setAAD(Buffer.from('mgu-browser-v1:'+purpose));
+    seal(purpose,data,key){
+        if(data.length>LIMIT)throw new Error('Storage limit exceeded');const iv=crypto.randomBytes(12),cipher=crypto.createCipheriv('aes-256-gcm',key||this.key,iv);cipher.setAAD(Buffer.from('mgu-browser-v1:'+purpose));
         return Buffer.concat([Buffer.from('MGB1'),iv,cipher.update(data),cipher.final(),cipher.getAuthTag()]);
     }
-    open(purpose,data){
+    open(purpose,data,key){
         if(data.length<32||data.length>LIMIT+64||data.slice(0,4).toString()!=='MGB1')throw new Error('Invalid protected storage');
-        const d=crypto.createDecipheriv('aes-256-gcm',this.key,data.slice(4,16));d.setAAD(Buffer.from('mgu-browser-v1:'+purpose));d.setAuthTag(data.slice(-16));return Buffer.concat([d.update(data.slice(16,-16)),d.final()]);
+        const d=crypto.createDecipheriv('aes-256-gcm',key||this.key,data.slice(4,16));d.setAAD(Buffer.from('mgu-browser-v1:'+purpose));d.setAuthTag(data.slice(-16));return Buffer.concat([d.update(data.slice(16,-16)),d.final()]);
     }
-    read(purpose){const file=path.join(this.directory,purpose+'.bin');return fs.existsSync(file)?this.open(purpose,readFile(file,LIMIT+64)):null;}
-    write(purpose,data){atomic(path.join(this.directory,purpose+'.bin'),this.seal(purpose,data));}
-    async status(){await this.ready;return {supported:this.supported,error:this.error,locked:!this.key,needsSetup:!this.protector&&!fs.existsSync(path.join(this.directory,'passphrase-key.bin')),rememberSessions:this.prefs.rememberSessions,rememberCache:this.prefs.rememberCache,protection:this.protector?'Windows DPAPI + AES-256-GCM':'Masterpasswort + AES-256-GCM'};}
-    async _configure(prefs){await this.requireReady();const next=Object.assign({},this.prefs);for(const name of ['rememberSessions','rememberCache'])if(typeof prefs[name]==='boolean')next[name]=prefs[name];const entries=await this.archiveAsync();this.prefs=next;atomic(path.join(this.directory,'preferences.json'),JSON.stringify(this.prefs));await this.saveArchiveAsync(entries.filter(e=>this.keep(e.name)));return this.status();}
+    read(purpose,key){const file=path.join(this.directory,purpose+'.bin');return fs.existsSync(file)?this.open(purpose,readFile(file,LIMIT+64),key):null;}
+    write(purpose,data,key){atomic(path.join(this.directory,purpose+'.bin'),this.seal(purpose,data,key));}
+    async status(){await this.ready;return {supported:this.supported,error:this.error,locked:!this.key,siteStorage:!!this.siteKey,needsSetup:!this.protector&&!fs.existsSync(path.join(this.directory,'passphrase-key.bin')),rememberSessions:this.prefs.rememberSessions,rememberCache:this.prefs.rememberCache,protection:this.protector?'Windows DPAPI + AES-256-GCM':'Masterpasswort + AES-256-GCM'};}
+    async _configure(prefs){
+        await this.requireSiteStorage();const next=Object.assign({},this.prefs);for(const name of ['rememberSessions','rememberCache'])if(typeof prefs[name]==='boolean')next[name]=prefs[name];
+        const entries=await this.archiveAsync().catch(()=>[]);this.prefs=next;atomic(path.join(this.directory,'preferences.json'),JSON.stringify(Object.assign({version:2},this.prefs)));
+        await this.saveArchiveAsync(entries.filter(e=>this.keep(e.name)));if(!this.prefs.rememberSessions)this.removeFile('cookies.bin');return this.status();
+    }
+    removeFile(name){const file=path.join(this.directory,name);if(!fs.existsSync(file))return;const s=fs.lstatSync(file);if(!s.isFile()||s.isSymbolicLink()||s.nlink!==1||(process.getuid&&s.uid!==process.getuid()))throw new Error('Unsafe data file');fs.unlinkSync(file);}
+    // Cookie snapshots come from Chromium's Storage.getCookies. They are taken
+    // while the browser runs, so a power loss or forced stop keeps the last
+    // consent and login state even when the profile files cannot be captured.
+    saveCookies(cookies){return this.task(async()=>{
+        await this.ready;if(!this.supported||!this.siteKey||!this.prefs.rememberSessions||!Array.isArray(cookies))return false;
+        const now=Date.now()/1000,list=cookies.filter(c=>c&&typeof c.name==='string'&&typeof c.domain==='string'&&(!(c.expires>0)||c.expires>now)).slice(0,4000).map(cookieRecord);
+        const compressed=await new Promise((resolve,reject)=>zlib.gzip(Buffer.from(JSON.stringify({version:1,cookies:list})),(e,data)=>e?reject(e):resolve(data)));
+        if(compressed.length>4*1024*1024)throw new Error('Cookie storage limit exceeded');
+        await atomicAsync(path.join(this.directory,'cookies.bin'),await this.cryptAsync('cookies',compressed,true,this.siteKey));return true;
+    });}
+    async loadCookies(){
+        await this.operation;await this.ready;if(!this.supported||!this.siteKey||!this.prefs.rememberSessions)return [];
+        const file=path.join(this.directory,'cookies.bin');if(!fs.existsSync(file))return [];
+        try{const plain=await inflateBounded(await this.cryptAsync('cookies',await readAsync(file,4*1024*1024+64),false,this.siteKey));const data=JSON.parse(plain.toString('utf8'));
+            const now=Date.now()/1000;return Array.isArray(data.cookies)?data.cookies.filter(c=>c&&typeof c.name==='string'&&typeof c.domain==='string'&&(!(c.expires>0)||c.expires>now)).slice(0,4000).map(cookieRecord):[];}
+        catch(e){this.error='Gespeicherte Cookies waren beschädigt und wurden verworfen';try{this.removeFile('cookies.bin');}catch(ignore){}return [];}
+    }
     keep(name){return !excluded(name)&&(isCache(name)?this.prefs.rememberCache:this.prefs.rememberSessions);}
-    archive(){const data=this.read('sessions');if(!data)return [];const plain=zlib.gunzipSync(data,{maxOutputLength:LIMIT});if(plain.length>LIMIT)throw new Error('Session storage limit exceeded');return unpack(plain);}
-    saveArchive(entries){this.write('sessions',zlib.gzipSync(pack(entries)));}
+    archive(){const data=this.read('sessions',this.siteKey);if(!data)return [];const plain=zlib.gunzipSync(data,{maxOutputLength:LIMIT});if(plain.length>LIMIT)throw new Error('Session storage limit exceeded');return unpack(plain);}
+    saveArchive(entries){this.write('sessions',zlib.gzipSync(pack(entries)),this.siteKey);}
     async archiveAsync(){
         const file=path.join(this.directory,'sessions.bin');if(!fs.existsSync(file))return [];
-        const data=await readAsync(file,LIMIT+64),compressed=await this.cryptAsync('sessions',data,false);
+        const data=await readAsync(file,LIMIT+64);let compressed;
+        try{compressed=await this.cryptAsync('sessions',data,false,this.siteKey);}
+        catch(e){
+            // Archives written before 0.13 were sealed with the master key.
+            if(!this.key||this.key===this.siteKey)throw e;compressed=await this.cryptAsync('sessions',data,false,this.key);
+        }
         return unpack(await inflateBounded(compressed));
     }
-    async cryptAsync(purpose,data,encrypt){
+    async cryptAsync(purpose,data,encrypt,key){
+        key=key||this.key;if(!key)throw new Error('Geschützter Speicher ist gesperrt');
         if(encrypt&&data.length>LIMIT)throw new Error('Storage limit exceeded');
         if(!encrypt&&(data.length<32||data.length>LIMIT+64||data.slice(0,4).toString()!=='MGB1'))throw new Error('Invalid protected storage');
-        const iv=encrypt?crypto.randomBytes(12):data.slice(4,16),cipher=encrypt?crypto.createCipheriv('aes-256-gcm',this.key,iv):crypto.createDecipheriv('aes-256-gcm',this.key,iv);
+        const iv=encrypt?crypto.randomBytes(12):data.slice(4,16),cipher=encrypt?crypto.createCipheriv('aes-256-gcm',key,iv):crypto.createDecipheriv('aes-256-gcm',key,iv);
         cipher.setAAD(Buffer.from('mgu-browser-v1:'+purpose));if(!encrypt)cipher.setAuthTag(data.slice(-16));
         const source=encrypt?data:data.slice(16,-16),parts=encrypt?[Buffer.from('MGB1'),iv]:[];
         for(let at=0;at<source.length;at+=256*1024){parts.push(cipher.update(source.slice(at,at+256*1024)));await later();}
@@ -125,13 +170,25 @@ class SecureBrowserData{
     }
     async saveArchiveAsync(entries){
         const compressed=await new Promise((resolve,reject)=>zlib.gzip(pack(entries),(e,data)=>e?reject(e):resolve(data)));
-        await atomicAsync(path.join(this.directory,'sessions.bin'),await this.cryptAsync('sessions',compressed,true));
+        await atomicAsync(path.join(this.directory,'sessions.bin'),await this.cryptAsync('sessions',compressed,true,this.siteKey));
     }
-    async filterArchive(kind){await this.requireReady();await this.saveArchiveAsync((await this.archiveAsync()).filter(e=>this.keep(e.name)&&!(kind==='cache'&&isCache(e.name))&&!(kind==='sites'&&!isCache(e.name))));}
-    resetSessions(){return this.task(async()=>{await this.requireReady();const file=path.join(this.directory,'sessions.bin');if(fs.existsSync(file)){const s=fs.lstatSync(file);if(!s.isFile()||s.isSymbolicLink()||s.nlink!==1||(process.getuid&&s.uid!==process.getuid()))throw new Error('Unsafe data file');fs.unlinkSync(file);}return this.status();});}
+    async filterArchive(kind){
+        await this.requireSiteStorage();if(kind==='sites')this.removeFile('cookies.bin');
+        await this.saveArchiveAsync((await this.archiveAsync().catch(()=>[])).filter(e=>this.keep(e.name)&&!(kind==='cache'&&isCache(e.name))&&!(kind==='sites'&&!isCache(e.name))));
+    }
+    resetSessions(){return this.task(async()=>{await this.requireSiteStorage();this.removeFile('sessions.bin');this.removeFile('cookies.bin');return this.status();});}
     async restore(profile,isAllowed){
-        await this.operation;await this.ready;if(!this.supported)return;if(!this.key){if(this.prefs.rememberSessions||this.prefs.rememberCache)throw new Error('Geschützten Speicher zuerst entsperren');return;}privateDirectory(profile);
-        const entries=(await this.archiveAsync()).filter(e=>this.keep(e.name));
+        await this.operation;await this.ready;if(!this.supported||!this.siteKey)return;privateDirectory(profile);
+        if(!this.prefs.rememberSessions&&!this.prefs.rememberCache)return;
+        let entries;
+        try{entries=(await this.archiveAsync()).filter(e=>this.keep(e.name));}
+        catch(e){
+            // A damaged archive must never keep the browser from starting.
+            // Keep it aside for diagnosis; the next clean exit writes a new one.
+            this.error='Gespeicherte Website-Daten waren beschädigt und wurden zurückgesetzt';
+            try{const file=path.join(this.directory,'sessions.bin');fs.renameSync(file,file+'.damaged');}catch(ignore){}
+            entries=[];
+        }
         for(let index=0;index<entries.length;index++){
             if(index%16===0){await new Promise(resolve=>setImmediate(resolve));if(isAllowed&&!isAllowed())throw new Error('Browserstart abgebrochen');}
             const item=entries[index];
@@ -140,7 +197,7 @@ class SecureBrowserData{
         }
     }
     async _capture(profile){
-        await this.ready;if(this.skipCapture){this.skipCapture=false;return;}if(!this.supported||!this.key||(!this.prefs.rememberSessions&&!this.prefs.rememberCache))return;
+        await this.ready;if(this.skipCapture){this.skipCapture=false;return;}if(!this.supported||!this.siteKey||(!this.prefs.rememberSessions&&!this.prefs.rememberCache))return;
         privateDirectory(profile);const entries=[];let total=0;
         let records=0;const walk=async(directory,prefix)=>{for(const name of fs.readdirSync(directory)){
             if(++records>12000)throw new Error('Session file limit exceeded');if(records%32===0)await later();
@@ -163,4 +220,11 @@ class SecureBrowserData{
     async login(id,origin){const entry=(await this.entries()).find(e=>e.id===id&&e.origin===origin);if(!entry)throw new Error('Kein gespeicherter Zugang für diese HTTPS-Seite');return entry;}
     async _removeLogin(id){const list=await this.entries();this.write('vault',Buffer.from(JSON.stringify(list.filter(e=>e.id!==id))));return {removed:true};}
 }
-module.exports={SecureBrowserData,dpapi,pack,unpack,validName,isCache};
+const COOKIE_FIELDS=['name','value','domain','path','expires','httpOnly','secure','sameSite','priority','sourceScheme','sourcePort','partitionKey'];
+function cookieRecord(c){
+    const out={};for(const name of COOKIE_FIELDS)if(c[name]!==undefined&&c[name]!==null)out[name]=c[name];
+    if(typeof out.value!=='string')out.value='';if(out.value.length>8192)out.value=out.value.slice(0,8192);
+    if(!(out.expires>0))delete out.expires;if(out.session)delete out.expires;
+    return out;
+}
+module.exports={SecureBrowserData,dpapi,pack,unpack,validName,isCache,cookieRecord};

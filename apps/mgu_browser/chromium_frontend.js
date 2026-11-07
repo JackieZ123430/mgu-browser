@@ -153,7 +153,7 @@ mgu.run({async start(ctx){
     };
     ui.onVisible(visible);if(ui.onFocus)ui.onFocus(visible);visible();setInterval(visible,100);
     browser.on('ready',()=>{serviceReady=true;resized='';if(!browser.child&&!frame)landing=true;launch();});
-    browser.on('frame',f=>{frame=f;setImage(IMAGE,f.width,f.height,f.rgba);});
+    browser.on('frame',f=>{frame=f;setImage(IMAGE,f.width,f.height,f.rgba);nativeBridge.markDirty(IMAGE,f.dirty);});
     browser.on('started',()=>{landing=!currentURL;resized='';activity();});
     browser.on('tabs',value=>{tabs=value;activeTab=(tabs.find(t=>t.active)||{}).id||'';});
     browser.on('tabSelected',t=>{
@@ -402,8 +402,11 @@ mgu.run({async start(ctx){
     }
     function drawPrivacy(c,bottom){
         c.text('Datenschutz & Logins',64,114,34,C.text);
-        const enabled=!!privacyState&&privacyState.supported&&!privacyState.locked&&!privacyBusy;
-        c.text(privacyBusy?'Geschützter Speicher wird geprüft ...':privacyState&&privacyState.error?privacyState.error:privacyState&&privacyState.supported?privacyState.locked?'Masterpasswort: Speicher zuerst entsperren':privacyState.protection:'Geschützter Speicher in dieser Laufzeit nicht verfügbar',65,157,18,C.muted);
+        // Cookies and site data use the device key; only the password vault
+        // needs the master password.
+        const enabled=!!privacyState&&privacyState.supported&&(privacyState.siteStorage||!privacyState.locked)&&!privacyBusy;
+        const vaultEnabled=!!privacyState&&privacyState.supported&&!privacyState.locked&&!privacyBusy;
+        c.text(privacyBusy?'Geschützter Speicher wird geprüft ...':privacyState&&privacyState.error?privacyState.error:privacyState&&privacyState.supported?privacyState.locked?'Cookies werden verschlüsselt gesichert. Passwörter: Speicher entsperren':privacyState.protection:'Geschützter Speicher in dieser Laufzeit nicht verfügbar',65,157,18,C.muted);
         if(privacyState&&privacyState.supported&&privacyState.locked&&!keyboard)button(c,1170,178,364,42,privacyState.needsSetup?'Masterpasswort einrichten':'Speicher entsperren',()=>{keyboard=privacyState.needsSetup?'vault-create':'vault-unlock';draft='';vaultSetup='';replaceDraft=false;keyMode='abc';upper=false;},'vault-unlock');
         c.text('Angemeldet bleiben',65,211,23,C.text);
         button(c,850,178,294,42,privacyState&&privacyState.rememberSessions?'Ein':'Aus',()=>changePrivacy('rememberSessions'),'remember-sessions',{enabled});
@@ -414,8 +417,8 @@ mgu.run({async start(ctx){
         button(c,64,354,390,42,'Website-Daten löschen / abmelden',()=>confirmPrivacy('Website-Daten löschen und alle Websites abmelden?',async()=>{privacyState=await browser.request('clearBrowserData',{kind:'sites'});landing=true;currentURL='';title='';}), 'clear-sites',{enabled});
         button(c,470,354,290,42,'HTTP-Cache löschen',()=>confirmPrivacy('Gespeicherten HTTP-Cache löschen?',async()=>{privacyState=await browser.request('clearBrowserData',{kind:'cache'});}), 'clear-cache',{enabled});
         button(c,776,354,290,42,'Verlauf löschen',()=>confirmPrivacy('Den lokalen Browser-Verlauf löschen?',async()=>store.clearHistory()),'clear-history');
-        button(c,1082,354,452,42,'Passwortverwaltung',openPasswords,'passwords',{enabled});
-        c.text('Speichern erfolgt beim Beenden. Ohne Sitzungen bleiben Logins nur bis zum Schließen.',65,439,17,C.muted);
+        button(c,1082,354,452,42,'Passwortverwaltung',openPasswords,'passwords',{enabled:vaultEnabled});
+        c.text('Cookies und Logins werden laufend gesichert, auch bei Zündung aus. Ohne Sitzungen bleiben sie nur bis zum Schließen.',65,439,17,C.muted);
         button(c,64,bottom-52,680,42,'Sitzungsspeicher zurücksetzen',()=>confirmPrivacy('Gespeicherte Website-Anmeldungen und Cache zurücksetzen? Passwörter bleiben erhalten.',async()=>{privacyState=await browser.request('clearBrowserData',{kind:'sessions-reset'});landing=true;currentURL='';title='';}),'reset-sessions',{enabled});
         button(c,1288,bottom-52,246,42,'Zurueck',()=>{panel='settings';},'privacy-back');
     }

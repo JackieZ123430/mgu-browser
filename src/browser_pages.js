@@ -126,7 +126,7 @@ module.exports={
         await send('Page.bringToFront');
         await send('Emulation.setFocusEmulationEnabled',{enabled:true});
         await this.resize(this.viewport.width,this.viewport.height);check();
-        await send('Page.startScreencast',{format:this.performance.codec==='jpeg-native'?'jpeg':'png',quality:82,maxWidth:1280,maxHeight:720,everyNthFrame:1});
+        await send('Page.startScreencast',{format:this.performance.codec==='jpeg-native'?'jpeg':'png',quality:75,maxWidth:1280,maxHeight:720,everyNthFrame:1});
         this.emit('loading',!!tab.loading);this.scheduleNavigation();this.inspectInput();
     }
 };
