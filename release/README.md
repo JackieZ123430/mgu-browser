@@ -100,12 +100,12 @@ file against source, and generates exact archive/catalog hashes from that CI
 build. It does not claim byte-identical native output across different compilers.
 
 After committing and testing the source, save the current public catalog in
-`release/0.12.0/previous-catalog.json`, add the release notes and local test report,
+`release/0.13.3/previous-catalog.json`, add the release notes and local test report,
 then lock inputs:
 
 ```sh
-python3 release/publish.py lock-inputs --source . --metadata release/0.12.0 \
-  --version 0.12.0
+python3 release/publish.py lock-inputs --source . --metadata release/0.13.3 \
+  --version 0.13.3
 ```
 
 The generic Actions workflow reads that descriptor's complete source SHA,
@@ -122,7 +122,7 @@ an independently checked-out Store source tree:
 
 ```sh
 node test/store_package_smoke.js /path/to/mgu-store \
-  /path/to/mgu_browser@0.12.0.tgz /path/to/mgu-browser@0.12.0.tgz \
+  /path/to/mgu_browser@0.13.3.tgz /path/to/mgu-browser@0.13.3.tgz \
   /path/to/catalog.json
 ```
 
@@ -130,6 +130,37 @@ This runs the real deploy artifact validator and updater catalog parser,
 prepares the app with the Store's synthetic donor, loads both native modules,
 and compares the packaged JavaScript with the current checkout. It does not
 install anything or validate systemd/vehicle behavior.
+
+## Service startup and failed-update recovery, 0.13.3
+
+The launcher uses one 384 MiB constant for both its private tmpfs mount and
+capacity check. The packaged root-startup regression must exercise the native
+launcher before any browser operation; JavaScript engine tests cannot catch a
+native exit before IPC starts.
+
+```sh
+python3 test/runtime_service_smoke.py \
+  --runtime /path/to/mgu-browser@0.13.3.tgz \
+  --engine /path/to/mgu-browser-engine@0.1.0.tgz
+node test/store_service_activation_smoke.js /path/to/mgu-store \
+  /path/to/mgu-browser@0.13.3.tgz
+```
+
+The first command uses local Linux Docker, a digest-pinned Ubuntu 18 image and
+hash-pinned Node 8, read-only inputs and a disposable container with SYS_ADMIN
+for its private mounts. It checks clean/legacy installations, distinct app UIDs,
+audio-group presence/absence, real privilege/mount isolation and authenticated
+IPC. With the optional immutable engine it also requires sandboxed Chromium
+and actual projected RGBA frames. It installs no host service and does not
+qualify real systemd, SmartX or headunit behavior.
+
+The second command runs the unchanged official Store restart policy and the
+built runtime's activation helper with authored systemctl/ownership fixtures.
+An update may recover an inactive/failed service only after both Browser names
+were proven present in recmgr's current list and boot-loaded list. A new install
+keeps the Store's mandatory first-reboot gate. The final runtime check waits up
+to 15 seconds for protected, fresh status from the exact installed version and
+the correctly owned backend socket; an old version's status is insufficient.
 
 ## Publication
 

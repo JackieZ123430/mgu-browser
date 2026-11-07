@@ -4,7 +4,7 @@ Ein experimenteller Browser für BMW MGU / iDrive 7: eine native, mit dem
 iDrive-Controller bedienbare Oberfläche und eine getrennte Chromium-Engine
 für echtes HTML, CSS und JavaScript.
 
-**Version 0.12.0 – experimentelle Store-Pakete für MGU / iDrive 7, x86_64.**
+**Version 0.13.3 – experimentelle Store-Pakete für MGU / iDrive 7, x86_64.**
 Oberfläche, native Runtime und eine private Chromium-Engine werden gemeinsam
 über einen Store-Katalog verteilt. Der eigene Code steht unter MIT.
 **Die BMW-Audioanbindung ist implementiert, aber mit diesem Browserstand noch
@@ -28,8 +28,8 @@ verknüpft die Pakete und ihre Abhängigkeiten:
 
 | Paket | Version | Inhalt |
 | --- | --- | --- |
-| Browser | 0.12.0 | Native Oberfläche, iDrive-Bedienung, Tabs, Einstellungen |
-| Browser Runtime | 0.12.0 | Backend, native IPC-/Bildmodule, begrenztes Profil-Dateisystem |
+| Browser | 0.13.3 | Native Oberfläche, iDrive-Bedienung, Tabs, Einstellungen |
+| Browser Runtime | 0.13.3 | Backend, native IPC-/Bildmodule, begrenztes Profil-Dateisystem |
 | Chromium Engine | 0.1.0 | Debian Chromium 156.0.8078.79 mit privaten Bibliotheken und Sandbox |
 
 MGU Deploy, Renderer und Internet uplink kommen aus der offiziellen Store-Quelle.
@@ -76,6 +76,20 @@ Die automatisierten Ergebnisse und ihre Grenzen stehen unter
 belegt keine Fehlerfreiheit. Die neue Prüfung verwendet eine echte sandboxed Chromium-Sitzung für Eingabe,
 Pop-ups, Video und Audio-Ausgabe in einen lokalen Testsink. Der genaue Umfang
 und die Grenzen stehen im [Testbericht für 0.11.0](docs/TESTING.md).
+
+## 0.13.3: „Browser-Dienst noch nicht bereit“
+
+In 0.13.0–0.13.2 wurde das Arbeitsdateisystem auf 384 MiB vergrößert, die
+anschließende native Grenzprüfung blieb jedoch bei 128 MiB. Dadurch endete der
+Backend-Start mit Code 125, bevor die Oberfläche eine Verbindung aufbauen konnte.
+Ab 0.13.3 verwenden Mount und Prüfung denselben Grenzwert. Die Isolation und
+Speichergrenze bleiben erhalten.
+
+Browser und Runtime auf **0.13.3** aktualisieren; Chromium Engine bleibt
+**0.1.0**. Ein bereits ausgefallener Dienst wird beim Update erneut gestartet,
+wenn seine Registrierung für diesen Boot nachgewiesen ist. Andernfalls fordert
+der Store den nötigen Headunit-Neustart an. Die Diagnose meldet „läuft“ erst
+nach einer echten Bereitschaftsnachricht des Backends.
 
 ## Neu in 0.12.0
 

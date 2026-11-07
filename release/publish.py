@@ -55,7 +55,7 @@ def config(metadata):
 def source_paths(source):
     paths = run(['git', '-C', source, 'ls-files']).stdout.splitlines()
     prefixes = ('src/', 'apps/mgu_browser/', 'runtime/', 'network/', 'native/', 'backend/', 'assets/ui-fonts/')
-    exact = {'release/build.py', 'release/native_build.py', 'tools/build_store.py', 'tools/kit_shutdown.py', 'package.json', 'mgu-repo.json'}
+    exact = {'release/build.py', 'release/native_build.py', 'release/runtime_check.sh', 'tools/build_store.py', 'tools/kit_shutdown.py', 'package.json', 'mgu-repo.json'}
     return [p for p in paths if p.startswith(prefixes) or p in exact]
 
 

@@ -111,6 +111,7 @@ const server=net.createServer(socket=>{
 });
 server.listen(SOCKET,()=>{
     fs.chmodSync(SOCKET,0o660);fs.chownSync(SOCKET,SERVICE_UID,APP_UID);status();
+    if(process.env.MGU_BROWSER_STATUS_FD==='3')fs.writeSync(3,'MGU_BROWSER_BACKEND_READY\n');
     console.log('Browser backend ready for the registered Browser frontend');
     networkProbe().then(result=>{lastNetwork=result;fs.writeFileSync('/var/opt/mgu-browser/data/network-status.json',JSON.stringify(result));if(owner)owner.json({event:'network',value:result});});
 });

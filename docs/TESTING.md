@@ -1,5 +1,38 @@
 # Teststand
 
+## 0.13.3 — vollständiger Backend-Start
+
+Die veröffentlichten Runtime-Pakete 0.13.1 und 0.13.2 wurden mit echtem
+Node 8.16.2 in isoliertem Ubuntu 18 gestartet. Beide beenden den nativen
+Launcher mit Code 125, weil das 384-MiB-tmpfs gegen ein 128-MiB-Maximum
+geprüft wird. Derselbe Aufbau erreicht mit dem korrigierten Launcher den
+authentifizierten Backend-Socket. Verschiedene App-UIDs, die vorhandene
+Audio-Gruppe und alte App-besitzende Ordner werden gesondert geprüft;
+Sicherungsmarker alter Daten bleiben erhalten. Die Fixture ist kein Fahrzeug.
+
+`test/runtime_service_smoke.py` führt den tatsächlichen Root-Launcher,
+Mount-Namespace, tmpfs, Rechteabgabe, Node-8-Backend, native Module und
+SO_PEERCRED-Prüfung aus. Ubuntu-Image und Node-Archiv sind gepinnt. Bei
+synthetischer Engine-Prüffläche belegt der Test ausdrücklich nur den Start bis
+zum Socket; eine Chromium-Rendering-Prüfung benötigt die echte Engine.
+Keine Headunit oder proprietäre SDK-Bibliothek wird dafür verwendet. Mit der
+gepinnten echten Engine 0.1.0 bestand das endgültige 0.13.3-Paket zusätzlich
+alle vier vollständigen Startfälle bis zu einem echten 1280×384-RGBA-Bild
+(1.966.080 Bytes) von sandboxed Chromium 156.0.8078.79. Das tatsächlich
+installierte `check.sh` bestand jeweils; alte Datenmarker und der Zielinhalt
+eines vorab platzierten Status-Symlinks blieben unverändert. In der lokalen
+rootless-Docker-Umgebung ist nur der zusätzliche `/proc`-Eigentümernachweis
+für die Aktivierung nicht ausführbar; die Aktivierungslogik wird separat
+gegen die offizielle Deploy-Reihenfolge geprüft und im rootful CI ergänzt.
+
+
+Weitere Regressionen prüfen die Wiederherstellung ausgefallener Dienste
+über die unveränderte offizielle Deploy-Reihenfolge, das Beibehalten der
+Neustartpflicht nach frischer recmgr-Registrierung sowie geschützte
+Statusdateien und eine echte Backend-Bereitschaftsnachricht. Endgültige
+Ergebnisse und Prüfgrenzen stehen im versionierten `test-results.json`.
+
+
 ## Update 0.12.0 — 7. November 2026
 
 Die neue Audio-Pipeline ist eine konkrete Fahrzeug-Anbindung mit lokal

@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <unistd.h>
+#define WORK_MIB 384UL
 static int root_directory(const char *name) {
     struct stat st;
     return !lstat(name,&st)&&S_ISDIR(st.st_mode)&&st.st_uid==0&&!(st.st_mode&0022);
@@ -39,7 +40,7 @@ int main(int argc,char **argv) {
     if(unshare(CLONE_NEWNS)||mount(NULL,"/",NULL,MS_REC|MS_PRIVATE,NULL)||mount(resolver,"/etc/resolv.conf",NULL,MS_BIND,NULL)){perror("private browser resolver");return 125;}
     /* A real aggregate quota, including IndexedDB, caches and temporary files.
      * This mount exists only in the service namespace and vanishes on stop. */
-    char options[128];snprintf(options,sizeof options,"size=384m,nr_inodes=32768,mode=0700,uid=%u,gid=%u",uid,app);
+    char options[128];snprintf(options,sizeof options,"size=%lum,nr_inodes=32768,mode=0700,uid=%u,gid=%u",WORK_MIB,uid,app);
     if(mount("mgu-browser-work",work,"tmpfs",MS_NODEV|MS_NOSUID|MS_NOEXEC,options)||
        !work_directory("/var/opt/mgu-browser/work/home",uid,app)||!work_directory("/var/opt/mgu-browser/work/tmp",uid,app)||
        !work_directory("/var/opt/mgu-browser/work/cache",uid,app)||!work_directory("/var/opt/mgu-browser/work/profiles",uid,app)){
@@ -55,8 +56,10 @@ int main(int argc,char **argv) {
     // existing mgu_alsa group, never run the browser or writer as ent_alsa/root.
     if(setgroups(audio_gid?2:1,groups)||setresgid(primary,primary,primary)||setresuid(uid,uid,uid)){perror("backend privilege drop");return 125;}
     struct statvfs capacity;
-    if(statvfs(work,&capacity)||capacity.f_blocks*capacity.f_frsize>128UL*1024*1024||
-       !(capacity.f_flag&ST_NOSUID)||!(capacity.f_flag&ST_NOEXEC))return 125;
+    if(statvfs(work,&capacity)||capacity.f_blocks*capacity.f_frsize>WORK_MIB*1024UL*1024UL||
+       !(capacity.f_flag&ST_NOSUID)||!(capacity.f_flag&ST_NOEXEC)){
+        fputs("backend-launch: working storage exceeds its quota or lacks required mount flags\n",stderr);return 125;
+    }
     if(check){printf("{\"uid\":%u,\"gid\":%u,\"workBytes\":%lu,\"noexec\":true,\"nosuid\":true}\n",(unsigned)getuid(),(unsigned)getgid(),capacity.f_blocks*capacity.f_frsize);return 0;}
     execl("/usr/bin/node","node","/var/opt/mgu-browser/current/backend/server.js",NULL);
     perror("backend exec");return 127;

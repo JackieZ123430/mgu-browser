@@ -17,7 +17,7 @@ import tempfile
 from native_build import build_additions
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '0.13.2'
+VERSION = '0.13.3'
 ENGINE_VERSION = '0.1.0'
 ENGINE_PREFIX = '/var/opt/mgu-browser-engine/versions/' + ENGINE_VERSION + '/engine'
 NATIVE_INPUTS = ('backend_launch.c', 'browser_launch.c', 'peer_uid.c', 'jpeg_frame.c')
@@ -242,7 +242,7 @@ def build_runtime(work, output, base=None, native_sysroot=None):
     units = ['mgu-browser-backend.service', 'mgu-browser-wifi.service']
     for name in units:
         copy(ROOT / ('backend' if 'backend' in name else 'network') / name, stage / 'units' / name)
-    return tool(stage, {'id': 'mgu-browser', 'kind': 'tool', 'version': VERSION, 'title': 'Browser runtime (experimental)', 'mguHmi': ['ID7'], 'internet': True, 'uids': [3911], 'requires': {'mgu-browser-engine': ENGINE_VERSION, 'mgu-uplink': '0.7.3', 'mgu-deploy': '0.7.17'}, 'units': [{'name': n} for n in units], 'enable': [{'unit': n, 'target': 'multi-user.target'} for n in units], 'recmgr': ['mgu-browser-backend', 'mgu-browser-wifi'], 'crashNames': ['backend-launch', 'browser-launch'], 'restart': units, 'check': ['check.sh']}, output)
+    return tool(stage, {'id': 'mgu-browser', 'kind': 'tool', 'version': VERSION, 'title': 'Browser runtime (experimental)', 'mguHmi': ['ID7'], 'internet': True, 'uids': [3911], 'requires': {'mgu-browser-engine': ENGINE_VERSION, 'mgu-uplink': '0.7.3', 'mgu-deploy': '0.7.17'}, 'units': [{'name': n} for n in units], 'enable': [{'unit': n, 'target': 'multi-user.target'} for n in units], 'recmgr': ['mgu-browser-backend', 'mgu-browser-wifi'], 'crashNames': ['backend-launch', 'browser-launch'], 'restart': units, 'activate': ['node', 'runtime/activate.js'], 'check': ['check.sh']}, output)
 
 
 def main():

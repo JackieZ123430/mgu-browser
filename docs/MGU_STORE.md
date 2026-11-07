@@ -7,11 +7,11 @@ URLs, byte sizes and SHA-256 values.
 
 | Component | Version | Purpose |
 | --- | --- | --- |
-| `mgu_browser` | 0.12.0 | SDK-free OAP frontend and iDrive UI |
-| `mgu-browser` | 0.12.0 | Native backend, IPC and uplink broker |
+| `mgu_browser` | 0.13.3 | SDK-free OAP frontend and iDrive UI |
+| `mgu-browser` | 0.13.3 | Native backend, IPC and uplink broker |
 | `mgu-browser-engine` | 0.1.0 | Debian Chromium 156.0.8078.79 and private libraries |
 
-The frontend requires runtime 0.12.0, engine 0.1.0, `mgu-uplink` 0.7.3,
+The frontend requires runtime 0.13.3, engine 0.1.0, `mgu-uplink` 0.7.3,
 `mgu-render` 0.6.11 and `mgu-deploy` 0.7.17 or newer. Keep the official Store
 source enabled for the last three. The Store installs dependencies automatically.
 This release targets **ID7 / Linux x86_64**, not ID8 or other architectures.
@@ -29,7 +29,25 @@ so the Releases source takes it over; no manual uninstall is needed. From
 0.13.1 the runtime also deletes the unused 0.9.x engine folder
 `/var/opt/mgu-browser/engine` once the versioned Store engine is installed.
 
-## 0.13.2: backend start after a private 0.9.x installation
+## 0.13.3: native backend exits 125
+
+The published 0.13.1 and 0.13.2 runtimes reproduce this failure even on a
+clean installation: the launcher mounts 384 MiB, then its stale 128 MiB
+post-drop check refuses the mount. No backend socket can be created. A shared
+native constant now defines both the mount size and its maximum check. The
+384 MiB quota and noexec/nosuid/nodev isolation are retained.
+
+Refresh Releases and update **both Browser and Browser Runtime to 0.13.3**.
+Engine stays **0.1.0**. Activation can recover stopped services only after
+trusted current-boot recmgr evidence proves both Browser service names were
+loaded. Fresh registration or unavailable evidence produces a Store reboot
+request instead of a risky hot start. Follow that restart request, then reopen
+the browser. No manual service command or firmware file edit is needed.
+
+The root launcher publishes bounded startup diagnostics through a protected
+status file. An explicit child readiness signal replaces the elapsed-time guess.
+
+## Historical 0.13.2: folders from a private 0.9.x installation
 
 "Browser-Dienst noch nicht bereit" without end: the runtime setup refused
 folders the private 0.9.x installation had created under another owner

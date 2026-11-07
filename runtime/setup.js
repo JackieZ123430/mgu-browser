@@ -21,7 +21,7 @@ function setAside(name,owners,io){
 }
 function readOwned(name,owners,max,trustedGroup){
     const fd=fs.openSync(name,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);
-    try{const s=fs.fstatSync(fd),forbidden=trustedGroup!==undefined&&s.uid===trustedGroup&&s.gid===trustedGroup?0o002:0o022;if(!s.isFile()||s.nlink!==1||owners.indexOf(s.uid)<0||(s.mode&forbidden)||s.size>max)throw Error('Unsafe runtime input');return fs.readFileSync(fd,'utf8');}finally{fs.closeSync(fd);}
+    try{const s=fs.fstatSync(fd),forbidden=trustedGroup!==undefined&&s.gid===trustedGroup?0o002:0o022;if(!s.isFile()||s.nlink!==1||owners.indexOf(s.uid)<0||(s.mode&forbidden)||s.size>max)throw Error('Unsafe runtime input');return fs.readFileSync(fd,'utf8');}finally{fs.closeSync(fd);}
 }
 function writeRoot(name,text,mode,gid){
     const fd=fs.openSync(name,fs.constants.O_WRONLY|fs.constants.O_CREAT|fs.constants.O_NOFOLLOW,mode);

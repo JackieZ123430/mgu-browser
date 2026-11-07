@@ -6,26 +6,19 @@
 // the backend ("Browser-Dienst noch nicht bereit" alone said nothing).
 const cp=require('child_process'),fs=require('fs'),setup=require('./setup');
 if(process.getuid()!==0)throw Error('Root service launcher required');
-const STATUS_DIR='/run/mgu-browser',STATUS=STATUS_DIR+'/status.json',SERVICE_UID=3911;
 let child=null,stopping=false,timer=null,version='';
 try{version=JSON.parse(fs.readFileSync(__dirname+'/../build-provenance.json','utf8')).version||'';}catch(e){/* development tree */}
+const startup=require('./startup_status').open(version);
 function status(state,extra){
-    const record=Object.assign({state,version,at:new Date().toISOString(),pid:process.pid},extra||{});
-    try{
-        try{fs.mkdirSync(STATUS_DIR,0o755);}catch(e){if(e.code!=='EEXIST')throw e;}
-        const st=fs.lstatSync(STATUS_DIR);
-        // Root creates it for the service account, which keeps writing after the privilege drop.
-        if(!st.isDirectory()||st.isSymbolicLink()||[0,SERVICE_UID].indexOf(st.uid)<0)return;
-        if(process.getuid()===0){fs.chownSync(STATUS_DIR,SERVICE_UID,0);fs.chmodSync(STATUS_DIR,0o755);}
-        const tmp=STATUS+'.'+process.pid;fs.writeFileSync(tmp,JSON.stringify(record)+'\n',{mode:0o644});fs.chmodSync(tmp,0o644);fs.renameSync(tmp,STATUS);
-    }catch(e){console.error('status: '+e.message);}
-    console.log('Browser backend: '+state+(extra?' '+JSON.stringify(extra):''));
+    try{startup.write(state,extra);}catch(e){console.error('Browser startup status unavailable');}
+    console.log('Browser backend: '+state);
 }
 function start(){
     if(stopping)return;
+    status('preparing');
     let identity;
     try{identity=setup.prepare();}
-    catch(e){status('setup_failed',{error:String(e.message).slice(0,200)});timer=setTimeout(start,15000);return;}
+    catch(e){status('setup_failed');console.error(e.message);timer=setTimeout(start,15000);return;}
     if(!identity.ready){status('waiting_for_app');timer=setTimeout(start,5000);return;}
     // Leftovers of the private 0.9.x installation (old engine folder).
     try{const r=require('./legacy_cleanup').cleanup();if(r.removed)console.log('Removed the unused 0.9.x Chromium engine folder');}
@@ -37,13 +30,24 @@ function start(){
     if(identity.audio)args.push('--audio-gid',String(identity.audio.gid));
     status('starting',{appUid:identity.appUid});
     const started=Date.now();
-    child=cp.spawn('/var/opt/mgu-browser/current/backend-launch',args,{stdio:'inherit',env:Object.assign({},process.env,{MGU_BROWSER_ENGINE_ROOT:identity.engineRoot})});
+    try{child=cp.spawn('/var/opt/mgu-browser/current/backend-launch',args,{stdio:['inherit','inherit','inherit','pipe'],env:Object.assign({},process.env,{MGU_BROWSER_ENGINE_ROOT:identity.engineRoot,MGU_BROWSER_STATUS_FD:'3'})});}
+    catch(e){status('backend_launch_failed');console.error(e.message);process.exit(1);return;}
+    let ready='',finished=false;
+    child.stdio[3].on('data',data=>{
+        if(finished||stopping)return;
+        ready+=data.toString('ascii');
+        if(ready.length>64){finished=true;return;}
+        if(ready.indexOf('\n')<0)return;
+        finished=true;
+        if(ready==='MGU_BROWSER_BACKEND_READY\n')status('running',{appUid:identity.appUid});
+    });
+    child.stdio[3].on('error',()=>{});
     // The supervising Node process does not retain root privileges either.
     process.setgroups([identity.appUid]);process.setgid(identity.serviceUid);process.setuid(identity.serviceUid);
-    const running=setTimeout(()=>{if(child)status('running',{appUid:identity.appUid});},3000);
-    child.on('error',e=>{status('backend_launch_failed',{error:e.message});});
+    child.on('error',e=>{finished=true;status('backend_launch_failed');console.error(e.message);process.exit(1);});
     // systemd (Restart=always) starts the service again after the backend ends.
-    child.on('exit',(code,signal)=>{clearTimeout(running);if(!stopping)status('backend_exited',{code,signal,afterSeconds:Math.round((Date.now()-started)/1000)});process.exit(stopping?0:(signal?1:code||1));});
+    child.on('exit',(code,signal)=>{finished=true;if(!stopping)status('backend_exited',{code,signal,afterSeconds:Math.round((Date.now()-started)/1000)});process.exit(stopping?0:(signal?1:code||1));});
 }
 for(const sig of ['SIGTERM','SIGINT'])process.on(sig,()=>{stopping=true;clearTimeout(timer);status('stopped');if(child)child.kill(sig);else process.exit(0);});
+process.on('exit',()=>startup.close());
 start();

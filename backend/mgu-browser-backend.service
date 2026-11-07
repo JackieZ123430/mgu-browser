@@ -1,5 +1,6 @@
 [Unit]
 Description=Owner native browser backend (prototype)
+RequiresMountsFor=/var/opt
 After=persistency-fs.target mgu-browser-wifi.service
 Wants=persistency-fs.target mgu-browser-wifi.service
 
@@ -8,6 +9,8 @@ Type=simple
 ExecStart=/usr/bin/node /var/opt/mgu-browser/current/runtime/launch.js
 Restart=always
 RestartSec=3
+StandardOutput=journal
+StandardError=journal
 KillMode=control-group
 TimeoutStopSec=20
 # Full CPU access (no quota) and raised priority for Chromium's software

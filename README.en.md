@@ -2,7 +2,7 @@
 
 An experimental native browser UI for BMW MGU / iDrive 7, backed by a separate
 Chromium process, with a local SDK app emulator for development.
-Version 0.12.0 publishes an **experimental ID7/x86_64 Store catalog** with
+Version 0.13.3 publishes an **experimental ID7/x86_64 Store catalog** with
 the frontend, native runtime and private Chromium engine. Add
 `pllanaio/mgu-browser` as a GitHub source and select **Releases** for complete
 installation and updates. Existing `main` sources must switch to Releases
@@ -14,6 +14,15 @@ Widevine binary or BMW SDK is distributed, and provider playback is unconfirmed.
 See [installation, dependencies and rollback](docs/MGU_STORE.md).
 
 The [full German README](README.md) describes features and verified limits.
+
+## Startup fix in 0.13.3
+
+Versions 0.13.0–0.13.2 mounted a 384 MiB working filesystem but still rejected
+anything above 128 MiB after dropping privileges. The backend exited 125
+before opening its socket. Mount and validation now share one limit. Updating
+Browser and Runtime to 0.13.3 also recovers a stopped service where the current
+boot registration permits it; otherwise Store requests a reboot. The engine
+remains 0.1.0. Readiness now requires an actual backend notification.
 
 ## New in 0.12.0
 

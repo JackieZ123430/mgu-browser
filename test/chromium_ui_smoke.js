@@ -91,8 +91,13 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     await press('privacy-back');await press('settings-done');
     // Phone remote control: QR panel, connection notice, new code and stop.
     await press('settings');await press('remote-settings');await new Promise(r=>setImmediate(r));tick();
-    assert(frame.textCalls.some(t=>/Handy-Kamera scannen/.test(t.label)),'QR instructions shown');
-    assert(require(root+'/kit/record').imageById.get(701),'QR image registered');
+    const cameraInstruction=browser.locale.toLowerCase().startsWith('de')?'Mit der Handy-Kamera scannen':'Scan with your phone camera';
+    assert(frame.textCalls.some(t=>t.label===cameraInstruction),'QR instructions match the active language');
+    const qrImage=require(root+'/kit/record').imageById.get(701);
+    assert(qrImage&&qrImage.w>0&&qrImage.w===qrImage.h&&qrImage.data.length===qrImage.w*qrImage.h*4,'QR image registered with complete pixels');
+    assert(frame.images.has(701),'QR image is drawn in the remote panel');
+    assert(frame.targets.some(t=>t.key==='remote-new')&&frame.targets.some(t=>t.key==='remote-stop'),'QR renewal and remote stop remain available');
+    const remotePreview=new Canvas(1600,533);play(frame.words(),remotePreview);fs.writeFileSync(path.resolve(__dirname,'../.local/remote-preview.png'),remotePreview.png());
     browser.emit('remote',{event:'connected'});tick();assert(!frame.targets.some(t=>t.key==='remote-stop'),'panel closes when the phone connects');
     await press('settings');await press('remote-settings');await new Promise(r=>setImmediate(r));tick();await press('remote-stop');assert.equal(browser.remote.active,false);
     await press('block-ads');assert(browser.calls.indexOf('block-false')<0||true);await press('block-ads');await press('settings-done');

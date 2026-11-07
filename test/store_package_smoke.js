@@ -34,6 +34,8 @@ try{
         for(const name of names)assert(fs.readFileSync(path.join(sourceRoot,folder,name)).equals(fs.readFileSync(path.join(tool.dir,'files',folder,name))),'Stale runtime helper '+folder+'/'+name);
     }
     assert(fs.readFileSync(path.join(sourceRoot,'backend/server.js')).equals(fs.readFileSync(path.join(tool.dir,'files/backend/server.js'))),'Stale backend entry point');
+    assert(fs.readFileSync(path.join(sourceRoot,'release/runtime_check.sh')).equals(fs.readFileSync(path.join(tool.dir,'files/check.sh'))),'Stale installed runtime check');
+    for(const entry of [['backend','mgu-browser-backend.service'],['network','mgu-browser-wifi.service']])assert(fs.readFileSync(path.join(sourceRoot,entry[0],entry[1])).equals(fs.readFileSync(path.join(tool.dir,'units',entry[1]))),'Stale packaged service unit '+entry[1]);
     const provenance=JSON.parse(fs.readFileSync(path.join(tool.dir,'files/build-provenance.json'),'utf8'));
     assert.equal(provenance.version,tool.version);assert.equal(provenance.engineComponent,'0.1.0');
     for(const name of Object.keys(provenance.nativeSources))assert.equal(provenance.nativeSources[name],require('crypto').createHash('sha256').update(fs.readFileSync(path.join(sourceRoot,'native',name))).digest('hex'),'Native source provenance differs');

@@ -1,6 +1,19 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),os=require('os'),path=require('path');
 const setup=require('../runtime/setup');
+test('Trusted UID-map group accepts root or manager ownership without trusting other owners',()=>{
+ const vm=require('vm'),module={exports:{}};
+ let uid=0,gid=12201,mode=0o100660;
+ const io={constants:fs.constants,openSync:()=>3,closeSync(){},readFileSync:()=> '12397=mgu_browser\n',fstatSync:()=>({uid,gid,mode,size:18,nlink:1,isFile:()=>true})};
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../runtime/setup.js'),'utf8'),{module,require:n=>n==='fs'?io:require(n)});
+ const read=()=>module.exports.readOwned('fixture',[0,12201],100,12201);
+ assert.equal(read(),'12397=mgu_browser\n','root:12201 mode0660 has only explicitly trusted writers');
+ uid=12201;assert.equal(read(),'12397=mgu_browser\n');
+ uid=1000;assert.throws(read,/Unsafe/,'a matching group never makes an unknown owner trusted');
+ uid=0;gid=1000;assert.throws(read,/Unsafe/,'group write by a different group is refused');
+ gid=12201;mode=0o100662;assert.throws(read,/Unsafe/,'world write is always refused');
+ mode=0o100640;gid=1000;assert.equal(read(),'12397=mgu_browser\n','a read-only unrelated group adds no writer');
+});
 test('Runtime discovers the app UID instead of assuming the development head unit UID',()=>{
  assert.equal(setup.appUid('12225=robertn_store\n12397=mgu_browser\n'),12397);
  assert.equal(setup.appUid('12225=robertn_store\n'),null);
