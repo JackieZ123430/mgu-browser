@@ -131,10 +131,14 @@ def verify_local_docker():
             'systemdAndResourceLimitsTested': False}
 
 
-def run_case(runtime, node, case, launcher, expected_exit, engine):
+def run_case(runtime, node, case, launcher, expected_exit, engine, unconfined_apparmor):
     name = 'mgu-browser-start-fixture-' + uuid.uuid4().hex[:16]
     command = ['docker', 'run', '--rm', '--name', name, '--platform', 'linux/amd64',
                '--network', 'none', '--cap-add', 'SYS_ADMIN']
+    if unconfined_apparmor:
+        # docker-default denies mount even with SYS_ADMIN. Only this disposable
+        # fixture needs mounts; Docker seccomp and Chromium's sandbox stay on.
+        command += ['--security-opt', 'apparmor=unconfined']
     values = {'APP_UID': str(case['appUid']), 'AUDIO_FIXTURE': '1' if case['audio'] else '0',
               'LEGACY_DIR': 'all' if case['legacy'] else ''}
     if expected_exit is not None:
@@ -189,6 +193,8 @@ def main():
     if engine and (engine.stat().st_size != ENGINE_SIZE or digest(engine) != ENGINE_SHA256):
         raise RuntimeError('Immutable public engine 0.1.0 size/SHA-256 differs')
     environment = verify_local_docker()
+    unconfined_apparmor = 'name=apparmor' in environment['securityOptions']
+    environment['fixtureAppArmor'] = 'unconfined' if unconfined_apparmor else 'unchanged'
     node = prepare_node(local_cache(args.cache), args.node_archive)
     cases = [{'appUid': uid, 'audio': audio, 'legacy': legacy}
              for legacy in (False, True)
@@ -202,7 +208,8 @@ def main():
               'launcherOverride': {'path': str(launcher), 'sha256': digest(launcher)} if launcher else None,
               'engine': {'sha256': ENGINE_SHA256, 'version': '0.1.0',
                          'url': 'https://github.com/pllanaio/mgu-browser/releases/download/v0.10.0/mgu-browser-engine%400.1.0.tgz'} if engine else None,
-              'cases': [run_case(runtime, node, case, launcher, args.expect_exit, engine) for case in cases]}
+              'cases': [run_case(runtime, node, case, launcher, args.expect_exit, engine,
+                                 unconfined_apparmor) for case in cases]}
     print(json.dumps(result, indent=2))
 
 
