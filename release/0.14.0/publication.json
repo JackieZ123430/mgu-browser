@@ -1,0 +1,10 @@
+{
+  "repository": "pllanaio/mgu-browser",
+  "version": "0.14.0",
+  "tag": "v0.14.0",
+  "sourceCommit": "85c91d0ad8067919d0a630d424e6aab2407251e6",
+  "storeCommit": "8cfae23db27e51d86f84e65b13ce0592668d8df9",
+  "title": "MGU Browser 0.14.0 \u2014 video pacing, fullscreen and faster iDrive control",
+  "previousCatalogSha256": "ffcc1cbc8a3e9fc7a819e5b67fad9df14954a7213d2c27373019fddecd02647b",
+  "sourceInputsSha256": "5e8a9af36a0ced24f75a2333c814f32eb96fd393c4cca87aa906071af6fd1a3e"
+}

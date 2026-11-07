@@ -1,0 +1,14 @@
+# MGU Browser 0.14.0
+
+- **Videotakt korrigiert:** Die native Audio-Bridge nimmt vollständige PCM-Blöcke an und taktet Ausgabe beziehungsweise Verwerfen gleichmäßig. Im isolierten Vergleich mit derselben Engine und allein geändertem Helfer lief die Videouhr in 2,002 Sekunden von zuvor 1,430 auf 1,996 Sekunden; 43 wurden zu 60 frischen Bildern.
+- **Vollbild ohne überschriebenes Website-Layout:** Verschachtelte Player, Website-Schaltflächen, iframe-/Shadow-Player und Viewport-Wechsel behalten ihr Bild. Die Mediensuche erkennt laufende Tonspuren auch hinter großen Seitenvorlagen.
+- **Weniger Renderarbeit:** Unter künstlich 70 % Verbraucherdruck wurden bei weiterhin 89 gelieferten Bildern 241 → 89 Dekodierungen und 389 → 252 ms Node-CPU-Zeit gemessen. Das neueste Bild wird vor überholter Arbeit bevorzugt.
+- **Schnellere iDrive-Drehfolgen:** 16 Drehschritte werden vor anschließendem Drücken zu einer Fokus-Anfrage zusammengefasst. Im endgültigen Pakettest sank die Aktivierungszeit von 783,66 auf 46,13 ms; beide Wege aktivierten dieselbe Schaltfläche, während das Video weiterlief. Ein Drehauftrag hält höchstens 64 Schritte, die Warteschlange 32 Aufträge einschließlich Druckbarrieren; überzählige oder veraltete Eingaben werden abgebrochen.
+
+Diese Werte stammen aus definierten lokalen Tests und sind keine allgemeine Bildraten- oder Latenzzusage für jede Website oder Headunit.
+
+**Update:** Browser schließen, Quelle `pllanaio/mgu-browser` auf **Releases**, Katalog aktualisieren und **Browser sowie Browser Runtime auf 0.14.0** aktualisieren. Chromium Engine bleibt **0.1.0**. Die Startkorrektur, Migration, vorhandene iDrive- und Handy-Fernbedienung aus 0.13 bleiben erhalten. Einen vom Store verlangten Headunit-Neustart durchführen.
+
+**Validiert:** 117/117 Kerntests ohne Auslassung, neun Publisher-Tests, 101 ausgelieferte JavaScript-Dateien unter echtem Node 8.16.2 geprüft, SDK-Oberfläche in Deutsch und Englisch sowie offizieller Store-Validator mit Quelldatei-/Provenienz-/Unitprüfung und Dienstaktivierung. Das exakte Paket bestand vier vollständige Root-/Node-8-/Chromium-Startfälle und alle drei Video-/Vollbild-/Controller-Fixtures mit nativer JPEG-Dekodierung, gepinnter Engine, alter ALSA, echten nichtschwarzen Bildern und PCM-Daten. Details: `test-results.json`, `build-verification.json` und `runtime-provenance.json`.
+
+**Grenzen:** Live-YouTube war hier durch Proxy-HTTP-403 blockiert; die Player-Fixtures sind eigene Testseiten. Reale MGU-Lautsprecher, Firmware-/Fokuswechsel und geschützte Anbieterwiedergabe sind mit diesem Patch nicht nachgewiesen. Im lokalen rootless Docker ist ausschließlich der zusätzliche `/proc`-Eigentümernachweis für die Dienstaktivierung nicht verfügbar; die Produktionsprüfung bleibt strikt und wird in rootful CI mitgeprüft. Keine neue Engine, BMW-Bibliothek, proprietäres SDK oder Widevine-Datei wird verteilt.

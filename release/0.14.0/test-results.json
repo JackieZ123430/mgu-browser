@@ -1,0 +1,395 @@
+{
+  "version": "0.14.0",
+  "sourceCommit": "85c91d0ad8067919d0a630d424e6aab2407251e6",
+  "date": "2026-11-07",
+  "environment": {
+    "platform": "Unprivileged Linux x86_64 host and isolated pinned Ubuntu18 Docker containers",
+    "nodeHost": "24.22.1",
+    "nodeRuntime": "8.16.2",
+    "engine": "Immutable public engine0.1.0, Chromium156.0.8078.79",
+    "sandbox": "enabled",
+    "tlsVerification": "enabled",
+    "systemALSA": "Pinned public Ubuntu18 libasound2 1.1.3-5ubuntu0.6, host/firmware libraries not redistributed"
+  },
+  "core": {
+    "command": "node --test test/*.test.js",
+    "passed": 117,
+    "failed": 0,
+    "skipped": 0
+  },
+  "publisher": {
+    "command": "python3 release/test_publish.py",
+    "passed": 9,
+    "failed": 0
+  },
+  "node8": {
+    "version": "8.16.2",
+    "distributedJavaScriptSyntax": {
+      "checked": 101,
+      "passed": 101,
+      "failed": 0
+    },
+    "actualRuntime": "Exact packaged backend, native JPEG and audio helpers, IPC, protected readiness and sandboxed Chromium exercised in pinned containers"
+  },
+  "packagedVideoFullscreenController": {
+    "command": "python3 test/fullscreen_audio_package_smoke.py --runtime <exact-final-runtime.tgz> --engine <immutable-engine0.1.0.tgz>",
+    "passed": true,
+    "result": {
+      "success": true,
+      "version": "0.14.0",
+      "node": "v8.16.2",
+      "uid": 3911,
+      "sandbox": true,
+      "codec": "jpeg-native",
+      "stages": [
+        {
+          "stage": "inline",
+          "wallMs": 2003,
+          "pcmBytes": 382208,
+          "clockAdvance": 1.995873,
+          "nonblackFrames": 59
+        },
+        {
+          "stage": "large-dom-inline",
+          "wallMs": 676,
+          "pcmBytes": 128640,
+          "clockAdvance": 0.654601,
+          "nonblackFrames": 21
+        },
+        {
+          "stage": "fullscreen",
+          "wallMs": 653,
+          "pcmBytes": 124800,
+          "clockAdvance": 0.6518549999999999,
+          "nonblackFrames": 19
+        },
+        {
+          "stage": "fullscreen-resize",
+          "wallMs": 654,
+          "pcmBytes": 124800,
+          "clockAdvance": 0.6522919999999996,
+          "nonblackFrames": 12
+        },
+        {
+          "stage": "inline-restored",
+          "wallMs": 658,
+          "pcmBytes": 126720,
+          "clockAdvance": 0.658633,
+          "nonblackFrames": 20
+        },
+        {
+          "stage": "route-released",
+          "wallMs": 1000,
+          "pcmBytes": 0,
+          "clockAdvance": 1.0346910000000005
+        }
+      ],
+      "siteFullscreen": true,
+      "controller": {
+        "test": "Real Chromium 30fps VP8 + Unix IPC,16 detents then press, no debounce",
+        "codec": "jpeg-native",
+        "raw": {
+          "mode": "raw",
+          "focusRequests": 16,
+          "burstToActivationMs": 783.657631,
+          "activated": "control15",
+          "videoBefore": {
+            "time": 0.465468,
+            "decoded": 19
+          },
+          "videoAfter": {
+            "time": 1.250246,
+            "decoded": 42
+          }
+        },
+        "coalesced": {
+          "mode": "coalesced",
+          "focusRequests": 1,
+          "burstToActivationMs": 46.127798,
+          "activated": "control15",
+          "videoBefore": {
+            "time": 1.25334,
+            "decoded": 42
+          },
+          "videoAfter": {
+            "time": 1.300477,
+            "decoded": 44
+          }
+        },
+        "video": {
+          "time": 1.300934,
+          "decoded": 44
+        }
+      }
+    },
+    "inputs": {
+      "engineSha256": "0b6a73c964354214262d01f2d9bec2d0ab253cac8d27de04708912e804ef0874",
+      "nodeArchiveSha256": "88617a293f5828cc94ee99c94a43fbea12b989e34fe643fc14885a14748a8da6",
+      "image": "ubuntu@sha256:152dc042452c496007f07ca9127571cb9c29697f42acbfad72324b2bb2e43c98",
+      "alsaArchiveSha256": "9f708b08cd507d61a26e350b4d421681131b0e283f3b65ff41b05e737b21e79a"
+    },
+    "scope": "Exact packaged backend/client/audio helper and jpeg-native addon; unprivileged UID3911, no native/source overrides, actual engine and local Unix application-protocol fixtures; no physical MGU or live provider. Peer authentication is exercised separately by the full packaged root-startup cases.",
+    "siteRegression": "Moving nonblack frames with native site fullscreen action and direct site click, zero-height intermediate player wrapper, physical viewport resize/exit, same-origin iframe, open shadow and closed AX media-control +/-16 detents",
+    "audioRegression": "Six stages require real-time initial video/PCM rate, new nonblack projected pixels, nonzero soundtrack across largeDOM/fullscreen/resize/restore and zero sink output while disconnected with advancing video clock",
+    "controllerRegression": "16 raw versus one coalesced focus request, same final control15; per-phase media clock changes and decoded frames increase; latency reported without speed-ratio assertion"
+  },
+  "nativeOnlyAudioDifferential": {
+    "purpose": "Native-only audio pacing differential with unchanged published backend and engine; no real speakers",
+    "node": "8.16.2",
+    "backend": "Published runtime0.13.3, jpeg-native",
+    "engine": "0.1.0 Chrome156.0.8078.79",
+    "engineSha256": "0b6a73c964354214262d01f2d9bec2d0ab253cac8d27de04708912e804ef0874",
+    "image": "ubuntu@sha256:152dc042452c496007f07ca9127571cb9c29697f42acbfad72324b2bb2e43c98",
+    "systemALSA": "Ubuntu18 GLIBC2.27/oldALSA private file fixture",
+    "old": {
+      "helperSha256": "1447756f2e7afe7f6708942ef112cfca5ebc07254eb8c3ce835b3c3194115c86",
+      "wallMs": 2002,
+      "pcmBytes": 274176,
+      "clockAdvance": 1.429786,
+      "nonblackFrames": 43
+    },
+    "fixedNativeOnly": {
+      "helperSha256": "c32b067a7e75ed5319c747b1ec924e43d225915dc97fdbdc42214f2ab3787ff4",
+      "wallMs": 2002,
+      "pcmBytes": 385920,
+      "clockAdvance": 1.9960969999999998,
+      "nonblackFrames": 60
+    },
+    "finding": "4096-byte atomic producer writes stall under1920-byte per-tick reads; buffer full blocks and pace output at1920bytes/10ms",
+    "limits": [
+      "No actual firmware SmartX or AudioManager",
+      "No physical headunit",
+      "Controlled generated320x180 VP8/Opus, not YouTube provider playback"
+    ]
+  },
+  "renderPressureComparison": {
+    "scope": "Separate controlled local benchmark with artificial70percent consumer pressure; no universal FPS or vehicle claim",
+    "deliveredFrames": {
+      "before": 89,
+      "after": 89
+    },
+    "decodes": {
+      "before": 241,
+      "after": 89
+    },
+    "nodeCpuMs": {
+      "before": 389,
+      "after": 252
+    },
+    "finding": "Latest encoded frame is preferred under backpressure before spending CPU decoding obsolete frames"
+  },
+  "controllerQueuePolicy": {
+    "maxDetentsPerMergedJob": 64,
+    "maxPendingJobsIncludingPressBarriers": 32,
+    "overflow": "Excess work is cancelled; unlimited bursts are not buffered in full",
+    "ordering": "Press barriers follow preceding rotations; context/tab/navigation changes cancel stale work"
+  },
+  "packagedRootStartup": {
+    "command": "python3 test/runtime_service_smoke.py --runtime <exact-final-runtime.tgz> --engine <immutable-engine0.1.0.tgz>",
+    "passed": 4,
+    "failed": 0,
+    "cases": [
+      {
+        "version": "0.14.0",
+        "node": "v8.16.2",
+        "appUid": 13001,
+        "audio": false,
+        "legacy": "",
+        "legacyNetworkStatus": false,
+        "legacyUid": false,
+        "success": true,
+        "ready": true,
+        "peerUidRejected": true,
+        "socket": {
+          "uid": 3911,
+          "gid": 13001,
+          "mode": "660"
+        },
+        "backendGid": 3911,
+        "groups": [
+          13001
+        ],
+        "workMiB": 384,
+        "moved": [],
+        "rendered": {
+          "version": "Chrome/156.0.8078.79",
+          "frame": {
+            "width": 1280,
+            "height": 384,
+            "rgbaBytes": 1966080
+          },
+          "transientFrames": 0
+        },
+        "activationBootProof": {
+          "skipped": "proc-owner-outside-container-root",
+          "procUid": 65534
+        },
+        "launcherReady": true,
+        "statusSymlinkProof": true,
+        "installedCheck": true
+      },
+      {
+        "version": "0.14.0",
+        "node": "v8.16.2",
+        "appUid": 14876,
+        "audio": true,
+        "legacy": "",
+        "legacyNetworkStatus": false,
+        "legacyUid": false,
+        "success": true,
+        "ready": true,
+        "peerUidRejected": true,
+        "socket": {
+          "uid": 3911,
+          "gid": 14876,
+          "mode": "660"
+        },
+        "backendGid": 301,
+        "groups": [
+          301,
+          14876
+        ],
+        "workMiB": 384,
+        "moved": [],
+        "rendered": {
+          "version": "Chrome/156.0.8078.79",
+          "frame": {
+            "width": 1280,
+            "height": 384,
+            "rgbaBytes": 1966080
+          },
+          "transientFrames": 0
+        },
+        "activationBootProof": {
+          "skipped": "proc-owner-outside-container-root",
+          "procUid": 65534
+        },
+        "launcherReady": true,
+        "statusSymlinkProof": true,
+        "installedCheck": true
+      },
+      {
+        "version": "0.14.0",
+        "node": "v8.16.2",
+        "appUid": 13001,
+        "audio": false,
+        "legacy": "all",
+        "legacyNetworkStatus": false,
+        "legacyUid": false,
+        "success": true,
+        "ready": true,
+        "peerUidRejected": true,
+        "socket": {
+          "uid": 3911,
+          "gid": 13001,
+          "mode": "660"
+        },
+        "backendGid": 3911,
+        "groups": [
+          13001
+        ],
+        "workMiB": 384,
+        "moved": [
+          "data.legacy-1794092350751",
+          "network.legacy-1794092350751",
+          "work.legacy-1794092350751"
+        ],
+        "rendered": {
+          "version": "Chrome/156.0.8078.79",
+          "frame": {
+            "width": 1280,
+            "height": 384,
+            "rgbaBytes": 1966080
+          },
+          "transientFrames": 0
+        },
+        "activationBootProof": {
+          "skipped": "proc-owner-outside-container-root",
+          "procUid": 65534
+        },
+        "launcherReady": true,
+        "statusSymlinkProof": true,
+        "installedCheck": true
+      },
+      {
+        "version": "0.14.0",
+        "node": "v8.16.2",
+        "appUid": 14876,
+        "audio": true,
+        "legacy": "all",
+        "legacyNetworkStatus": false,
+        "legacyUid": false,
+        "success": true,
+        "ready": true,
+        "peerUidRejected": true,
+        "socket": {
+          "uid": 3911,
+          "gid": 14876,
+          "mode": "660"
+        },
+        "backendGid": 301,
+        "groups": [
+          301,
+          14876
+        ],
+        "workMiB": 384,
+        "moved": [
+          "data.legacy-1794092356898",
+          "network.legacy-1794092356898",
+          "work.legacy-1794092356898"
+        ],
+        "rendered": {
+          "version": "Chrome/156.0.8078.79",
+          "frame": {
+            "width": 1280,
+            "height": 384,
+            "rgbaBytes": 1966080
+          },
+          "transientFrames": 0
+        },
+        "activationBootProof": {
+          "skipped": "proc-owner-outside-container-root",
+          "procUid": 65534
+        },
+        "launcherReady": true,
+        "statusSymlinkProof": true,
+        "installedCheck": true
+      }
+    ],
+    "evidence": "Actual root launcher, 384MiB noexec/nosuid/nodev mount namespace, UID3911, app/audio groups, socket ownership, wrong-peer rejection, authenticated ready, exact fd3 signal, protected root0:0/0644 status and preserved symlink victim/legacy markers; installed check.sh succeeds and real sandboxed Chromium returns1280x384 RGBA1966080B",
+    "localActivationProofLimit": "Only additional root/proc ownership proof is unavailable in local rootless Docker because host proc files report unmapped UID65534; production guard remains strict and rootful CI exercises same proof"
+  },
+  "frontend": {
+    "en-GB": "passed",
+    "de-DE": "passed",
+    "evidence": "Fresh final SDK-free UI including controller cancellation assertions, media/fullscreen and retained phone-remote controls"
+  },
+  "store": {
+    "storeSourceCommit": "8cfae23db27e51d86f84e65b13ce0592668d8df9",
+    "deployValidatorVersion": "0.8.4",
+    "artifactValidation": "passed",
+    "catalogParser": "passed",
+    "sourceByteEquality": "All distributed JavaScript/frontend modules, runtime helpers, check.sh and service units match final source",
+    "nativeProvenance": "New static backend launcher and stock-loader audio helper are source/hash/ABI audited; unchanged native JPEG/addons/libjpeg match pinned base; explicit libdl retained, GLIBC ceiling2.27",
+    "syntheticDonorPreparation": "passed; proprietary SDK omitted",
+    "activationIntegration": "Unchanged official Store restart policy plus actual packaged activation passed failed-service recovery and first-install recmgr reboot gate",
+    "engine": "Immutable0.1.0 entry retained exactly"
+  },
+  "localArtifactEvidence": {
+    "meaning": "Exact local archives below passed the local tests. CI rebuilds locked source and tests its own exact artifacts before publishing generated hashes; native bytes may vary between trusted compilers.",
+    "mgu-browser@0.14.0.tgz": {
+      "size": 339953,
+      "sha256": "d03cdac4b2c0db8ee03397ba3371dece85b10f4d459fb6a28c1831b879256d52"
+    },
+    "mgu_browser@0.14.0.tgz": {
+      "size": 1850182,
+      "sha256": "93329bf7cd7b59b0996d16916c364e939a59e98efe0ce817151b485f8c6940d5"
+    }
+  },
+  "limits": [
+    "Live YouTube request blocked by test-proxy HTTP403; provider-like fixtures are original authored DOM, not live YouTube qualification",
+    "No physical MGU speakers, real firmware SmartX/AudioManager focus or vehicle power/standby lifecycle qualified",
+    "No authorized CDM, protected provider license/decode/output or hardware certification verified for this patch",
+    "Container startup does not run actual MGU systemd/resource policy; physical phone/controller behavior still needs vehicle testing"
+  ]
+}
