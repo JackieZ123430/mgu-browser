@@ -1,0 +1,48 @@
+{
+  "version": "0.13.1",
+  "sourceCommit": "84ba61ddb94fc3ccf7a2d1bf36af467ab0df9a87",
+  "date": "2026-11-07",
+  "environment": {
+    "platform": "unprivileged Linux x86_64 (container)",
+    "node": "22.23.4",
+    "chromium": "Chrome for Testing headless shell 153.0.8010.12",
+    "sandbox": "enabled",
+    "tlsVerification": "enabled"
+  },
+  "core": {
+    "command": "node --test test/*.test.js",
+    "passed": 82,
+    "failed": 0,
+    "skipped": 0
+  },
+  "publisher": {
+    "command": "python3 release/test_publish.py",
+    "passed": 9,
+    "failed": 0
+  },
+  "realChromium": {
+    "chromium_tabs_smoke.js": "passed",
+    "chromium_restore_smoke.js": "passed",
+    "chromium_persistence_smoke.js": "passed",
+    "chromium_remote_smoke.js": "passed",
+    "offline_engine_smoke.js": "passed",
+    "offline_input_smoke.js": "passed",
+    "media_engine_smoke.js": "passed"
+  },
+  "frontend": {
+    "storeBuild": "tools/build_store.py with the pinned kit tree (offline archive, checksum override only in the test copy) and a synthetic SDK placeholder",
+    "uiSmoke": "chromium_ui_smoke.js against the built package: passed"
+  },
+  "performance": {
+    "screencastFps": 30.0,
+    "bandBytesPercentOfFullFrames": "10-17",
+    "jpegDecodeMs": 1.2
+  },
+  "qrCode": "Versions 1-10 and the rendered iDrive panel decoded by OpenCV QRCodeDetector",
+  "notRun": {
+    "chromium_vehicle_audio_smoke.js": "needs the packaged audio helper; runs in the publish workflow",
+    "chromium_drm_smoke.js": "no CDM in this environment",
+    "vehicle": "not yet tested on a head unit"
+  },
+  "changesSince0.13.0": "runtime/legacy_cleanup.js (unit-tested); no change to frontend, backend modules or native sources"
+}
