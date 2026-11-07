@@ -16,7 +16,7 @@ mgu.run({async start(ctx){
     let editable=false,password=false,tipLabels={};
     let tabs=[],activeTab='',wifiState={},wifiSSID='',wifiPassword='',wifiBusy=false,wifiInternet=null,wifiPoll=0;
     let media={fullscreen:false},mediaIndex=1,mediaUntil=0;
-    let mediaCaps=null,mediaBusy=false;
+    let mediaCaps=null,mediaBusy=false,audioBusy=false;
     let wifiNetworks=[],wifiScanning=false,wifiScanError='',wifiOffset=0;
     let privacyState=null,privacyBusy=false,logins=[],loginOffset=0,privacyConfirmation=null,vaultSetup='';
     const videoActions=['back','toggle','forward','mute','exit'];
@@ -103,7 +103,7 @@ mgu.run({async start(ctx){
     browser.on('started',()=>{landing=!currentURL;resized='';activity();});
     browser.on('tabs',value=>{tabs=value;activeTab=(tabs.find(t=>t.active)||{}).id||'';});
     browser.on('tabSelected',t=>{
-        currentURL=t.url;title=t.title;landing=!t.url;frame=null;page=null;finger=null;
+        currentURL=t.url;title=t.title;landing=!t.url&&!t.popup;frame=null;page=null;finger=null;
         canBack=false;canForward=false;editable=false;loading=!!t.loading;resized='';
         keyboard=null;draft='';panel=null;reading=false;webMode=false;activity();
         if(ctx.display)ctx.display.focusKey='tgt:'+(t.url?'tab-'+t.id:'urlbar');
@@ -123,21 +123,23 @@ mgu.run({async start(ctx){
     browser.on('loading',value=>{loading=value;});
     browser.on('navigationState',s=>{
         canBack=s.canBack;canForward=s.canForward;currentURL=s.url;title=s.title||'';
+        if(s.url)landing=false;
         store.visit(s.url,title,false);
     });
     browser.on('input',info=>{
         editable=!!info.editable;password=!!info.password;
+        if(info.adjusting)note('Drehen: Wert ändern. Drücken: fertig. Links: Browserleiste.');
         if(editable&&webMode&&!keyboard&&!panel&&!landing)openText();
     });
     let diagnostic='';browser.on('diagnostic',s=>{if(s!==diagnostic){diagnostic=s;log.warn(s.slice(0,400));}});
     for(const id of ['BTN_OPEN','BTN_BACK','BTN_STOP'])ctx.hideButton(id);
     ui.onClick('BTN_OPEN',()=>safe(home));ui.onClick('BTN_BACK',()=>safe(()=>media.fullscreen?browser.mediaAction('exit'):browser.child?browser.back():home()));ui.onClick('BTN_STOP',()=>safe(closeApp));
     const webActions={
-        toolbar:()=>{webMode=false;reading=false;if(ctx.display&&activeTab)ctx.display.focusKey='tgt:tab-'+activeTab;activity();},
+        toolbar:()=>{safe(()=>browser.leavePage());webMode=false;reading=false;if(ctx.display&&activeTab)ctx.display.focusKey='tgt:tab-'+activeTab;activity();},
         keyboard:openText,
         scroll:d=>{activity();safe(()=>browser.scroll(d));},
-        press:()=>{activity();safe(()=>browser.key('Enter'));},
-        focus:d=>{activity();safe(async()=>{for(let n=0;n<Math.abs(d);n++)await browser.key('Tab',d<0);});}
+        press:()=>{activity();safe(()=>browser.pressPage());},
+        focus:d=>{activity();safe(()=>browser.focusPage(d));}
     };
     const showMedia=()=>{mediaUntil=Date.now()+5000;activity();};
     const mediaActions={
@@ -172,7 +174,7 @@ mgu.run({async start(ctx){
     };
     const actions=()=>media.fullscreen?(media.hasSiteControls?siteMediaActions:mediaActions):webMode&&!keyboard&&!panel&&!landing&&browser.child?(media.playerMode&&media.hasSiteControls?siteMediaActions:webActions):uiActions;
     const controller=new Controller({focus:d=>actions().focus(d),toolbar:()=>actions().toolbar(),keyboard:()=>actions().keyboard(),scroll:d=>actions().scroll(d),press:()=>actions().press()});
-    const input=v=>{if(!gate.check().allowed)return false;controller.feed(v);return true;};
+    const input=v=>{if(!gate.check().allowed){controller.reset();return false;}controller.feed(v);return true;};
     nativeBridge.setControllerHandler(input);ctx.controller.onInput(input);
     let finger=null;
     if(ctx.display){
@@ -210,11 +212,17 @@ mgu.run({async start(ctx){
     }
     async function selectTab(id){webMode=false;if(id===activeTab){panel=null;keyboard=null;return;}await browser.selectTab(id);}
     async function closeTab(id){await browser.closeTab(id);webMode=false;if(ctx.display)ctx.display.focusKey='tgt:tab-'+activeTab;}
-    function enterPage(){webMode=true;activity();note('Webseite aktiv. Controller nach links: Browserleiste.');if(ctx.display)ctx.display.focusKey=null;}
+    function enterPage(){if(!webMode&&browser.child)safe(()=>browser.leavePage());webMode=true;activity();note('Webseite aktiv. Controller nach links: Browserleiste.');if(ctx.display)ctx.display.focusKey=null;}
     async function newTab(){await browser.newTab('');if(ctx.display)ctx.display.focusKey='tgt:urlbar';}
     async function openStreaming(){
         panel='streaming';keyboard=null;webMode=false;reading=false;activity();
+        mediaCaps=null;
         mediaCaps=await browser.request('mediaCapabilities');
+    }
+    async function testAudio(){
+        if(audioBusy)return;audioBusy=true;
+        try{await browser.request('audioTest');mediaCaps=await browser.request('mediaCapabilities');note('Testton erzeugt. Hörbare Ausgabe am Gerät prüfen.');}
+        finally{audioBusy=false;}
     }
     async function openPrivacy(){panel='privacy';keyboard=null;webMode=false;reading=false;privacyBusy=true;activity();try{privacyState=await browser.request('privacyStatus');}finally{privacyBusy=false;}}
     async function changePrivacy(name){privacyBusy=true;try{const prefs={};prefs[name]=!privacyState[name];privacyState=await browser.request('privacyConfigure',{prefs});}finally{privacyBusy=false;}}
@@ -418,13 +426,17 @@ mgu.run({async start(ctx){
         c.text('Medien & Streaming',64,114,34,C.text);
         c.text('Vollbild zeigt das ganze Video ohne Beschnitt. Drehen und Drücken bleiben aktiv.',65,164,20,C.text);
         if(mediaCaps){
-            c.text(mediaCaps.mediaEnabled?'Videowiedergabe in dieser Laufzeit aktiviert':'Videowiedergabe auf der Headunit noch nicht freigegeben',65,219,22,C.text);
-            c.text(mediaCaps.secure===false?'Widevine-Prüfung: zuerst eine HTTPS-Seite öffnen':mediaCaps.widevine?'Widevine erkannt - Anbieterwiedergabe noch einzeln zu prüfen':'Widevine nicht verfügbar - geschützte Streams sind nicht bestätigt',65,260,20,C.muted);
-            c.text('H.264: '+(mediaCaps.h264?'Ja':'Nein')+'   VP9: '+(mediaCaps.vp9?'Ja':'Nein'),65,300,18,C.muted);
+            c.text(mediaCaps.mediaEnabled?'Videowiedergabe in dieser Laufzeit aktiviert':'Videowiedergabe auf der Headunit noch nicht freigegeben',65,205,22,C.text);
+            c.text(mediaCaps.secure===false?'Widevine-Prüfung: zuerst eine HTTPS-Seite öffnen':mediaCaps.widevine?'Widevine erkannt - Anbieterwiedergabe noch einzeln zu prüfen':'Widevine nicht verfügbar - geschützte Streams sind nicht bestätigt',65,235,20,C.muted);
+            c.text('H.264: '+(mediaCaps.h264?'Ja':'Nein')+'   VP9: '+(mediaCaps.vp9?'Ja':'Nein'),65,265,18,C.muted);
+            c.text(mediaCaps.audio&&mediaCaps.audio.routeAvailable?'Audio-Ausgang erkannt; Fahrzeugton unbestätigt':'Kein Audio-Ausgang erkannt; BMW-Anbindung offen',65,295,18,C.muted);
         }
-        [['YouTube','https://www.youtube.com/'],['Netflix','https://www.netflix.com/'],['Disney+','https://www.disneyplus.com/'],['Prime Video','https://www.primevideo.com/'],['Paramount+','https://www.paramountplus.com/']].forEach((item,i)=>button(c,64+i*296,330,278,44,item[0],()=>browser.newTab(item[1]),'stream-'+i));
-        if(process.env.MGU_EMULATOR_MODE==='1')button(c,64,407,352,44,mediaBusy?'Video wird erzeugt ...':'Vollbild testen',async()=>{mediaBusy=true;try{await browser.request('mediaDemo');}finally{mediaBusy=false;}},'media-demo',{enabled:!mediaBusy,primary:true});
-        if(process.env.MGU_EMULATOR_MODE==='1')button(c,450,407,500,44,'Widevine-Test öffnen',()=>browser.newTab('https://shaka-player-demo.appspot.com/demo/'),'drm-demo');
+        [['YouTube','https://www.youtube.com/'],['Netflix','https://www.netflix.com/'],['Disney+','https://www.disneyplus.com/'],['Prime Video','https://www.primevideo.com/'],['Paramount+','https://www.paramountplus.com/']].forEach((item,i)=>button(c,64+i*296,320,278,44,item[0],()=>browser.newTab(item[1]),'stream-'+i));
+        button(c,64,380,352,44,audioBusy?'Testton läuft ...':'Testton (1 s)',testAudio,'audio-test',{enabled:!audioBusy&&!!mediaCaps&&mediaCaps.mediaEnabled});
+        button(c,450,380,352,44,'Wiedergabe / Pause',async()=>{await browser.mediaAction('toggle');panel=null;enterPage();},'media-toggle',{enabled:!!mediaCaps&&mediaCaps.mediaEnabled});
+        button(c,836,380,352,44,'Video-Vollbild',()=>browser.mediaAction('fullscreen'),'media-fullscreen',{enabled:!!mediaCaps&&mediaCaps.mediaEnabled});
+        if(process.env.MGU_EMULATOR_MODE==='1')button(c,644,bottom-52,250,42,mediaBusy?'Video wird erzeugt ...':'Vollbild testen',async()=>{mediaBusy=true;try{await browser.request('mediaDemo');}finally{mediaBusy=false;}},'media-demo',{enabled:!mediaBusy});
+        if(process.env.MGU_EMULATOR_MODE==='1')button(c,920,bottom-52,250,42,'Widevine-Test öffnen',()=>browser.newTab('https://shaka-player-demo.appspot.com/demo/'),'drm-demo');
         button(c,1288,bottom-52,246,42,'Zurueck',()=>{panel='settings';},'streaming-back');
     }
     function drawKeyboard(c,bottom){

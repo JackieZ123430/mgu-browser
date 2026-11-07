@@ -53,8 +53,12 @@ const server=net.createServer(socket=>{
                 case 'selectTab':result=await browser.selectTab(m.tabId);break;
                 case 'closeTab':result=await browser.closeTab(m.tabId);break;
                 case 'clearTab':result=await browser.clearTab();break;
+                case 'pageFocus':result=await browser.focusPage(m.delta);break;
+                case 'pagePress':result=await browser.pressPage();break;
+                case 'pageLeave':result=await browser.leavePage();break;
                 case 'mediaAction':result=await browser.mediaAction(m.action);break;
                 case 'mediaCapabilities':result=await browser.mediaCapabilities();break;
+                case 'audioTest':result=await browser.audioTest();break;
                 case 'privacyStatus':result=await browser.privacyStatus();break;
                 case 'privacyConfigure':result=await browser.privacyConfigure(m.prefs);break;
                 case 'vaultUnlock':try{result=await browser.vaultUnlock(m.password);}finally{m.password=null;}break;

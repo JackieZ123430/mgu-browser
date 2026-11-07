@@ -2,7 +2,7 @@
 
 An experimental native browser UI for BMW MGU / iDrive 7, backed by a separate
 Chromium process, with a local SDK app emulator for development.
-Version 0.10.0 publishes an **experimental ID7/x86_64 Store catalog** with
+Version 0.11.0 publishes an **experimental ID7/x86_64 Store catalog** with
 the frontend, native runtime and private Chromium engine. Add
 `pllanaio/mgu-browser` as a GitHub source and select **Releases** for complete
 installation and updates. Existing `main` sources must switch to Releases
@@ -13,6 +13,16 @@ playback are not confirmed. No Widevine CDM or BMW SDK is distributed.**
 See [installation, dependencies and rollback](docs/MGU_STORE.md).
 
 The [full German README](README.md) describes features and verified limits.
+
+## New in 0.11.0
+
+Ordered rotary input, visible page focus, correct Enter/Space activation,
+shadow/same-origin frame form detection, tracked popup tabs preserving opener
+relationships, repaired headless fullscreen and inline media actions.
+Settings → Media & streaming now includes playback/fullscreen actions and
+an explicit one-second audio test. Actual Chromium output to a configured
+Linux ALSA test sink is verified; BMW speaker routing remains unimplemented.
+See [audio](docs/AUDIO.md) and [tests](docs/TESTING.md).
 
 ## Implemented locally
 

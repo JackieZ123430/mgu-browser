@@ -1,5 +1,41 @@
 # Teststand
 
+## Update 0.11.0 — 7. November 2026
+
+Prüfumgebung: unprivilegierter Linux-x86_64-Benutzer, Node 24.22.1,
+Chromium 156.0.8078.79 (Debian 13). Chromium läuft mit eigener Sandbox,
+privaten temporären Profilen und ohne TLS-Ausnahmen. Die neuen Engine-Fixtures
+benötigen keine Konten oder Fahrzeugverbindung. FFmpeg erzeugt originale
+Testvideos; der Audio-Test schreibt in einen begrenzten lokalen ALSA-Testsink.
+
+| Prüfung | Nachweis |
+| --- | --- |
+| Kerntests | 49/49 bestanden, keine Auslassungen (`node --test test/*.test.js`) |
+| iDrive-Eingabe | Echte Tab-Reihenfolge, sichtbarer Fokus, Enter/Space-Aktivierung, Checkboxen, geordnete Unicode-Eingabe, offene Shadow-DOMs und gleichursprüngliche Frame-Formulare; Auswahlfelder/Regler per Drücken/Drehen |
+| Fenster/Tabs | Originaler Popup-Target, Opener-Kommunikation, window.close, target=_blank/noopener, Tab-Limit, Shutdown-Rennen und Fehler-Rückkehr |
+| Video | Generierte VP8/Opus- und H.264/AAC-Dateien: dekodierte Frames und AAC-Daten, Inline-Wiedergabe/Pause/Spulen/Stumm, Vollbild mit vollständigem Bild und Vollbild-Ende |
+| Website-Player | Native Controls, deaktivierte/versteckte Schaltflächen, Player mit eigenständigem DOM-Fokus, Regler und offene/geschlossene Komponenten |
+| Audio | Tatsächliche nichtleere PCM-Samples aus Chromium über ALSA-Datei-Fixture; ausdrücklich kein Lautsprecher-Nachweis |
+| Node 8.16.2 | Syntax der ausgelieferten JavaScript-Module und echte Chromium-Sitzung mit Fokus/Aktivierung und AudioContext lokal geprüft |
+| Sitzungswiederherstellung | Echte verschlüsselte Archive über zwei saubere Engine-Neustarts, Session-Cookie erhalten; keine Akkumulation unsichtbarer Tabs |
+| Native Oberfläche | Frisch gebautes SDK-freies Frontend: Controller-Routing, Tabs, Tastatur, maskierte Geheimnisse, Medienaktionen, Audio-Test und Zielgrenzen |
+| Store-Pakete | Echter MGU-Deploy-0.8.4-Artefaktprüfer, Updater-Katalogparser und synthetische Donor-SDK-Vorbereitung; Dateien gegen aktuellen Quellcode verglichen, beide N-API-Module geladen |
+
+Die Paketprüfung installiert keine Dienste. Die unveränderten nativen Dateien
+werden aus dem SHA-256-geprüften 0.10.0-Artefakt übernommen, die Engine 0.1.0
+bleibt bytegleich. Installations- und Rollback-Ergebnisse der Vorversion unten
+sind keine erneute Ausführung mit 0.11.0. Der Release-Bericht nennt die genaue
+Store-Quellrevision und die Paketprüfsummen.
+
+**Weiterhin offen:** BMW-Lautsprecher/Audiofokus, Provider-Logins und DRM,
+physisches iDrive-Touchpad, plötzlicher Stromverlust, Fahrzeug-Standby sowie
+die neue Installation auf einer echten MGU. Native Dateiauswahl/Downloads,
+Website-Berechtigungsdialoge und Texteingabe in Cross-Origin-Frames sind
+kein vollständig implementierter Desktop-Browserablauf. Die allgemeinen
+Engine-Fixtures bestätigen keine bestimmte YouTube-/Disney-/Netflix-Sitzung.
+Sie ersetzen auch keinen Sicherheitscheck einer künftig aktualisierten Engine.
+
+
 ## Store-Pakete 0.10.0
 
 Am 5. November 2026: **43 von 43 Quelltests unter unprivilegiertem Linux

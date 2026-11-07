@@ -4,7 +4,7 @@ Ein experimenteller Browser für BMW MGU / iDrive 7: eine native, mit dem
 iDrive-Controller bedienbare Oberfläche und eine getrennte Chromium-Engine
 für echtes HTML, CSS und JavaScript.
 
-**Version 0.10.0 – experimentelle Store-Pakete für MGU / iDrive 7, x86_64.**
+**Version 0.11.0 – experimentelle Store-Pakete für MGU / iDrive 7, x86_64.**
 Oberfläche, native Runtime und eine private Chromium-Engine werden gemeinsam
 über einen Store-Katalog verteilt. Der eigene Code steht unter MIT.
 **Die BMW-Lautsprecherausgabe ist noch nicht angebunden. YouTube- und
@@ -26,8 +26,8 @@ verknüpft die Pakete und ihre Abhängigkeiten:
 
 | Paket | Version | Inhalt |
 | --- | --- | --- |
-| Browser | 0.10.0 | Native Oberfläche, iDrive-Bedienung, Tabs, Einstellungen |
-| Browser Runtime | 0.10.0 | Backend, native IPC-/Bildmodule, begrenztes Profil-Dateisystem |
+| Browser | 0.11.0 | Native Oberfläche, iDrive-Bedienung, Tabs, Einstellungen |
+| Browser Runtime | 0.11.0 | Backend, native IPC-/Bildmodule, begrenztes Profil-Dateisystem |
 | Chromium Engine | 0.1.0 | Debian Chromium 156.0.8078.79 mit privaten Bibliotheken und Sandbox |
 
 MGU Deploy, Renderer und Internet uplink kommen aus der offiziellen Store-Quelle.
@@ -71,8 +71,26 @@ bleiben offen.
 
 Die automatisierten Ergebnisse und ihre Grenzen stehen unter
 [Tests](docs/TESTING.md). Ein Quellcode-Audit ersetzt keinen Hardwaretest und
-belegt keine Fehlerfreiheit. Die echte Chromium-Prüfung der neuen Player-Auswahl
-ist durch die zusätzliche Audit-Isolation blockiert und noch offen.
+belegt keine Fehlerfreiheit. Die neue Prüfung verwendet eine echte sandboxed Chromium-Sitzung für Eingabe,
+Pop-ups, Video und Audio-Ausgabe in einen lokalen Testsink. Der genaue Umfang
+und die Grenzen stehen im [Testbericht für 0.11.0](docs/TESTING.md).
+
+## Neu in 0.11.0
+
+- Geordnete iDrive-Eingaben mit sichtbarem Website-Fokus; Drücken aktiviert
+  auch Schaltflächen und Checkboxen. Formulare in offenen Shadow-DOMs und
+  Frames desselben Ursprungs öffnen die native Tastatur.
+- Website-Pop-ups und Links in neuen Fenstern erscheinen als Tabs. Der originale
+  Fensterbezug für Anmeldung und Rückkehr zur aufrufenden Seite bleibt erhalten.
+- Repariertes HTML-Vollbild im Headless-Betrieb; eingebettete Videos und
+  Audioelemente können auch ohne vorheriges Vollbild gesteuert werden.
+- Unter **Einstellungen → Medien & Streaming** stehen Wiedergabe/Pause,
+  Video-Vollbild, Audio-Ausgangsstatus und ein expliziter Testton bereit.
+
+**Ton:** Die Chromium-Ausgabe in einen konfigurierten Linux-Audioausgang wird
+mit echten PCM-Daten geprüft. Die Anbindung an BMWs Lautsprechersystem ist
+weiterhin offen. Der Testton ist eine Diagnose und kein Nachweis hörbarer
+Fahrzeugausgabe. Einrichtung und Grenzen: [Audio](docs/AUDIO.md).
 
 ## Was der Browser heute kann
 
@@ -108,8 +126,8 @@ Suchanfrage geöffnet.
 
 | Eingabe | Verhalten |
 | --- | --- |
-| Drehen | Native Schaltflächen oder fokussierbare Website-Elemente auswählen |
-| Drücken | Auswahl aktivieren |
+| Drehen | Native Schaltflächen oder Website-Elemente auswählen; im Bearbeitungsmodus Werte ändern |
+| Drücken | Auswahl aktivieren; bei Auswahlfeldern/Reglern Bearbeitung starten bzw. beenden |
 | Controller nach links | Zur Browserleiste beziehungsweise zu den Tabs zurückkehren |
 | Nach oben/unten neigen | In der aktiven Webseite scrollen |
 | Nach rechts neigen | Tastatur für das ausgewählte Webseitenfeld öffnen |

@@ -1,26 +1,26 @@
 'use strict';
 // Separate real Chromium instance. Generates its own silent, unencrypted test clip.
-const fs=require('fs'),path=require('path'),assert=require('assert');
-if(process.platform!=='linux'||process.getuid()===0)throw new Error('Run as mgu-dev in WSL');
-const base='/home/mgu-dev/bmw-emulator',Browser=require(base+'/backend/browser_session');
-const profileRoot=fs.mkdtempSync(base+'/data/media-test-');let media={};
-const config=JSON.parse(fs.readFileSync(base+'/config.json','utf8'));
-const browser=new Browser({gate:{check:()=>({allowed:true})},mediaDisabled:false,binary:config.chromium,profileRoot,viewport:{width:1280,height:480}});
+const fs=require('fs'),path=require('path'),os=require('os'),assert=require('assert');
+if(process.platform!=='linux'||process.getuid()===0)throw new Error('Unprivileged Linux required');
+const Browser=require('../src/browser_session');
+const profileRoot=fs.mkdtempSync(path.join(os.tmpdir(),'mgu-emulator-media-'));let media={};
+process.env.MGU_EMULATOR_MODE='1';
+const browser=new Browser({gate:{check:()=>({allowed:true})},mediaDisabled:false,binary:process.env.MGU_BROWSER_BINARY||'/usr/bin/chromium',profileRoot,viewport:{width:1280,height:480}});
 browser.on('media',s=>media=s);browser.on('fault',e=>console.error(e.message));
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
-const until=async check=>{for(let i=0;!check()&&i<100;i++)await delay(100);assert(check(),'Expected video state not reached');};
+const until=async check=>{for(let i=0;!check()&&i<100;i++)await delay(100);if(!check()){const state=await browser.send('Runtime.evaluate',{expression:'JSON.stringify({fullscreen:document.fullscreenElement&&document.fullscreenElement.tagName,controls:Array.from(document.querySelectorAll("video,button")).map(e=>({tag:e.tagName,rect:e.getBoundingClientRect().toJSON(),visibility:getComputedStyle(e).visibility}))})',returnByValue:true});assert.fail('Expected video state not reached: '+JSON.stringify({media,document:JSON.parse(state.result.value)}));}};
 (async()=>{try{
-    await browser.setLocale('de-DE');await browser.start('https://example.org/');
+    await browser.setLocale('de-DE');await browser.start('');
     const language=await browser.send('Runtime.evaluate',{expression:'navigator.language',returnByValue:true});assert.equal(language.result.value,'de-DE');
     await browser.setLocale('en-GB');
     const english=await browser.send('Runtime.evaluate',{expression:'navigator.language',returnByValue:true});assert.equal(english.result.value,'en-GB');
     const first=browser.activeTab;
     await browser.send('Runtime.evaluate',{expression:'window.tabMarker="preserved"'});
-    await browser.newTab('https://example.org/');const second=browser.activeTab;
+    await browser.newTab('');const second=browser.activeTab;
     await browser.selectTab(first);const marker=await browser.send('Runtime.evaluate',{expression:'window.tabMarker',returnByValue:true});assert.equal(marker.result.value,'preserved','Switching must retain JS/page state');
     await browser.closeTab(second);
     const capabilities=await browser.mediaCapabilities();
-    fs.writeFileSync(path.resolve(__dirname,'../.local/emulator/media-capabilities.json'),JSON.stringify(capabilities,null,2));
+    fs.writeFileSync(path.join(profileRoot,'media-capabilities.json'),JSON.stringify(capabilities,null,2));
     await require('../src/browser_media_demo')(browser);await until(()=>media.fullscreen);
     assert.equal(media.hasSiteControls,false,'Video without controls needs the native fallback');
     await browser.send('Runtime.evaluate',{expression:'document.querySelector("video").controls=true'});await until(()=>media.hasSiteControls);
@@ -33,7 +33,7 @@ const until=async check=>{for(let i=0;!check()&&i<100;i++)await delay(100);asser
     await browser.mediaAction('back');await until(()=>media.currentTime<2);
     await browser.mediaAction('mute');await until(()=>!media.muted);
     await browser.mediaAction('exit');await until(()=>!media.fullscreen);
-    await browser.send('Runtime.evaluate',{expression:'const player=document.createElement("div");player.id="fixture-player";document.body.appendChild(player);player.appendChild(document.querySelector("video"));for(let i=0;i<2;i++){const b=document.createElement("button");b.textContent=String(i);player.appendChild(b);}player.requestFullscreen()',awaitPromise:true,userGesture:true});await until(()=>media.fullscreen&&media.hasSiteControls);
+    await browser.send('Runtime.evaluate',{expression:'const player=document.createElement("div");player.id="fixture-player";document.body.appendChild(player);player.appendChild(document.querySelector("video"));for(let i=0;i<2;i++){const b=document.createElement("button");b.textContent=String(i);b.style.cssText="position:absolute;bottom:20px;left:"+(20+i*140)+"px";player.appendChild(b);}player.requestFullscreen()',awaitPromise:true,userGesture:true});await until(()=>media.fullscreen&&media.hasSiteControls);
     await browser.send('Runtime.evaluate',{expression:'window.fixtureControlClicks=0;document.querySelectorAll("#fixture-player button").forEach(b=>b.onclick=()=>window.fixtureControlClicks++)'});
     await browser.focusMediaControl(1);await browser.pressMediaControl();assert.equal((await browser.send('Runtime.evaluate',{expression:'window.fixtureControlClicks',returnByValue:true})).result.value,1,'Controller press activates the actual website button');
     await browser.focusMediaControl(1);assert.equal((await browser.send('Runtime.evaluate',{expression:'document.querySelectorAll("[data-mgu-media-focus]").length',returnByValue:true})).result.value,1,'Only the selected website control keeps the highlight');
@@ -46,4 +46,4 @@ const until=async check=>{for(let i=0;!check()&&i<100;i++)await delay(100);asser
     assert.equal((await browser.send('Runtime.evaluate',{expression:'getComputedStyle(window.fixtureShadow.activeElement).outlineWidth',returnByValue:true})).result.value,'3px');
     await browser.mediaAction('exit');await until(()=>!media.fullscreen);
     console.log('Actual Chromium: system locale changes, tab page-state retention, generated video, fullscreen containment, pause/seek/mute/exit passed');
-}finally{browser.destroy();await browser.closing;assert.equal(path.dirname(profileRoot),base+'/data');fs.rmSync(profileRoot,{recursive:true,force:true});}})().catch(e=>{console.error(e.stack);process.exitCode=1;});
+}finally{browser.destroy();await browser.closing;assert.equal(path.dirname(profileRoot),os.tmpdir());fs.rmSync(profileRoot,{recursive:true,force:true});}})().catch(e=>{console.error(e.stack);process.exitCode=1;});

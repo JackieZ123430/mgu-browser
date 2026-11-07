@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('fs'),path=require('path'),assert=require('assert'),EventEmitter=require('events');
-const root=path.resolve(__dirname,'../dist/mgu_browser/source/javascript'),data=path.resolve(__dirname,'../.local/ui-smoke-070');
+const root=path.resolve(process.env.MGU_UI_SMOKE_ROOT||path.join(__dirname,'../dist/mgu_browser/source/javascript')),data=path.resolve(__dirname,'../.local/ui-smoke-070');
 fs.mkdirSync(data,{recursive:true});const storeFile=path.join(data,'browser-state.json');
 if(fs.existsSync(storeFile))fs.unlinkSync(storeFile);
 const {Recorder,play}=require(root+'/kit/record'),{Canvas}=require(root+'/kit/canvas');
@@ -21,11 +21,13 @@ class FakeBrowser extends EventEmitter{
         if(op==='privacyStatus')return this.privacy||{supported:true,locked:false,rememberSessions:false,rememberCache:false,protection:'Fixture protection'};
         if(op==='privacyConfigure'){this.privacy=Object.assign(await this.request('privacyStatus'),args.prefs);return this.privacy;}
         if(op==='vaultList')return [];
+        if(op==='audioTest'){this.calls.push('audio-test');return {generated:true,audibleVerified:false,durationMs:1000};}
         if(op==='mediaFocus'||op==='mediaPress'){this.calls.push(op);return {};}
         if(op==='vaultUnlock'){assert.equal(args.password,'w'.repeat(12));this.privacy.locked=false;this.privacy.needsSetup=false;return this.privacy;}
-        assert.equal(op,'mediaCapabilities');return {mediaEnabled:true,widevine:true,h264:true,vp9:true};
+        assert.equal(op,'mediaCapabilities');return {mediaEnabled:true,widevine:true,h264:true,vp9:true,audio:{routeAvailable:!!this.audioRoute,speakerVerified:false}};
     }
     async text(){}async key(){this.calls.push('web-key');}async tap(){}async scroll(delta){this.scrollDelta=delta;}
+    async focusPage(delta){this.calls.push('web-focus');this.focusDelta=delta;}async pressPage(){this.calls.push('web-press');}async leavePage(){this.calls.push('web-leave');}
     async back(){this.calls.push('back');}async forward(){this.calls.push('forward');}async reload(){this.calls.push('reload');}
     async stopLoading(){}async resize(w,h){this.size=[w,h];}
     async stop(){this.child=null;this.calls.push('stop');this.emit('blocked','Browser geschlossen');}destroy(){}
@@ -71,7 +73,15 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     browser.privacy.locked=true;browser.privacy.needsSetup=true;tick();await press('vault-unlock');for(let i=0;i<12;i++)await press('key-0-1');assert(!JSON.stringify(frame).includes('w'.repeat(12)),'Master password must stay out of rendered text');await press('done');for(let i=0;i<12;i++)await press('key-0-1');await press('done');assert.equal(browser.privacy.locked,false);
     await press('privacy-back');await press('settings-done');
     await press('settings');await press('streaming-settings');
-    frame.targets.forEach(t=>assert(t.x>=0&&t.x+t.w<=1600,'Streaming control outside display'));
+    frame.targets.forEach(t=>assert(t.x>=0&&t.y>=0&&t.x+t.w<=1600&&t.y+t.h<=533,'Streaming control outside display'));
+    assert(frame.textCalls.some(t=>/No audio output detected|Kein Audio-Ausgang erkannt/.test(t.label)),'Missing audio output must be explained');
+    await press('audio-test');assert(browser.calls.includes('audio-test'));
+    assert(frame.textCalls.some(t=>/Check audible output|Hörbare Ausgabe/.test(t.label)),'Generating a test tone must ask the user to check audibility');
+    await press('media-fullscreen');assert(browser.calls.includes('video-fullscreen'));
+    await press('media-toggle');assert(browser.calls.includes('video-toggle'));
+    browser.audioRoute=true;await press('settings');await press('streaming-settings');
+    assert(frame.textCalls.some(t=>/vehicle sound unverified|Fahrzeugton unbestätigt/.test(t.label)),'An available output must not be presented as verified vehicle sound');
+    const streaming=new Canvas(1600,533);play(frame.words(),streaming);fs.writeFileSync(path.resolve(__dirname,'../.local/streaming-preview.png'),streaming.png());
     await press('stream-2');assert.equal(browser.url,'https://www.disneyplus.com/');
     await press('tab-close-test-2');
     browser.emit('frame',{width:1280,height:380,rgba:Buffer.alloc(1280*380*4)});tick();
@@ -80,18 +90,26 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     assert.equal(display.focusKey,'tgt:tab-close-test-1','Selecting current tab must keep browser controls active');
     display.focusKey='tgt:library';await feed(0,1);await feed(0,0);await feed(1,0);assert.equal(display.focusKey,'tgt:list-bookmarks');
     await feed(0,1);await feed(0,0);await feed(1,0);assert.equal(display.focusKey,'tgt:list-history');await feed(0,1);await feed(0,0);
-    assert(!browser.calls.includes('web-key'),'Browser controls must never send their rotary/press input into the web page');
+    assert(!browser.calls.some(c=>/^web-(key|focus|press)$/.test(c)),'Browser controls must never send their rotary/press input into the web page');
     await press('library');
     display._touch(1,500,300);display._touch(2,500,250);display._touch(3,500,250);
     await new Promise(r=>setImmediate(r));
     assert(Number.isFinite(browser.scrollDelta)&&browser.scrollDelta>0,'Released drag must retain its queued scroll delta');
+    await feed(1,0);await feed(0,1);await feed(0,0);
+    assert(browser.calls.includes('web-focus')&&browser.calls.includes('web-press'),'Active webpages receive rotary selection and activation');
+    browser.emit('input',{editable:false,adjusting:true});tick();
+    assert(frame.textCalls.some(t=>/Turn: change value|Drehen: Wert ändern/.test(t.label)),'Rotary form editing explains how to finish');
     browser.emit('frame',{width:1280,height:380,rgba:Buffer.alloc(1280*380*4)});browser.emit('media',{fullscreen:true,paused:true,currentTime:10,duration:120});tick();
     await press('video-toggle');await press('video-forward');await press('video-exit');assert(browser.calls.includes('video-toggle')&&browser.calls.includes('video-forward')&&browser.calls.includes('video-exit'));
     browser.emit('media',{fullscreen:true,hasSiteControls:true,paused:true});tick();
     assert(!frame.targets.some(t=>t.key==='video-toggle'),'Website controls must suppress the native fallback overlay');
     await feed(1,0);await feed(0,1);await feed(0,0);
     assert(browser.calls.includes('mediaFocus')&&browser.calls.includes('mediaPress'),'Fullscreen website controls receive selection and activation');
-    browser.emit('media',{fullscreen:false});tick();await press('close');
+    browser.emit('media',{fullscreen:false});tick();
+    browser.emit('tabSelected',{id:'popup-fixture',url:'',title:'',loading:false,popup:true});
+    browser.emit('frame',{width:1280,height:380,rgba:Buffer.alloc(1280*380*4)});tick();
+    assert(frame.targets.some(t=>t.key==='page-controller'),'A blank site popup displays web content instead of the browser start page');
+    await press('close');
     assert(closed,'Close must leave the app MAIN state');assert.equal(browser.child,null,'Close must stop Chromium');
     console.log('SDK UI: tabs, URL keyboard, masked hotspot settings, fullscreen controls, target bounds and app close passed');
 }finally{timers.forEach(clearInterval);}})().catch(e=>{console.error(e.stack);process.exitCode=1;});

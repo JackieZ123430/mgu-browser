@@ -4,7 +4,7 @@ const assert=require('assert'),fs=require('fs'),os=require('os'),path=require('p
 const Browser=require('../src/browser_session');
 if(process.platform!=='linux'||process.getuid()===0)throw new Error('Unprivileged isolated Linux fixture required');
 const root=fs.mkdtempSync(path.join(os.tmpdir(),'mgu-offline-engine-'));
-const browser=new Browser({gate:{check:()=>({allowed:true})},profileRoot:root,binary:'/opt/google/chrome/chrome',viewport:{width:960,height:540},mediaDisabled:false});
+const browser=new Browser({gate:{check:()=>({allowed:true})},profileRoot:root,binary:process.env.MGU_BROWSER_BINARY||'/usr/bin/chromium',viewport:{width:960,height:540},mediaDisabled:false});
 browser.on('diagnostic',text=>{if(/sandbox|FATAL|failed|error/i.test(text))console.error(text.slice(0,600));});
 const value=async expression=>(await browser.send('Runtime.evaluate',{expression,returnByValue:true})).result.value;
 (async()=>{try{

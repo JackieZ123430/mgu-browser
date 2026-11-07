@@ -14,6 +14,12 @@ const en={
 };
 const de={'gueltige':'gültige','auswaehlen':'auswählen','pruefen':'prüfen','Zurueck':'Zurück','Vorwaerts':'Vorwärts','schliessen':'schließen','Haeufig':'Häufig','haeufig':'häufig','Waehle':'Wähle','waehlt':'wählt','Druecken':'Drücken','bestaetigt':'bestätigt','oeffnen':'öffnen','zurueck':'zurück','geschuetzten':'geschützten','ergaenzt':'ergänzt','Loeschen':'Löschen','Laedt':'Lädt','Oeffnen':'Öffnen'};
 Object.assign(en,{
+ 'Audio-Ausgang erkannt; Fahrzeugton unbestätigt':'Audio output detected; vehicle sound unverified',
+ 'Kein Audio-Ausgang erkannt; BMW-Anbindung offen':'No audio output detected; BMW integration pending',
+ 'Testton (1 s)':'Test tone (1 s)','Testton läuft ...':'Playing test tone ...',
+ 'Testton erzeugt. Hörbare Ausgabe am Gerät prüfen.':'Test tone generated. Check audible output on the device.',
+ 'Drehen: Wert ändern. Drücken: fertig. Links: Browserleiste.':'Turn: change value. Press: done. Left: browser toolbar.',
+ 'Wiedergabe / Pause':'Play / pause','Video-Vollbild':'Video fullscreen',
  'Sitzungsspeicher zurücksetzen':'Reset saved sessions','Gespeicherte Website-Anmeldungen und Cache zurücksetzen? Passwörter bleiben erhalten.':'Reset saved sign-ins and cache? Saved passwords remain.',
  'Browser-Einstellungen konnten nicht gespeichert werden':'Browser settings could not be saved','Speichereinstellungen beschädigt; Persistenz ist ausgeschaltet':'Storage settings are damaged; persistence is off',
  'Datenschutz & Logins':'Privacy & sign-ins','Angemeldet bleiben':'Keep signed in','HTTP-Cache behalten':'Keep HTTP cache','Verlauf aufzeichnen':'Record history',

@@ -71,10 +71,14 @@ const server=net.createServer(socket=>{
                 case 'selectTab':result=await browser.selectTab(message.tabId);break;
                 case 'closeTab':result=await browser.closeTab(message.tabId);break;
                 case 'clearTab':result=await browser.clearTab();break;
+                case 'pageFocus':result=await browser.focusPage(message.delta);break;
+                case 'pagePress':result=await browser.pressPage();break;
+                case 'pageLeave':result=await browser.leavePage();break;
                 case 'mediaAction':result=await browser.mediaAction(message.action);break;
                 case 'mediaFocus':result=await browser.focusMediaControl(message.delta);break;
                 case 'mediaPress':result=await browser.pressMediaControl();break;
                 case 'mediaCapabilities':result=await browser.mediaCapabilities();break;
+                case 'audioTest':result=await browser.audioTest();break;
                 case 'privacyStatus':result=await browser.privacyStatus();break;
                 case 'privacyConfigure':result=await browser.privacyConfigure(message.prefs);break;
                 case 'vaultUnlock':try{result=await browser.vaultUnlock(message.password);}finally{message.password=null;}break;

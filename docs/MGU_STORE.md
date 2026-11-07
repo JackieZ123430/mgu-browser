@@ -7,14 +7,27 @@ URLs, byte sizes and SHA-256 values.
 
 | Component | Version | Purpose |
 | --- | --- | --- |
-| `mgu_browser` | 0.10.0 | SDK-free OAP frontend and iDrive UI |
-| `mgu-browser` | 0.10.0 | Native backend, IPC and uplink broker |
+| `mgu_browser` | 0.11.0 | SDK-free OAP frontend and iDrive UI |
+| `mgu-browser` | 0.11.0 | Native backend, IPC and uplink broker |
 | `mgu-browser-engine` | 0.1.0 | Debian Chromium 156.0.8078.79 and private libraries |
 
-The frontend requires runtime 0.10.0, engine 0.1.0, `mgu-uplink` 0.7.3,
+The frontend requires runtime 0.11.0, engine 0.1.0, `mgu-uplink` 0.7.3,
 `mgu-render` 0.6.11 and `mgu-deploy` 0.7.17 or newer. Keep the official Store
 source enabled for the last three. The Store installs dependencies automatically.
 This release targets **ID7 / Linux x86_64**, not ID8 or other architectures.
+
+## Update to 0.11.0
+
+Refresh the Releases source, close Browser, and update **both Browser and
+Browser Runtime to 0.11.0**. The Chromium Engine stays at immutable **0.1.0**;
+its original artifact and corresponding sources remain in release v0.10.0.
+The frontend uses new runtime commands, so a frontend-only branch build against
+runtime 0.10.0 is insufficient. Reopen Browser after both updates.
+
+Live checks: rotate/press on a link, checkbox and text field; open a link in a
+new tab; play an unprotected video; enter/exit fullscreen; then use Settings →
+Media & streaming → Test tone (1 s). Record audible/not audible separately from
+successful tone generation. BMW speaker integration remains open. See [audio](AUDIO.md).
 
 ## Installation and updates
 
@@ -67,6 +80,12 @@ iDrive on the author's ID7. **The new 0.10.0 package integration has not yet
 been installed on a real vehicle. BMW speaker output is not implemented.
 YouTube/subscription-provider playback is unconfirmed; no CDM is included.**
 See [testing](TESTING.md).
+
+The 0.11.0 update reuses the exact hash-verified native helpers, N-API modules
+and JPEG library from 0.10.0. Their C sources must match the pinned original
+hashes before the builder accepts this path. JavaScript, frontend and metadata
+are rebuilt; the engine is not repackaged from a newer build host. The new
+release includes `runtime-provenance.json` identifying these inputs.
 
 ## Source channel and licenses
 

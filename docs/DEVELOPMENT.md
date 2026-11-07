@@ -16,6 +16,30 @@ Commit `9b5e9cf8a49399939d51d3458fb29b6a3cec8346`. Dieses Projekt liefert weder
 geprüft werden. Eine reine Git-Kopie dieses Repositorys kann deshalb nicht ohne
 weitere Voraussetzungen die vollständige native App bauen.
 
+## Portable Linux-Engine-Prüfungen
+
+Ein unprivilegierter Benutzer, Node.js, Chromium und für die Videodatei-Fixture
+FFmpeg genügen für die neuen Prüfungen. Sie benötigen weder SDK noch Fahrzeug
+oder Konten. Die Chromium-Sandbox bleibt eingeschaltet.
+
+```sh
+node test/offline_input_smoke.js
+node test/chromium_tabs_smoke.js
+node test/chromium_restore_smoke.js
+node test/media_engine_smoke.js
+node test/offline_engine_smoke.js
+node test/emulator_media_smoke.js
+node test/chromium_audio_smoke.js
+```
+
+Die Tests erzeugen eigene temporäre Profile und Medien. Der Audiotest benutzt
+eine lokale ALSA-Dateiausgabe; ein Ergebnis ist kein Lautsprechernachweis.
+Die SDK-Oberflächenprüfung kann ein entpacktes Store-Frontend verwenden:
+
+```sh
+MGU_UI_SMOKE_ROOT=/path/to/unpacked/javascript node test/chromium_ui_smoke.js
+```
+
 ## Windows / WSL
 
 Die Werkzeuge erwarten WSL mit Debian-kompatibler x86-64-Laufzeit, Node.js,

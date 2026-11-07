@@ -38,6 +38,7 @@ class BrowserClient extends EventEmitter {
     forward(){return this.request('forward');}reload(){return this.request('reload');}stopLoading(){return this.request('stopLoading');}resize(width,height){return this.request('resize',{width,height});}
     newTab(url){return this.request('newTab',{url:url||''});}selectTab(tabId){return this.request('selectTab',{tabId});}closeTab(tabId){return this.request('closeTab',{tabId});}
     clearTab(){return this.request('clearTab');}
+    focusPage(delta){return this.request('pageFocus',{delta});}pressPage(){return this.request('pagePress');}leavePage(){return this.request('pageLeave');}
     mediaAction(action){return this.request('mediaAction',{action});}
     setLocale(locale){return this.request('locale',{locale});}
     wifiStatus(){return this.request('wifiStatus');}wifiConnect(ssid,password){return this.request('wifiConnect',{ssid,password});}wifiReconnect(){return this.request('wifiReconnect');}

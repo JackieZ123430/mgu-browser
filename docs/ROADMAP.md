@@ -47,7 +47,7 @@ werden nicht Teil von App-Paketen oder Testberichten.
   zuverlässig darstellen oder durch passende native UI unterstützen.
 - [ ] Spracheingabe für URL, Suche und Textfelder evaluieren. Dafür fehlen
   bislang eine qualifizierte BMW-Sprachschnittstelle und ein vollständiger Ablauf.
-- [ ] Vollbild-Bedienung für eingebettete Videos und Player in Frames erweitern.
+- [x] Inline-Medienaktionen und Vollbild für offene Shadow-DOMs und Frames desselben Ursprungs erweitern; sandboxed Chromium lokal getestet.
 - [ ] Tableiste und Browserleiste bei vielen Tabs und langen Titeln weiter verfeinern.
 - [ ] Weitere App-Sprachen, Schriftsätze und Tastaturlayouts gemeinsam mit
   Muttersprachlern ergänzen. Regionale Formate aus der Systemsprache beibehalten.
@@ -113,4 +113,4 @@ Ein Quellen-Repository darf Experimente und offene Punkte zeigen. Eine
 installierbare Freigabe soll dagegen einen dokumentierten Hardware-Teststand,
 klare Abhängigkeiten und Rechte für verteilte Bestandteile, einen nachvollziehbaren
 Installations- und Rücknahmeweg sowie getrennte Ergebnisse je Streamingdienst haben.
-Ein endgültiger Lizenzentscheid für den eigenen Projektcode steht noch aus.
+Der eigene Projektcode steht unter MIT; Drittanbieter behalten ihre Lizenzen.

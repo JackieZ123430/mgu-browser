@@ -9,7 +9,7 @@ sudo apt-get install python3 nodejs libnode-dev gcc musl-tools patchelf \
   chromium chromium-common chromium-sandbox fonts-dejavu-core libjpeg62-turbo-dev
 python3 release/build.py --out /path/to/empty-output
 MGU_OUT=/path/to/empty-frontend-output python3 tools/build_store.py \
-  --app mgu_browser --version 0.10.0 --source apps/mgu_browser --release-package
+  --app mgu_browser --version 0.11.0 --source apps/mgu_browser --release-package
 ```
 
 Published engine: Chromium `156.0.8078.79-1~deb12u1`. Signed Debian repositories
@@ -40,6 +40,48 @@ It includes libjpeg/musl. Debian `.dsc` and patches document upstream build
 configuration; use Debian's source-package build process to reconstruct those
 libraries/Chromium, then this packager. Original Ubuntu TTF sources are committed
 under `assets/ui-fonts/` with their own notices.
+
+## Frontend/runtime updates with the existing engine
+
+Version 0.11.0 keeps the immutable engine 0.1.0 from release v0.10.0. Do not
+rebuild it with another Debian version under the same component version. For
+JavaScript-only runtime changes, the original Debian-12 native binaries can also
+be reused on a different x86_64 build host:
+
+```sh
+gh release download v0.10.0 --repo pllanaio/mgu-browser \
+  --pattern 'mgu-browser@0.10.0.tgz' --dir /path/to/input
+python3 release/build.py --out /path/to/empty-runtime-output --runtime-only \
+  --runtime-base /path/to/input/mgu-browser@0.10.0.tgz
+```
+
+The builder pins the complete published artifact's SHA-256, validates every
+reused native payload against its manifest, and requires all four native C
+sources to match commit `3c01fdfb600c38125ce2a874b77c1918521d7bf7`. It refuses
+reuse after native edits. It records the base URL/digest and source hashes in
+`runtime-provenance.json` and the installed runtime. Only native helpers,
+N-API modules, libjpeg and their license files are reused; JavaScript, units,
+checks and component metadata are rebuilt from the current source tree.
+
+Publish the two 0.11.0 frontend/runtime artifacts and runtime provenance. Keep
+the engine 0.1.0 entry and artifact URL in the Store catalog unchanged. Its
+matching Debian/libjpeg/musl source archives remain available as
+`corresponding-source-0.10.0.tar` in the retained v0.10.0 release. No replacement
+engine or new third-party binaries are distributed by this update.
+
+After both packages and the updated catalog are assembled, validate them with
+an independently checked-out Store source tree:
+
+```sh
+node test/store_package_smoke.js /path/to/mgu-store \
+  /path/to/mgu_browser@0.11.0.tgz /path/to/mgu-browser@0.11.0.tgz \
+  /path/to/catalog.json
+```
+
+This runs the real deploy artifact validator and updater catalog parser,
+prepares the app with the Store's synthetic donor, loads both native modules,
+and compares the packaged JavaScript with the current checkout. It does not
+install anything or validate systemd/vehicle behavior.
 
 ## Publication
 

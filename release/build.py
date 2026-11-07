@@ -16,9 +16,19 @@ import tarfile
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '0.10.0'
+VERSION = '0.11.0'
 ENGINE_VERSION = '0.1.0'
 ENGINE_PREFIX = '/var/opt/mgu-browser-engine/versions/' + ENGINE_VERSION + '/engine'
+NATIVE_INPUTS = ('backend_launch.c', 'browser_launch.c', 'peer_uid.c', 'jpeg_frame.c')
+BASE_NATIVE_INPUTS = {
+    # Public 0.10.0 sources at 3c01fdf. Reuse is rejected after any source edit.
+    'backend_launch.c': 'b8d3fa2e0cddb4b7c4c0844f0c17ce78ef794a66ff3004948981353f58bd1f3a',
+    'browser_launch.c': 'ddf4c9d8839586d63a7aab47ce9deb183fb807f9016bc30f8e72e3f5e7391143',
+    'peer_uid.c': 'bc32019bc92632d2938da3dbb7d3f9991460f6c6ed42258604ddcedfd016d239',
+    'jpeg_frame.c': 'a32bc9b7d8080708418e7c7fdb7eeb8955f84ccd76833de6513beca03d8fdd61',
+}
+BASE_RUNTIME_SHA256 = 'b2fb09e1747bf0db52d0b8004b7421ddeb56c27830fab10d927c4cd2511eb42f'
+BASE_RUNTIME_URL = 'https://github.com/pllanaio/mgu-browser/releases/download/v0.10.0/mgu-browser%400.10.0.tgz'
 
 
 def sha(file):
@@ -153,7 +163,37 @@ def build_engine(work, output):
     return tool(stage, {'id': 'mgu-browser-engine', 'kind': 'tool', 'version': ENGINE_VERSION, 'title': 'Browser Chromium engine (experimental)', 'mguHmi': ['ID7'], 'requires': {'mgu-deploy': '0.7.17'}, 'check': ['check.sh'], 'activate': ['node', 'activate.js'], 'deactivate': ['node', 'deactivate.js'], 'crashNames': ['chromium', 'chrome-sandbox', 'chrome_crashpad']}, output)
 
 
-def build_runtime(work, output):
+def reuse_native(base, files):
+    """Reuse only the exact published Debian-12 native files, with source checks."""
+    if sha(base) != BASE_RUNTIME_SHA256:
+        raise RuntimeError('Runtime base differs from the immutable 0.10.0 artifact')
+    inputs = {name: sha(ROOT / 'native' / name) for name in NATIVE_INPUTS}
+    if inputs != BASE_NATIVE_INPUTS:
+        raise RuntimeError('Native sources changed; rebuild on the Debian 12 release host')
+    names = ('backend-launch', 'browser-launch', 'backend/peer_uid.node',
+             'backend/jpeg_frame.node', 'backend/codec/libjpeg.so.62',
+             'backend/codec/COPYRIGHT.libjpeg-turbo', 'LICENSE.musl')
+    with tarfile.open(base, 'r:gz') as archive:
+        metadata = json.load(archive.extractfile('component.json'))
+        if metadata.get('id') != 'mgu-browser' or metadata.get('version') != '0.10.0':
+            raise RuntimeError('Unexpected base runtime identity')
+        manifest = {row['path']: row for row in metadata['files']}
+        for name in names:
+            member = archive.getmember('files/' + name)
+            if not member.isfile() or member.size > 16 * 1024 * 1024:
+                raise RuntimeError('Invalid native base file')
+            data = archive.extractfile(member).read()
+            if hashlib.sha256(data).hexdigest() != manifest[name]['sha256']:
+                raise RuntimeError('Base native file checksum differs')
+            target = files / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+            target.chmod(0o755 if name in ('backend-launch', 'browser-launch') else 0o644)
+    return {'baseUrl': BASE_RUNTIME_URL, 'baseSha256': BASE_RUNTIME_SHA256,
+            'nativeSources': inputs, 'nativeSourceCommit': '3c01fdfb600c38125ce2a874b77c1918521d7bf7'}
+
+
+def build_runtime(work, output, base=None):
     stage = work / 'runtime-tool'
     files = stage / 'files'
     legacy = {'native_reader.js', 'http_reader.js', 'html_page.js', 'html5_parser.js', 'park_gate.js', 'vehicle_signals.js'}
@@ -165,17 +205,25 @@ def build_runtime(work, output):
         copy(ROOT / 'network' / name, files / 'network' / name)
     for file in (ROOT / 'runtime').glob('*.js'):
         copy(file, files / 'runtime' / file.name)
-    for name in ['backend_launch', 'browser_launch']:
-        run(['musl-gcc', '-static', '-O2', '-Wall', '-Wextra', '-Werror', '-ffile-prefix-map=' + str(ROOT) + '=.', ROOT / 'native' / (name + '.c'), '-o', files / name.replace('_', '-')])
-        (files / name.replace('_', '-')).chmod(0o755)
-    for name in ['peer_uid', 'jpeg_frame']:
-        args = ['gcc', '-shared', '-fPIC', '-O2', '-Wall', '-Wextra', '-DNAPI_VERSION=3', '-ffile-prefix-map=' + str(ROOT) + '=.', '-I/usr/include/node', ROOT / 'native' / (name + '.c'), '-o', files / 'backend' / (name + '.node')]
-        if name == 'jpeg_frame':
-            args += ['-ljpeg', '-Wl,-rpath,$ORIGIN/codec']
-        run(args)
-    copy('/usr/lib/x86_64-linux-gnu/libjpeg.so.62', files / 'backend/codec/libjpeg.so.62')
-    copy('/usr/share/doc/libjpeg62-turbo/copyright', files / 'backend/codec/COPYRIGHT.libjpeg-turbo')
-    copy('/usr/share/doc/musl/copyright', files / 'LICENSE.musl')
+    native_record = None
+    if base:
+        native_record = reuse_native(base, files)
+    else:
+        for name in ['backend_launch', 'browser_launch']:
+            run(['musl-gcc', '-static', '-O2', '-Wall', '-Wextra', '-Werror', '-ffile-prefix-map=' + str(ROOT) + '=.', ROOT / 'native' / (name + '.c'), '-o', files / name.replace('_', '-')])
+            (files / name.replace('_', '-')).chmod(0o755)
+        for name in ['peer_uid', 'jpeg_frame']:
+            args = ['gcc', '-shared', '-fPIC', '-O2', '-Wall', '-Wextra', '-DNAPI_VERSION=3', '-ffile-prefix-map=' + str(ROOT) + '=.', '-I/usr/include/node', ROOT / 'native' / (name + '.c'), '-o', files / 'backend' / (name + '.node')]
+            if name == 'jpeg_frame':
+                args += ['-ljpeg', '-Wl,-rpath,$ORIGIN/codec']
+            run(args)
+        copy('/usr/lib/x86_64-linux-gnu/libjpeg.so.62', files / 'backend/codec/libjpeg.so.62')
+        copy('/usr/share/doc/libjpeg62-turbo/copyright', files / 'backend/codec/COPYRIGHT.libjpeg-turbo')
+        copy('/usr/share/doc/musl/copyright', files / 'LICENSE.musl')
+    record = {'version': VERSION, 'nativeSources': {name: sha(ROOT / 'native' / name) for name in NATIVE_INPUTS},
+              'engineComponent': ENGINE_VERSION, 'reusedNative': native_record}
+    (files / 'build-provenance.json').write_text(json.dumps(record, indent=2) + '\n')
+    (output / 'runtime-provenance.json').write_text(json.dumps(record, indent=2) + '\n')
     copy(ROOT / 'LICENSE', files / 'LICENSE')
     copy(ROOT / 'release/runtime_check.sh', files / 'check.sh', 0o755)
     units = ['mgu-browser-backend.service', 'mgu-browser-wifi.service']
@@ -187,7 +235,11 @@ def build_runtime(work, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', required=True)
+    parser.add_argument('--runtime-only', action='store_true', help='Keep the already published immutable engine dependency')
+    parser.add_argument('--runtime-base', type=Path, help='Reuse exact 0.10.0 native binaries after artifact and source SHA-256 checks')
     args = parser.parse_args()
+    if args.runtime_base and not args.runtime_only:
+        parser.error('--runtime-base requires --runtime-only; keep the published engine unchanged')
     if os.name != 'posix' or os.uname().machine != 'x86_64':
         raise SystemExit('Linux x86_64 build host required')
     output = Path(args.out).resolve()
@@ -196,7 +248,8 @@ def main():
         raise SystemExit('Release output must be empty')
     with tempfile.TemporaryDirectory(prefix='mgu-browser-release-') as temporary:
         work = Path(temporary)
-        entries = [build_engine(work, output), build_runtime(work, output)]
+        entries = [] if args.runtime_only else [build_engine(work, output)]
+        entries.append(build_runtime(work, output, args.runtime_base))
     (output / 'components.json').write_text(json.dumps(entries, indent=2) + '\n')
     print(json.dumps(entries, indent=2))
 

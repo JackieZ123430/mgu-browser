@@ -2,12 +2,14 @@
 const cp=require('child_process'),fs=require('fs'),path=require('path'),EventEmitter=require('events');
 const CdpPipe=require('./cdp_pipe'),PNG=require('./png_frame'),URLPolicy=require('./url_policy');
 const Metadata=require('./browser_metadata');
+const Audio=require('./browser_audio');
 let JPEG=null;try{JPEG=require('./jpeg_frame.node');}catch(e){}
 const monotonic=()=>{const t=process.hrtime();return t[0]*1000+t[1]/1e6;};
 
 class BrowserSession extends EventEmitter {
     constructor(options) {
         super();this.options=options;this.gate=options.gate;this.child=null;this.pipe=null;
+        this.audio=Audio.output(Object.assign({},process.env,options.env||{}));
         this.session=null;this.epoch=0;this.lastFrame=0;this.decoding=false;this.profile=null;
         this.performance={codec:JPEG?'jpeg-native':'png-js',frames:0,decodeMs:0,encodedBytes:0};
         this.closing=Promise.resolve();
@@ -37,6 +39,7 @@ class BrowserSession extends EventEmitter {
             '--disable-breakpad','--disable-dev-shm-usage','--disk-cache-size=16777216','--media-cache-size=8388608',
             '--window-size='+this.viewport.width+','+this.viewport.height,'--user-data-dir='+this.profile,'about:blank'];
         if(this.options.mediaDisabled)args.push('--disable-blink-features=WebCodecs');
+        this.audio.reset();args.push.apply(args,this.audio.args);
         if(this.options.profileStore&&this.options.profileStore.prefs.rememberSessions)args.push('--restore-last-session');
         // Browser/renderer sandbox stays enabled. No --no-sandbox, root browser,
         // insecure TLS flag, public debugging port or remote rendering backend.
@@ -44,7 +47,7 @@ class BrowserSession extends EventEmitter {
         this.child=child;
         const pipe=this.pipe=new CdpPipe(child.stdio[3],child.stdio[4]);
         child.on('error',e=>{this.emit('fault',e);this.stop('Browser konnte nicht starten');});
-        child.stderr.on('data',data=>this.emit('diagnostic',data.toString('utf8').slice(0,1000)));
+        child.stderr.on('data',data=>{this.audio.observe(data.toString('utf8').slice(0,4000));this.emit('diagnostic',data.toString('utf8').slice(0,1000));});
         child.once('exit',(code,signal)=>{if(this.child===child){this.stop('Browser beendet ('+(signal||code)+')');}});
         pipe.on('closed',()=>{if(this.pipe===pipe)this.stop('Browser-Verbindung beendet');});
         pipe.on('event',event=>{if(epoch===this.epoch)this.event(event);});
@@ -52,6 +55,7 @@ class BrowserSession extends EventEmitter {
             const version=await pipe.send('Browser.getVersion');this.emit('version',version.product);
             this.userAgent=version.userAgent;
             await pipe.send('Browser.setDownloadBehavior',{behavior:'deny'});
+            await pipe.send('Target.setDiscoverTargets',{discover:true});
             if(epoch!==this.epoch)throw new Error('Browserstart abgebrochen');
             await this._newTab(url||'');
             this.emit('started');
@@ -66,6 +70,7 @@ class BrowserSession extends EventEmitter {
         const result=await this.send('Page.navigate',{url});if(result.errorText)throw new Error(result.errorText);return result;
     }
     event(event) {
+        if(/^Target\.(targetCreated|targetInfoChanged|targetDestroyed)$/.test(event.method)){this.targetEvent(event);return;}
         const tab=this.tabs.find(t=>t.session===event.sessionId);
         if(!tab)return;
         const active=event.sessionId===this.session;
@@ -115,34 +120,29 @@ class BrowserSession extends EventEmitter {
             }else work();
         }
     }
-    async tap(x,y) {
-        this.requireAllowed();if(!Number.isFinite(x)||!Number.isFinite(y))return;
-        x=Math.max(0,Math.min(this.viewport.width-1,x));y=Math.max(0,Math.min(this.viewport.height-1,y));
-        await this.send('Input.dispatchMouseEvent',{type:'mousePressed',x,y,button:'left',clickCount:1});
-        await this.send('Input.dispatchMouseEvent',{type:'mouseReleased',x,y,button:'left',clickCount:1});this.inspectInput();
+    tap(x,y) {
+        return this.inputTask(async context=>{
+            if(!Number.isFinite(x)||!Number.isFinite(y))return;
+            x=Math.max(0,Math.min(this.viewport.width-1,x));y=Math.max(0,Math.min(this.viewport.height-1,y));
+            await context.send('Input.dispatchMouseEvent',{type:'mousePressed',x,y,button:'left',clickCount:1});
+            await context.send('Input.dispatchMouseEvent',{type:'mouseReleased',x,y,button:'left',clickCount:1});this.inspectInput();
+        });
     }
-    async text(value) {
-        this.requireAllowed();
-        // Custom PIN/key-driven fields need keydown, while composition text
-        // still needs insertText. Do not insert twice when a field handles
-        // keydown and prevents its default text insertion.
-        for(const character of String(value).slice(0,1000)){
-            this.requireAllowed();
-            if(/^[\x20-\x7e]$/.test(character)){
-                const code=/^[a-z]$/i.test(character)?'Key'+character.toUpperCase():/^[0-9]$/.test(character)?'Digit'+character:undefined;
-                const data={key:character};if(code)data.code=code;
-                await this.send('Input.dispatchKeyEvent',Object.assign({type:'keyDown',text:character,unmodifiedText:character},data));
-                await this.send('Input.dispatchKeyEvent',Object.assign({type:'keyUp'},data));
-            }else await this.send('Input.insertText',{text:character});
-        }
-        this.inspectInput();
+    text(value) {
+        return this.inputTask(async context=>{
+            // Key-driven PIN fields need keydown; Unicode uses composition.
+            for(const character of String(value).slice(0,1000)){
+                if(/^[\x20-\x7e]$/.test(character)){
+                    const code=/^[a-z]$/i.test(character)?'Key'+character.toUpperCase():/^[0-9]$/.test(character)?'Digit'+character:undefined;
+                    const data={key:character};if(code)data.code=code;
+                    await context.send('Input.dispatchKeyEvent',Object.assign({type:'keyDown',text:character,unmodifiedText:character},data));
+                    await context.send('Input.dispatchKeyEvent',Object.assign({type:'keyUp'},data));
+                }else await context.send('Input.insertText',{text:character});
+            }
+            this.inspectInput();
+        });
     }
-    async key(key,shift) {
-        this.requireAllowed();const codes={Tab:9,Enter:13,Backspace:8,Escape:27,ArrowUp:38,ArrowDown:40,ArrowLeft:37,ArrowRight:39};
-        const data={key,modifiers:shift?8:0};if(codes[key])data.windowsVirtualKeyCode=codes[key];
-        await this.send('Input.dispatchKeyEvent',Object.assign({type:'keyDown'},data));
-        const result=await this.send('Input.dispatchKeyEvent',Object.assign({type:'keyUp'},data));this.inspectInput();return result;
-    }
+    key(key,shift) {return this.inputTask(async context=>{const result=await context.key(key,shift);this.inspectInput();return result;});}
     async scroll(delta) {this.requireAllowed();return this.send('Input.dispatchMouseEvent',{type:'mouseWheel',x:this.viewport.width/2,y:this.viewport.height/2,deltaX:0,deltaY:Math.max(-1000,Math.min(1000,delta))});}
     async back() {
         return this.moveHistory(-1);
@@ -176,7 +176,7 @@ class BrowserSession extends EventEmitter {
     inspectInput(){
         clearTimeout(this.inputTimer);const epoch=this.epoch,view=this.pageGeneration;
         this.inputTimer=setTimeout(async()=>{
-            try{const r=await this.send('Runtime.evaluate',{expression:'JSON.stringify((()=>{const e=document.activeElement,t=(e&&e.type||"").toLowerCase(),editable=!!e&&!e.disabled&&!e.readOnly&&(e.isContentEditable||e.tagName==="TEXTAREA"||(e.tagName==="INPUT"&&!/^(button|submit|reset|checkbox|radio|range|file|color|hidden|image)$/.test(t)));return {editable,password:t==="password",token:editable?e.tagName+":"+t+":"+Array.from(document.querySelectorAll("input,textarea,[contenteditable]")).indexOf(e):""};})())',returnByValue:true});
+            try{const r=await this.send('Runtime.evaluate',{expression:'JSON.stringify('+this.inputExpression+')',returnByValue:true});
                 const info=JSON.parse(r.result.value),key=JSON.stringify(info);
                 if(epoch===this.epoch&&view===this.pageGeneration&&key!==this.lastInput){this.lastInput=key;this.emit('input',info);}
             }catch(e){}
@@ -186,6 +186,7 @@ class BrowserSession extends EventEmitter {
         return this.send('Runtime.evaluate',{expression:'JSON.stringify({ready:document.readyState,visible:document.visibilityState,scripts:document.scripts.length,resources:performance.getEntriesByType("resource").length})',returnByValue:true});
     }
     stop(reason) {
+        if(this.pendingPopups)this.pendingPopups.clear();
         this.tabs=[];this.activeTab=null;this.pageGeneration++;this.emitTabs();
         this.lastMedia=null;this.emit('media',{fullscreen:false});
         clearTimeout(this.navigationTimer);clearTimeout(this.inputTimer);this.lastInput=null;
@@ -210,7 +211,9 @@ class BrowserSession extends EventEmitter {
     destroy() {clearInterval(this.watch);clearInterval(this.mediaWatch);this.stop('App geschlossen');}
 }
 Object.assign(BrowserSession.prototype,require('./browser_pages'));
+Object.assign(BrowserSession.prototype,require('./browser_input'));
 Object.assign(BrowserSession.prototype,require('./browser_media'));
+Object.assign(BrowserSession.prototype,Audio.methods);
 Object.assign(BrowserSession.prototype,require('./browser_privacy'));
 // Node 8 has no recursive rm. Never follow links when clearing our temporary
 // profile, and accept only the direct session directory we created ourselves.

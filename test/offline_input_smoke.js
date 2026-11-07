@@ -1,0 +1,37 @@
+'use strict';
+// Native Chromium input against authored offline fixtures; no real accounts.
+const assert=require('assert'),fs=require('fs'),os=require('os'),path=require('path'),Browser=require('../src/browser_session');
+if(process.platform!=='linux'||process.getuid()===0)throw new Error('Run as an unprivileged Linux user');
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'mgu-offline-input-'));
+const browser=new Browser({gate:{check:()=>({allowed:true})},profileRoot:root,binary:process.env.MGU_BROWSER_BINARY||'/usr/bin/chromium',mediaDisabled:false});
+const value=async expression=>(await browser.send('Runtime.evaluate',{expression,returnByValue:true})).result.value;
+(async()=>{try{
+    await browser.start('');
+    await value(`document.body.innerHTML='<button id="first">Start</button><button disabled>Disabled</button><input id="check" type="checkbox"><button id="third">Next</button><div id="host"></div>';
+        window.clicks=0;document.getElementById('third').onclick=()=>window.clicks++;
+        const shadow=document.getElementById('host').attachShadow({mode:'open'});shadow.innerHTML='<input type="password" id="secret">';`);
+    await browser.focusPage(1);assert.equal(await value('document.activeElement.id'),'first');
+    assert.equal(await value('getComputedStyle(document.activeElement).outlineWidth'),'3px','Controller focus remains visible even on pages without their own focus style');
+    await Promise.all([browser.focusPage(1),browser.pressPage()]);
+    assert.equal(await value('document.getElementById("check").checked'),true,'A checkbox requires Space rather than Enter');
+    await Promise.all([browser.focusPage(1),browser.pressPage()]);assert.equal(await value('window.clicks'),1,'Press must activate the selection made by the preceding detent');
+    let input;browser.on('input',info=>input=info);
+    await browser.focusPage(1);assert(input&&input.editable&&input.password,'Open shadow inputs are detected for the native keyboard');
+    await Promise.all([browser.text('AB'),browser.text('12'),browser.text('ä')]);
+    assert.equal(await value('document.getElementById("host").shadowRoot.activeElement.value'),'AB12ä','Text events keep character groups in order');
+    await browser.focusPage(-1);assert.equal(await value('document.activeElement.id'),'third','Reverse rotation traverses the native shadow focus boundary');
+    await browser.send('Runtime.evaluate',{expression:`document.body.innerHTML='<iframe id="embedded" srcdoc="&lt;input type=password id=inside&gt;"></iframe>';`,returnByValue:true});
+    for(let i=0;i<30&&!await value('document.getElementById("embedded").contentDocument.querySelector("input")');i++)await new Promise(r=>setTimeout(r,20));
+    await browser.focusPage(1);assert(input&&input.editable&&input.password,'Same-origin embedded forms expose their focused input');
+    await browser.text('inside');assert.equal(await value('document.getElementById("embedded").contentDocument.getElementById("inside").value'),'inside');
+    await value(`document.body.innerHTML='<select id="select"><option>A</option><option>B</option><option>C</option></select><input id="range" type="range" min="0" max="8" step="2" value="2"><button id="done">Done</button>';window.changes=0;document.getElementById('select').onchange=()=>window.changes++;`);
+    await browser.focusPage(1);assert.equal(await value('document.activeElement.id'),'select');
+    await browser.pressPage();assert(input.adjusting,'Pressing a select starts rotary value editing');
+    await browser.focusPage(2);assert.equal(await value('document.getElementById("select").selectedIndex'),2);assert.equal(await value('window.changes'),2,'Native arrows fire website change events');
+    await browser.pressPage();assert.equal(input.adjusting,false);
+    await browser.focusPage(1);assert.equal(await value('document.activeElement.id'),'range');
+    await browser.pressPage();await browser.focusPage(1);assert.equal(await value('document.getElementById("range").value'),'4','Range editing respects the site step');
+    await browser.focusPage(-1);assert.equal(await value('document.getElementById("range").value'),'2');
+    await browser.leavePage();await browser.focusPage(1);assert.equal(await value('document.activeElement.id'),'done','Returning to the toolbar clears value editing');
+    console.log('Offline real Chromium input: rotary order, visible focus, checkbox activation, shadow/embedded forms, Unicode typing and select/range editing passed');
+}finally{browser.destroy();await browser.closing;assert.equal(path.dirname(root),os.tmpdir());fs.rmSync(root,{recursive:true,force:true});}})().catch(e=>{console.error(e.stack);process.exitCode=1;});
