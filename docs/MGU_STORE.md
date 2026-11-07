@@ -29,6 +29,16 @@ so the Releases source takes it over; no manual uninstall is needed. From
 0.13.1 the runtime also deletes the unused 0.9.x engine folder
 `/var/opt/mgu-browser/engine` once the versioned Store engine is installed.
 
+## 0.13.2: backend start after a private 0.9.x installation
+
+"Browser-Dienst noch nicht bereit" without end: the runtime setup refused
+folders the private 0.9.x installation had created under another owner
+(`/var/opt/mgu-browser/data`, `work`, `network`), and the backend unit had
+`Restart=no`, so it stayed down. From 0.13.2 such folders are moved aside
+(`<name>.legacy-<time>`, never deleted), setup problems are retried, the unit
+restarts always, and `/run/mgu-browser/status.json` reports each step; the
+app shows that reason instead of the generic message.
+
 ## Update to 0.13.0
 
 Refresh the Releases source and update **Browser** (the Store installs Browser

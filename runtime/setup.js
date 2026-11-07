@@ -10,6 +10,15 @@ function directory(name,mode,owner){
     try{fs.mkdirSync(name,mode);}catch(e){if(e.code!=='EEXIST')throw e;}
     const st=fs.lstatSync(name);if(!st.isDirectory()||st.isSymbolicLink()||st.uid!==owner||(st.mode&0o022))throw Error('Unsafe runtime directory: '+name);
 }
+// Folders the private 0.9.x installation created under other owners (the
+// backend then ran as the app UID) make every start fail. Move such a folder
+// aside (never delete it) so a correct one can be created; a link is removed.
+function setAside(name,owners,io){
+    io=io||fs;let st;try{st=io.lstatSync(name);}catch(e){if(e.code==='ENOENT')return null;throw e;}
+    if(st.isSymbolicLink()){io.unlinkSync(name);return 'link-removed';}
+    if(st.isDirectory()&&owners.indexOf(st.uid)>=0&&!(st.mode&0o022))return null;
+    const target=name+'.legacy-'+Date.now();io.renameSync(name,target);return target;
+}
 function readOwned(name,owners,max,trustedGroup){
     const fd=fs.openSync(name,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);
     try{const s=fs.fstatSync(fd),forbidden=trustedGroup!==undefined&&s.uid===trustedGroup&&s.gid===trustedGroup?0o002:0o022;if(!s.isFile()||s.nlink!==1||owners.indexOf(s.uid)<0||(s.mode&forbidden)||s.size>max)throw Error('Unsafe runtime input');return fs.readFileSync(fd,'utf8');}finally{fs.closeSync(fd);}
@@ -31,7 +40,11 @@ function audioIdentity(groupText,io){
 function prepare(){
     if(process.getuid()!==0)throw Error('Root setup required');
     for(const p of ['/var','/var/opt'])directory(p,0o755,0);
-    const base='/var/opt/mgu-browser';directory(base,0o755,0);directory(base+'/network',0o700,0);directory(base+'/work',0o755,0);
+    const base='/var/opt/mgu-browser';directory(base,0o755,0);
+    const migrated=[];
+    for(const entry of [[base+'/network',[0]],[base+'/work',[0]],[base+'/data',[0,UID]]]){const moved=setAside(entry[0],entry[1]);if(moved)migrated.push(entry[0]+' -> '+moved);}
+    if(migrated.length)console.log('Moved incompatible folders of an older installation aside: '+migrated.join(', '));
+    directory(base+'/network',0o700,0);directory(base+'/work',0o755,0);
     const passwd=readOwned('/etc/passwd',[0],262144).split('\n').filter(Boolean).map(l=>l.split(':'));
     if(passwd.some(p=>Number(p[2])===UID&&p[0]!=='mgu-browser'))throw Error('Runtime UID 3911 is occupied by another system account');
     const engineRoot=fs.realpathSync('/var/opt/mgu-browser-engine/current/engine');
@@ -52,4 +65,4 @@ function prepare(){
     writeRoot(base+'/runtime-identity.json',JSON.stringify(identity)+'\n',0o644,0);
     return identity;
 }
-module.exports={appUid,readOwned,writeRoot,audioIdentity,prepare};
+module.exports={appUid,readOwned,writeRoot,audioIdentity,prepare,setAside};

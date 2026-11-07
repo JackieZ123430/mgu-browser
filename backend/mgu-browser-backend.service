@@ -6,7 +6,8 @@ Wants=persistency-fs.target mgu-browser-wifi.service
 [Service]
 Type=simple
 ExecStart=/usr/bin/node /var/opt/mgu-browser/current/runtime/launch.js
-Restart=no
+Restart=always
+RestartSec=3
 KillMode=control-group
 TimeoutStopSec=20
 # Full CPU access (no quota) and raised priority for Chromium's software
