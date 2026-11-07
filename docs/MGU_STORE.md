@@ -16,6 +16,19 @@ The frontend requires runtime 0.12.0, engine 0.1.0, `mgu-uplink` 0.7.3,
 source enabled for the last three. The Store installs dependencies automatically.
 This release targets **ID7 / Linux x86_64**, not ID8 or other architectures.
 
+## From a private 0.9.x installation or the `branch:main` channel
+
+The runtime (`mgu-browser`) and engine (`mgu-browser-engine`) exist only as
+release packages. With a `branch:main` source the Store therefore reports
+`needs mgu-browser … which no source has`. Remove the source and add
+`pllanaio/mgu-browser` again with **Releases**.
+
+A runtime installed privately with mgu-deploy (0.9.x) has no Store origin.
+The Store updates such a component from the only source that lists its id,
+so the Releases source takes it over; no manual uninstall is needed. From
+0.13.1 the runtime also deletes the unused 0.9.x engine folder
+`/var/opt/mgu-browser/engine` once the versioned Store engine is installed.
+
 ## Update to 0.13.0
 
 Refresh the Releases source and update **Browser** (the Store installs Browser
