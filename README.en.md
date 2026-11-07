@@ -2,19 +2,29 @@
 
 An experimental native browser UI for BMW MGU / iDrive 7, backed by a separate
 Chromium process, with a local SDK app emulator for development.
-Version 0.11.0 publishes an **experimental ID7/x86_64 Store catalog** with
+Version 0.12.0 publishes an **experimental ID7/x86_64 Store catalog** with
 the frontend, native runtime and private Chromium engine. Add
 `pllanaio/mgu-browser` as a GitHub source and select **Releases** for complete
 installation and updates. Existing `main` sources must switch to Releases
 for these binary packages. The project's own code is now MIT licensed.
 
-**BMW speaker output is not connected yet. YouTube and subscription-provider
-playback are not confirmed. No Widevine CDM or BMW SDK is distributed.**
+**BMW AudioManager/SmartX output is implemented; audible vehicle testing of this
+version is pending. Protected streams need a separately authorized CDM. No
+Widevine binary or BMW SDK is distributed, and provider playback is unconfirmed.**
 See [installation, dependencies and rollback](docs/MGU_STORE.md).
 
 The [full German README](README.md) describes features and verified limits.
 
-## New in 0.11.0
+## New in 0.12.0
+
+Concrete AudioManager/SmartX routing with connection ownership, a separate
+unprivileged firmware-ALSA writer, bounded PCM buffering and lifecycle cleanup.
+Real Chromium-to-system-ALSA fixtures pass; physical BMW speakers remain a
+vehicle test. A bounded async shutdown hook and optional authorized CDM
+registration are included. See [audio](docs/AUDIO.md), [DRM](docs/DRM.md) and
+[tests](docs/TESTING.md).
+
+## Historical 0.11.0 changes
 
 Ordered rotary input, visible page focus, correct Enter/Space activation,
 shadow/same-origin frame form detection, tracked popup tabs preserving opener
@@ -44,10 +54,10 @@ local session. This does not certify any subscription provider or the real MGU.
 Netflix currently fails before its password step. Disney+ login has reached the
 profile-PIN step and confirmed visible playback, fullscreen and controller
 play/pause in the laptop emulator. YouTube, Prime Video and
-Paramount+ require further qualification. Vehicle audio is also unconfirmed.
+Paramount+ require further qualification. Audible vehicle output from the new integration is also unconfirmed.
 Media is enabled in the backend. An earlier private build rendered muted test
 video on the author's MGU; the new packaging still needs hardware qualification.
-Chromium does not provide a CDM or BMW audio routing.
+Chromium does not provide a CDM. Version 0.12.0 adds the separate BMW audio route.
 
 Version 0.9.0 adds opt-in encrypted session and HTTP-cache persistence, separate
 site/cache/history clearing, and an explicit origin-bound password manager.

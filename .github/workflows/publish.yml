@@ -1,0 +1,110 @@
+name: Publish audited Browser release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - release/0.12.0/**
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Audited release metadata version
+        required: true
+        default: '0.12.0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-mgu-browser
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'pllanaio/mgu-browser'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ inputs.version || '0.12.0' }}
+    steps:
+      - name: Check out publication controls
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: publish-control
+          persist-credentials: false
+      - name: Read source-locked release descriptor
+        id: descriptor
+        run: |
+          python3 - <<'PY'
+          import json,os,pathlib,re
+          version=os.environ['RELEASE_VERSION']
+          if not re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)',version):
+              raise SystemExit('Invalid release version')
+          conf=json.loads((pathlib.Path('publish-control/release')/version/'publication.json').read_text())
+          if conf['repository']!='pllanaio/mgu-browser' or conf['version']!=version or not re.fullmatch('[0-9a-f]{40}',conf['sourceCommit']):
+              raise SystemExit('Release descriptor must name this repository and one full source commit')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as output:
+              output.write('source_commit='+conf['sourceCommit']+'\n')
+          PY
+      - name: Check out audited source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ steps.descriptor.outputs.source_commit }}
+          path: source
+          persist-credentials: false
+      - name: Download immutable unchanged native base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release download v0.10.0 --repo pllanaio/mgu-browser
+          --pattern 'mgu-browser@0.10.0.tgz' --dir "$RUNNER_TEMP/base"
+      - name: Build source-verified native runtime and frontend
+        working-directory: source
+        env:
+          MGU_OUT: ${{ runner.temp }}/frontend
+        run: |
+          umask 077
+          python3 release/native_build.py --out "$RUNNER_TEMP/native-sysroot"
+          python3 release/build.py --out "$RUNNER_TEMP/packages" --runtime-only --runtime-base "$RUNNER_TEMP/base/mgu-browser@0.10.0.tgz" --native-sysroot "$RUNNER_TEMP/native-sysroot"
+          python3 tools/build_store.py --app mgu_browser --version "$RELEASE_VERSION" --source apps/mgu_browser --release-package
+          cp "$RUNNER_TEMP/frontend/mgu_browser@$RELEASE_VERSION.tgz" "$RUNNER_TEMP/packages/"
+          python3 ../publish-control/release/publish.py prepare --source "$PWD" --metadata "../publish-control/release/$RELEASE_VERSION" --out "$RUNNER_TEMP/packages"
+      - name: Run core regressions and publisher ordering tests
+        working-directory: source
+        run: |
+          node --test test/*.test.js
+          python3 ../publish-control/release/test_publish.py
+      - name: Test the packaged native audio bridge with GLIBC 2.27 and old ALSA
+        working-directory: source
+        run: |
+          mkdir "$RUNNER_TEMP/packaged-runtime"
+          tar -xzf "$RUNNER_TEMP/packages/mgu-browser@$RELEASE_VERSION.tgz" -C "$RUNNER_TEMP/packaged-runtime"
+          python3 test/prepare_audio_abi_fixture.py --out .local/audio-abi/root --cache .local/audio-abi/cache
+          export MGU_AUDIO_BRIDGE="$RUNNER_TEMP/packaged-runtime/files/audio-bridge"
+          export MGU_AUDIO_LOADER="$PWD/.local/audio-abi/root/lib/x86_64-linux-gnu/ld-2.27.so"
+          export MGU_AUDIO_LIBRARY_PATH="$PWD/.local/audio-abi/root/lib/x86_64-linux-gnu:$PWD/.local/audio-abi/root/usr/lib/x86_64-linux-gnu"
+          export MGU_TEST_CHROMIUM="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          test -n "$MGU_TEST_CHROMIUM"
+          node test/chromium_vehicle_audio_smoke.js
+      - name: Check out pinned Store validator
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: robertnisipeanu/mgu-store
+          ref: 8cfae23db27e51d86f84e65b13ce0592668d8df9
+          path: store
+          persist-credentials: false
+      - name: Validate packages, source bytes, native provenance and Store catalog
+        run: >-
+          node source/test/store_package_smoke.js "$GITHUB_WORKSPACE/store"
+          "$RUNNER_TEMP/packages/mgu_browser@$RELEASE_VERSION.tgz"
+          "$RUNNER_TEMP/packages/mgu-browser@$RELEASE_VERSION.tgz"
+          "$RUNNER_TEMP/packages/catalog.json"
+      - name: Publish verified immutable assets, then switch Store catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 publish-control/release/publish.py publish --source "$GITHUB_WORKSPACE/source"
+          --metadata "publish-control/release/$RELEASE_VERSION" --out "$RUNNER_TEMP/packages"

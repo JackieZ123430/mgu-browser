@@ -4,11 +4,13 @@ Ein experimenteller Browser für BMW MGU / iDrive 7: eine native, mit dem
 iDrive-Controller bedienbare Oberfläche und eine getrennte Chromium-Engine
 für echtes HTML, CSS und JavaScript.
 
-**Version 0.11.0 – experimentelle Store-Pakete für MGU / iDrive 7, x86_64.**
+**Version 0.12.0 – experimentelle Store-Pakete für MGU / iDrive 7, x86_64.**
 Oberfläche, native Runtime und eine private Chromium-Engine werden gemeinsam
 über einen Store-Katalog verteilt. Der eigene Code steht unter MIT.
-**Die BMW-Lautsprecherausgabe ist noch nicht angebunden. YouTube- und
-Abonnement-Streaming sind noch nicht als funktionierend bestätigt.**
+**Die BMW-Audioanbindung ist implementiert, aber mit diesem Browserstand noch
+nicht auf einer echten Headunit hörbar getestet. Geschützte Streams benötigen
+ein separat autorisiert bereitgestelltes Widevine-Modul; Anbieterwiedergabe
+ist nicht bestätigt.**
 Die Veröffentlichung ist ein Entwicklungsstand, keine Freigabe für alle
 MGU-Firmwarestände. Geprüfte Bereiche und offene Punkte stehen unter [Tests](docs/TESTING.md).
 
@@ -26,8 +28,8 @@ verknüpft die Pakete und ihre Abhängigkeiten:
 
 | Paket | Version | Inhalt |
 | --- | --- | --- |
-| Browser | 0.11.0 | Native Oberfläche, iDrive-Bedienung, Tabs, Einstellungen |
-| Browser Runtime | 0.11.0 | Backend, native IPC-/Bildmodule, begrenztes Profil-Dateisystem |
+| Browser | 0.12.0 | Native Oberfläche, iDrive-Bedienung, Tabs, Einstellungen |
+| Browser Runtime | 0.12.0 | Backend, native IPC-/Bildmodule, begrenztes Profil-Dateisystem |
 | Chromium Engine | 0.1.0 | Debian Chromium 156.0.8078.79 mit privaten Bibliotheken und Sandbox |
 
 MGU Deploy, Renderer und Internet uplink kommen aus der offiziellen Store-Quelle.
@@ -75,6 +77,23 @@ belegt keine Fehlerfreiheit. Die neue Prüfung verwendet eine echte sandboxed Ch
 Pop-ups, Video und Audio-Ausgabe in einen lokalen Testsink. Der genaue Umfang
 und die Grenzen stehen im [Testbericht für 0.11.0](docs/TESTING.md).
 
+## Neu in 0.12.0
+
+- Konkrete BMW-Audioanbindung über AudioManager und SmartX: Ausgabe erst nach
+  bestätigter Verbindung, Freigabe bei Pause/Fokusverlust/Schließen. Bereits
+  benutzte CarLife-Kanäle werden nicht übernommen.
+- Eigener unprivilegierter Audio-Prozess verbindet Chromiums private ALSA mit
+  der vorhandenen Fahrzeug-ALSA. Echte PCM-Daten, Puffergrenzen, Wiederaufnahme
+  ohne alten Ton und ein stummer Fehlerfall sind lokal geprüft.
+- Begrenzter asynchroner App-Shutdown erlaubt geordnetes Aufräumen.
+- Registrierung eines separat bereitgestellten, autorisierten Linux-x86_64-CDM
+  mit Pfad-/Manifest-/ABI-Prüfung und klareren DRM-Statusmeldungen.
+
+Unter **Einstellungen → Medien & Streaming** zeigt die App den Audiozustand;
+**Testton (1 s)** fordert den Fahrzeugkanal vor der Tonerzeugung an. Eine
+bestätigte Verbindung ist noch kein Nachweis hörbarer Lautsprecher. Details:
+[Audio](docs/AUDIO.md), [DRM](docs/DRM.md), [Tests](docs/TESTING.md).
+
 ## Neu in 0.11.0
 
 - Geordnete iDrive-Eingaben mit sichtbarem Website-Fokus; Drücken aktiviert
@@ -87,10 +106,8 @@ und die Grenzen stehen im [Testbericht für 0.11.0](docs/TESTING.md).
 - Unter **Einstellungen → Medien & Streaming** stehen Wiedergabe/Pause,
   Video-Vollbild, Audio-Ausgangsstatus und ein expliziter Testton bereit.
 
-**Ton:** Die Chromium-Ausgabe in einen konfigurierten Linux-Audioausgang wird
-mit echten PCM-Daten geprüft. Die Anbindung an BMWs Lautsprechersystem ist
-weiterhin offen. Der Testton ist eine Diagnose und kein Nachweis hörbarer
-Fahrzeugausgabe. Einrichtung und Grenzen: [Audio](docs/AUDIO.md).
+**Historischer Ton-Stand 0.11.0:** Diese Version prüft Linux-Ausgabe und Testton;
+die konkrete Fahrzeug-Anbindung ist Teil von 0.12.0, siehe oben.
 
 ## Was der Browser heute kann
 
@@ -209,7 +226,7 @@ Das ist kein Nachweis der Unterstützung jedes Abonnementdienstes.
 | Disney+ | Anmeldung bleibt nach vollständigem App-/Engine-Neustart erhalten. Bild/Vollbild funktionieren. Zuverlässige Auswahl der eigenen Player-Buttons per iDrive ist noch nicht bestätigt; der letzte sichtbare Test blieb auf „Zurück“. |
 | Prime Video | Direktzugriff vorhanden; angemeldete Wiedergabe noch nicht geprüft |
 | Paramount+ | Direktzugriff vorhanden; angemeldete Wiedergabe noch nicht geprüft |
-| Fahrzeuglautsprecher | Audio-Routing und hörbare Wiedergabe auf der MGU noch nicht bestätigt |
+| Fahrzeuglautsprecher | AudioManager-/SmartX-Anbindung implementiert; hörbarer Test dieses Stands auf der MGU offen |
 | Geschützte Wiedergabe auf echter MGU | Nicht bestätigt; Laptop-Ergebnisse sind nicht auf die Headunit übertragbar |
 
 **Die Headunit-Quellkonfiguration in `backend/server.js` aktiviert Medien jetzt

@@ -1,5 +1,52 @@
 # Teststand
 
+## Update 0.12.0 — 7. November 2026
+
+Die neue Audio-Pipeline ist eine konkrete Fahrzeug-Anbindung mit lokal
+prüfbarem Ende-zu-Ende-Datenweg. Echtes sandboxed Chromium liefert über seine
+private ALSA und eine begrenzte FIFO an den gebauten nativen Prozess; dieser
+schreibt über System-ALSA in eine eigene Dateisink-Fixture. Nichtleere PCM-Daten,
+Echtzeittakt, Verwerfen bei Pause, Wiederaufnahme ohne alten Ton, Prozessende
+und ein stummer Fehlerfall werden tatsächlich geprüft. Die SmartX-Bibliotheken
+und Lautsprecher der realen Headunit stehen in dieser Umgebung nicht bereit.
+
+AudioManager-Tests decken fremde/belegte Quellen, verifizierten Verbindungsaufbau,
+eigene Verbindungs-IDs, Provider-Neustarts, unterbrochenen Fokus, verspätete
+Antworten und geordnetes Freigeben ab. Der Paketbau prüft alle nativen ELF-
+Importe auf GLIBC höchstens 2.27 und verwendet den statischen Launcher. Die
+native Bridge importiert beim lokalen Build maximal GLIBC 2.17 und bindet
+`libdl.so.2` ausdrücklich ein. Der tatsächlich paketierte Helfer bestand den
+PCM-Test zusätzlich unter echtem Ubuntu-18-Loader, glibc/libdl 2.27 und ALSA
+1.1.3. Die öffentlichen Testpakete sind per SHA-256 gepinnt; ihre Herkunft
+wurde anhand des signierten Ubuntu-Paketindexes überprüft. Die alten
+Bibliotheken werden nur isoliert zum Test geladen und nicht verteilt.
+
+74/74 JavaScript-Kerntests bestanden ohne Auslassungen. Neun getrennte
+Publisher-Tests prüfen unter anderem Tag-Bindung, Konsistenz und Katalog-Rollback.
+
+Neue Tests prüfen außerdem den maximal 1,5 Sekunden langen Shutdown-Cleanup,
+Einschränkungen auf rootgeschützte CDM-Konfiguration, Manifest-/ELF-Prüfungen,
+Sitzungsarchive ohne Audio-/CDM-Laufzeitdateien und HTML-/WebAudio-Aktivität über
+Tabs. Der echte DRM-Test bestätigt EME/ClearKey, aber ohne CDM erwartungsgemäß
+`Widevine: NotSupportedError`. Es wurde kein positiver Widevine-/Anbieter-
+Wiedergabetest vorgetäuscht. Die finalen Anzahlen und konkreten Befehle stehen
+im versionierten `test-results.json` der Veröffentlichung.
+
+Die CI baut die neuen nativen MIT-Helfer selbst und prüft Quellen/Compiler-
+Provenienz, ABI und die tatsächlich gepackte Audio-Bridge vor Veröffentlichung.
+Abweichende vertrauenswürdige Compiler können andere Binärbytes liefern; die
+Prüfsummen beziehen sich deshalb auf genau die anschließend geprüften und
+hochgeladenen Artefakte. Der Katalog wird zuletzt umgeschaltet. Der reale
+Store-Parser, die Donor-Aufbereitung und der Vergleich der gepackten JS-Dateien
+mit dem Quellstand bleiben Teil der Paketannahme.
+
+**Offen bleiben reale Lautsprecher, ganze Fahrzeug-Lebenszyklen und geschützte
+Anbieterwiedergabe mit einem autorisierten CDM.** Die neuen lokalen Prüfungen
+sind kein Nachweis für jede MGU-Firmware. Download-/Berechtigungsdialoge sowie
+alle fremden Frame-/Shadow-Formulare sind weiterhin keine vollständig fertigen
+Desktop-Browserabläufe.
+
+
 ## Update 0.11.0 — 7. November 2026
 
 Prüfumgebung: unprivilegierter Linux-x86_64-Benutzer, Node 24.22.1,

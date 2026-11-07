@@ -9,12 +9,16 @@ test('Portable encrypted storage preserves selected profile data and never resto
         const profile=path.join(root,'session-fixture');fs.mkdirSync(profile);fs.mkdirSync(profile+'/Default');fs.mkdirSync(profile+'/Default/Cache');
         fs.writeFileSync(profile+'/Default/Cookies','fixture-cookie-only');fs.writeFileSync(profile+'/Default/Cache/item','fixture-cached-response');
         fs.writeFileSync(profile+'/Default/History','fixture-history');fs.writeFileSync(profile+'/Default/Login Data','fixture-password-db');
+        fs.mkdirSync(profile+'/mgu-audio');fs.writeFileSync(profile+'/mgu-audio/alsa.conf','temporary PCM routing');
+        fs.mkdirSync(profile+'/WidevineCdm');fs.writeFileSync(profile+'/WidevineCdm/latest-component-updated-widevine-cdm','temporary native module selection');
         await store.capture(profile);assert(!fs.readFileSync(root+'/protected/sessions.bin').includes(Buffer.from('fixture-cookie-only')));
+        assert(!store.archive().some(e=>/^(mgu-audio|WidevineCdm)\//.test(e.name)),'Session archives must exclude runtime audio and native module configuration');
         const reopened=new SecureBrowserData(root+'/protected');await assert.rejects(()=>reopened.restore(root+'/session-locked'),/entsperren/);
         await assert.rejects(()=>reopened.unlock('incorrect fixture password'),/ungültig/);await reopened.unlock('fixture master phrase 2468');
         await assert.rejects(()=>reopened.restore(root+'/session-cancelled',()=>false),/abgebrochen/);assert.equal(fs.readdirSync(root+'/session-cancelled').length,0);
         const restored=root+'/session-restored';await reopened.restore(restored);assert.equal(fs.readFileSync(restored+'/Default/Cookies','utf8'),'fixture-cookie-only');
         assert(!fs.existsSync(restored+'/Default/History'));assert(!fs.existsSync(restored+'/Default/Login Data'));
+        assert(!fs.existsSync(restored+'/mgu-audio'));assert(!fs.existsSync(restored+'/WidevineCdm'));
         await reopened.clear('cache');assert(reopened.archive().every(e=>!e.name.includes('/Cache/')));
         await reopened.clear('sites');assert.equal(reopened.archive().length,0);
         await reopened.saveLogin('https://login.example.org','fixture-user','fixture-secret-123');

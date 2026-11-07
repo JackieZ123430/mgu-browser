@@ -7,9 +7,8 @@ Install compiler dependencies separately:
 ```sh
 sudo apt-get install python3 nodejs libnode-dev gcc musl-tools patchelf \
   chromium chromium-common chromium-sandbox fonts-dejavu-core libjpeg62-turbo-dev
-python3 release/build.py --out /path/to/empty-output
 MGU_OUT=/path/to/empty-frontend-output python3 tools/build_store.py \
-  --app mgu_browser --version 0.11.0 --source apps/mgu_browser --release-package
+  --app mgu_browser --version 0.12.0 --source apps/mgu_browser --release-package
 ```
 
 Published engine: Chromium `156.0.8078.79-1~deb12u1`. Signed Debian repositories
@@ -69,12 +68,61 @@ matching Debian/libjpeg/musl source archives remain available as
 `corresponding-source-0.10.0.tar` in the retained v0.10.0 release. No replacement
 engine or new third-party binaries are distributed by this update.
 
+## Audio runtime 0.12.0
+
+The audio update keeps the engine and three unchanged native helpers from the
+immutable base, but rebuilds `backend-launch` and the new `audio-bridge` from
+this repository's MIT sources. It never substitutes the old launcher after its
+source changes. Prepare a public, pinned build sysroot without root or Docker:
+
+```sh
+python3 release/native_build.py --out /path/to/empty-native-sysroot
+python3 release/build.py --out /path/to/empty-runtime-output --runtime-only \
+  --runtime-base /path/to/input/mgu-browser@0.10.0.tgz \
+  --native-sysroot /path/to/empty-native-sysroot
+```
+
+The sysroot is Debian's `musl-dev` 1.2.3-1, size/SHA-256 pinned against its signed
+package index. The changed launcher links statically. The audio writer uses the
+stock `/lib/ld-linux-x86-64.so.2`; the build refuses GLIBC imports above 2.27,
+unexpected shared dependencies or a private engine RPATH.
+The bridge explicitly retains `libdl.so.2` as a required library, because
+glibc 2.27 keeps `dlopen` there even when a newer build host merges it into libc.
+Source hashes, compiler flags/version, ELF imports and resulting binary hashes are recorded
+in `runtime-provenance.json`. Firmware ALSA/SmartX is resolved on the owner's
+headunit, and those libraries are never copied into the package. No Moonride
+GPL source or Widevine binary is included.
+
+New helper bytes may differ between trusted compiler versions. Release
+verification therefore locks the audited source commit and input hashes,
+checks native ABI and functional fixtures, checks every distributed JavaScript
+file against source, and generates exact archive/catalog hashes from that CI
+build. It does not claim byte-identical native output across different compilers.
+
+After committing and testing the source, save the current public catalog in
+`release/0.12.0/previous-catalog.json`, add the release notes and local test report,
+then lock inputs:
+
+```sh
+python3 release/publish.py lock-inputs --source . --metadata release/0.12.0 \
+  --version 0.12.0
+```
+
+The generic Actions workflow reads that descriptor's complete source SHA,
+rebuilds the changed helpers, runs the actual packaged Chromium/FIFO/ALSA
+fixture through a pinned public Ubuntu 18 GLIBC 2.27/libasound 1.1.3 runtime,
+and runs the Store's validator, then publishes immutable assets using the
+job's repository-scoped token. Uploaded downloads are checked against the
+generated hashes. It uploads and verifies the new catalog under a temporary
+name before switching it last; the previous catalog is retained for recovery.
+The published 0.11.0 artifacts and their locked workflow remain unchanged.
+
 After both packages and the updated catalog are assembled, validate them with
 an independently checked-out Store source tree:
 
 ```sh
 node test/store_package_smoke.js /path/to/mgu-store \
-  /path/to/mgu_browser@0.11.0.tgz /path/to/mgu-browser@0.11.0.tgz \
+  /path/to/mgu_browser@0.12.0.tgz /path/to/mgu-browser@0.12.0.tgz \
   /path/to/catalog.json
 ```
 

@@ -44,7 +44,7 @@ function dpapi(helper){
     });
 }
 const isCache=name=>/(^|\/)(Cache|Code Cache|GPUCache|DawnCache|ShaderCache|GrShaderCache)(\/|$)/.test(name);
-const excluded=name=>/(^|\/)(Singleton[^/]*|Crashpad|BrowserMetrics[^/]*|History(?:-journal)?|Visited Links|Top Sites(?:-journal)?|Sessions|Login Data(?:-journal)?|Safe Browsing[^/]*)(\/|$)/.test(name);
+const excluded=name=>/(^|\/)(Singleton[^/]*|Crashpad|BrowserMetrics[^/]*|History(?:-journal)?|Visited Links|Top Sites(?:-journal)?|Sessions|Login Data(?:-journal)?|Safe Browsing[^/]*|mgu-audio|WidevineCdm)(\/|$)/.test(name);
 function validName(name){return !!name&&name.length<2048&&!name.includes('\\')&&!name.includes('\0')&&!name.startsWith('/')&&!name.split('/').some(p=>!p||p==='.'||p==='..'||p.includes(':'));}
 function pack(entries){
     const chunks=[];let total=0;

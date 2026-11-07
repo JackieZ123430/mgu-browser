@@ -2,14 +2,16 @@
 const cp=require('child_process'),fs=require('fs'),path=require('path'),EventEmitter=require('events');
 const CdpPipe=require('./cdp_pipe'),PNG=require('./png_frame'),URLPolicy=require('./url_policy');
 const Metadata=require('./browser_metadata');
-const Audio=require('./browser_audio');
+const Audio=require('./browser_audio'),DRM=require('./browser_drm');
+const VehicleAudioBridge=require('./browser_audio_bridge');
 let JPEG=null;try{JPEG=require('./jpeg_frame.node');}catch(e){}
 const monotonic=()=>{const t=process.hrtime();return t[0]*1000+t[1]/1e6;};
 
 class BrowserSession extends EventEmitter {
     constructor(options) {
         super();this.options=options;this.gate=options.gate;this.child=null;this.pipe=null;
-        this.audio=Audio.output(Object.assign({},process.env,options.env||{}));
+        this.audio=Audio.output(Object.assign({},process.env,options.env||{}));this.webAudioContexts=new Map();this.drm=DRM.status();
+        this.vehicleAudio=options.vehicleAudio?new VehicleAudioBridge(options.vehicleAudio):null;
         this.session=null;this.epoch=0;this.lastFrame=0;this.decoding=false;this.profile=null;
         this.performance={codec:JPEG?'jpeg-native':'png-js',frames:0,decodeMs:0,encodedBytes:0};
         this.closing=Promise.resolve();
@@ -34,16 +36,22 @@ class BrowserSession extends EventEmitter {
         if(!profileStat.isDirectory()||profileStat.isSymbolicLink()||profileStat.uid!==process.getuid())throw new Error('Profilordner gehört nicht dem Browser-Benutzer');
         const profile=this.profile=fs.mkdtempSync(path.join(this.options.profileRoot,'session-'));
         try{if(this.options.profileStore)await this.options.profileStore.restore(profile,()=>epoch===this.epoch&&this.profile===profile&&this.gate.check().allowed);this.requireAllowed();if(epoch!==this.epoch||this.profile!==profile)throw new Error('Browserstart abgebrochen');}catch(e){removeProfile(profile,this.options.profileRoot);if(this.profile===profile)this.profile=null;throw e;}
+        try{this.drm=DRM.prepare(profile,this.options);}catch(e){removeProfile(profile,this.options.profileRoot);if(this.profile===profile)this.profile=null;throw e;}
+        this.webAudioContexts.clear();
+        let vehicleOutput=null;
+        if(this.vehicleAudio&&!this.options.mediaDisabled){try{vehicleOutput=await this.vehicleAudio.start(profile);}catch(e){if(this.vehicleAudio.error==='audio-helper-starting')this.vehicleAudio.fail('audio-helper-unavailable');this.emit('diagnostic','Vehicle audio helper unavailable');}}
+        if(epoch!==this.epoch||this.profile!==profile||!this.gate.check().allowed){if(this.vehicleAudio)await this.vehicleAudio.stop();removeProfile(profile,this.options.profileRoot);throw new Error('Browserstart abgebrochen');}
         const args=['--headless','--disable-gpu','--remote-debugging-pipe','--no-first-run','--no-default-browser-check','--lang='+this.locale,
             '--disable-sync','--disable-background-networking','--disable-extensions','--disable-component-update',
             '--disable-breakpad','--disable-dev-shm-usage','--disk-cache-size=16777216','--media-cache-size=8388608',
             '--window-size='+this.viewport.width+','+this.viewport.height,'--user-data-dir='+this.profile,'about:blank'];
         if(this.options.mediaDisabled)args.push('--disable-blink-features=WebCodecs');
-        this.audio.reset();args.push.apply(args,this.audio.args);
+        if(this.options.mediaDisabled||this.vehicleAudio&&!vehicleOutput)args.push('--mute-audio');
+        this.audio.reset();args.push.apply(args,vehicleOutput?vehicleOutput.args:this.audio.args);
         if(this.options.profileStore&&this.options.profileStore.prefs.rememberSessions)args.push('--restore-last-session');
         // Browser/renderer sandbox stays enabled. No --no-sandbox, root browser,
         // insecure TLS flag, public debugging port or remote rendering backend.
-        const child=cp.spawn(this.options.binary,args,{stdio:['ignore','ignore','pipe','pipe','pipe'],detached:true,env:Object.assign({},process.env,this.options.env||{})});
+        const child=cp.spawn(this.options.binary,args,{stdio:['ignore','ignore','pipe','pipe','pipe'],detached:true,env:Object.assign({},process.env,this.options.env||{},vehicleOutput?vehicleOutput.env:{})});
         this.child=child;
         const pipe=this.pipe=new CdpPipe(child.stdio[3],child.stdio[4]);
         child.on('error',e=>{this.emit('fault',e);this.stop('Browser konnte nicht starten');});
@@ -74,7 +82,8 @@ class BrowserSession extends EventEmitter {
         const tab=this.tabs.find(t=>t.session===event.sessionId);
         if(!tab)return;
         const active=event.sessionId===this.session;
-        if(event.method==='Page.frameNavigated'&&!event.params.frame.parentId){if(active){this.pageGeneration++;this.focusedMediaControl=null;this.focusedMediaObject=null;this.lastMedia=null;this.emit('media',{fullscreen:false});}tab.mainFrame=event.params.frame.id;tab.url=URLPolicy.allowed(event.params.frame.url)?event.params.frame.url:'';this.emitTabs();}
+        if(event.method.indexOf('WebAudio.')===0){this.webAudioEvent(event);return;}
+        if(event.method==='Page.frameNavigated'&&!event.params.frame.parentId){if(active){this.pageGeneration++;this.focusedMediaControl=null;this.focusedMediaObject=null;this.lastMedia=null;this.emit('media',Object.assign({fullscreen:false},this.mediaActivityState||{}));}tab.mainFrame=event.params.frame.id;tab.url=URLPolicy.allowed(event.params.frame.url)?event.params.frame.url:'';this.emitTabs();}
         if(event.method==='Page.navigatedWithinDocument'&&event.params.frameId===tab.mainFrame){tab.url=URLPolicy.allowed(event.params.url)?event.params.url:'';this.emitTabs();}
         if(event.method==='Page.frameStartedLoading'&&event.params.frameId===tab.mainFrame){tab.loading=true;this.emitTabs();}
         if(event.method==='Page.loadEventFired'){tab.loading=false;this.updateTab(tab);}
@@ -186,9 +195,11 @@ class BrowserSession extends EventEmitter {
         return this.send('Runtime.evaluate',{expression:'JSON.stringify({ready:document.readyState,visible:document.visibilityState,scripts:document.scripts.length,resources:performance.getEntriesByType("resource").length})',returnByValue:true});
     }
     stop(reason) {
+        const audioClosing=this.vehicleAudio?this.vehicleAudio.stop():Promise.resolve();
+        this.webAudioContexts.clear();
         if(this.pendingPopups)this.pendingPopups.clear();
         this.tabs=[];this.activeTab=null;this.pageGeneration++;this.emitTabs();
-        this.lastMedia=null;this.emit('media',{fullscreen:false});
+        this.lastMedia=null;this.emit('media',{fullscreen:false,playing:false,audible:false,webAudioRunning:0});
         clearTimeout(this.navigationTimer);clearTimeout(this.inputTimer);this.lastInput=null;
         clearTimeout(this.frameTimer);this.frameTimer=null;if(this.pendingFrame){this.pendingFrame.ack();this.pendingFrame=null;}
         const child=this.child,pipe=this.pipe,profile=this.profile;this.child=null;this.pipe=null;this.session=null;this.profile=null;this.epoch++;
@@ -199,7 +210,7 @@ class BrowserSession extends EventEmitter {
             if(pipe&&!pipe.closed)pipe.send('Browser.close',{},null,2000).catch(()=>{});
             let exited=child.exitCode!==null||child.signalCode!==null,forced=false,interrupted=false,cleaned=false,termTimer,killTimer,deadline;
             this.closing=new Promise(resolve=>{
-                const cleanup=()=>{if(cleaned)return;cleaned=true;clearTimeout(termTimer);clearTimeout(killTimer);clearTimeout(deadline);setTimeout(async()=>{try{if(this.options.profileStore&&!forced&&!interrupted&&child.exitCode===0&&!child.signalCode)await this.options.profileStore.capture(profile);else if(this.options.profileStore)this.options.profileStore.skipCapture=false;}catch(e){this.emit('diagnostic','Geschützte Sitzung konnte nicht gespeichert werden');}finally{try{removeProfile(profile,this.options.profileRoot);}catch(e){this.emit('diagnostic','Profile cleanup failed');}this.shutdownFault=null;resolve();}},500);};
+                const cleanup=()=>{if(cleaned)return;cleaned=true;clearTimeout(termTimer);clearTimeout(killTimer);clearTimeout(deadline);setTimeout(async()=>{try{await audioClosing;if(this.options.profileStore&&!forced&&!interrupted&&child.exitCode===0&&!child.signalCode)await this.options.profileStore.capture(profile);else if(this.options.profileStore)this.options.profileStore.skipCapture=false;}catch(e){this.emit('diagnostic','Geschützte Sitzung konnte nicht gespeichert werden');}finally{try{removeProfile(profile,this.options.profileRoot);}catch(e){this.emit('diagnostic','Profile cleanup failed');}this.shutdownFault=null;resolve();}},500);};
                 if(exited)cleanup();else child.once('close',()=>{exited=true;cleanup();});
                 if(!exited)deadline=setTimeout(()=>{this.shutdownFault=new Error('Browser-Prozess nicht beendet. Backend-Neustart erforderlich.');this.emit('fault',this.shutdownFault);resolve();},9000);
             });
@@ -207,6 +218,7 @@ class BrowserSession extends EventEmitter {
             if(!exited){termTimer=setTimeout(()=>signal('SIGTERM'),2500);killTimer=setTimeout(()=>{if(!exited){forced=true;this.emit('diagnostic','Browser reagiert nicht; eigene Prozessgruppe wird beendet');signal('SIGKILL');}},5500);}
         }
         if(pipe)pipe.close(new Error(reason||'Browser geschlossen'));
+        if(!child)this.closing=audioClosing;
     }
     destroy() {clearInterval(this.watch);clearInterval(this.mediaWatch);this.stop('App geschlossen');}
 }

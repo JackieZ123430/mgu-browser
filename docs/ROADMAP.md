@@ -26,6 +26,9 @@ werden nicht Teil von App-Paketen oder Testberichten.
 
 ## 2. Audio und BMW-Medienintegration
 
+- [x] AudioManager-/SmartX-Anbindung mit eigener Verbindung, begrenzter PCM-Bridge
+  und lokalem Ende-zu-Ende-Test ab 0.12.0 implementieren.
+
 - [ ] Audio-Quelle, Audio-Fokus, Lautstärke, Unterbrechungen und hörbare Ausgabe
   über die Fahrzeuglautsprecher nachvollziehbar nachweisen.
 - [ ] Prüfen, ob der BMW-Medienplayer für geeignete Medien verwendet werden kann.

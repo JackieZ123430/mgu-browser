@@ -17,7 +17,9 @@ let lastNetworkProbe=0;
 function status(){fs.writeFileSync('/var/opt/mgu-browser/data/service-state.json',JSON.stringify({uid:process.getuid(),connected:!!owner,allowed,generation,phase,pid:process.pid}));}
 const now=()=>{const t=process.hrtime();return t[0]*1000+t[1]/1e6;};
 const gate={onBlock:null,check(){return {allowed:allowed&&now()-updated>=0&&now()-updated<1500};}};
-const browser=new Browser({gate,mediaDisabled:false,binary:'/var/opt/mgu-browser/current/browser-launch',profileRoot:'/var/opt/mgu-browser/work/profiles',profileStore,viewport:{width:1280,height:384},env:{FONTCONFIG_FILE:ENGINE+'/fonts.conf',CHROME_DEVEL_SANDBOX:ENGINE+'/chrome-sandbox'}});
+const audioGid=Number(process.env.MGU_BROWSER_AUDIO_GID);
+const vehicleAudio=Number.isInteger(audioGid)&&audioGid>0&&audioGid<=65535?{binary:'/var/opt/mgu-browser/current/audio-bridge',gid:audioGid}:null;
+const browser=new Browser({gate,mediaDisabled:false,cdmConfig:'/var/opt/mgu-browser/cdm.json',binary:'/var/opt/mgu-browser/current/browser-launch',profileRoot:'/var/opt/mgu-browser/work/profiles',profileStore,viewport:{width:1280,height:384},vehicleAudio,env:{FONTCONFIG_FILE:ENGINE+'/fonts.conf',CHROME_DEVEL_SANDBOX:ENGINE+'/chrome-sandbox'}});
 function stop(reason){allowed=false;browser.stop(reason);phase='idle';status();}
 browser.on('frame',frame=>{
     if(!owner||!gate.check().allowed||(owner.socket.writableLength||owner.socket.bufferSize||0)>2*1024*1024)return;
@@ -79,6 +81,8 @@ const server=net.createServer(socket=>{
                 case 'mediaPress':result=await browser.pressMediaControl();break;
                 case 'mediaCapabilities':result=await browser.mediaCapabilities();break;
                 case 'audioTest':result=await browser.audioTest();break;
+                case 'audioStatus':result=browser.audioStatus();break;
+                case 'audioRoute':result=await browser.audioRoute(message.enabled);break;
                 case 'privacyStatus':result=await browser.privacyStatus();break;
                 case 'privacyConfigure':result=await browser.privacyConfigure(message.prefs);break;
                 case 'vaultUnlock':try{result=await browser.vaultUnlock(message.password);}finally{message.password=null;}break;

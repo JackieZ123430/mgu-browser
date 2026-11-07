@@ -22,6 +22,9 @@ for part in ['kit','oap-sdk']:
 kit=state/'kit'
 if not (kit/'tools/emu.js').exists():
     shutil.copytree(upstream/'kit',kit,dirs_exist_ok=True)
+sys.path.insert(0,str(project/'tools'))
+from kit_shutdown import patch_shutdown
+patch_shutdown(kit)
 # Respect an app's explicit touch claim in the former HMI back-column area.
 emu=kit/'tools/emu.js';text=emu.read_text()
 old='const col = x < BACK_COL.w && y < BACK_COL.h;'

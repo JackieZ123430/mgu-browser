@@ -11,7 +11,7 @@ const profileStore=new SecureBrowserData(path.join(base,'protected'),fs.existsSy
 const now=()=>{const t=process.hrtime();return t[0]*1000+t[1]/1e6;};
 let owner=null,allowed=false,updated=0,generation=0,phase='idle',lastURL=null,frames=0;
 const gate={check:()=>({allowed:allowed&&now()-updated<1500})};
-const browser=new Browser({gate,mediaDisabled:false,binary:process.env.MGU_CHROMIUM,profileRoot:path.join(base,'profiles'),profileStore,viewport:{width:1280,height:384},env:{HOME:process.env.HOME}});
+const browser=new Browser({gate,mediaDisabled:false,cdmDirectory:process.env.MGU_BROWSER_CDM_DIRECTORY,binary:process.env.MGU_CHROMIUM,profileRoot:path.join(base,'profiles'),profileStore,viewport:{width:1280,height:384},env:{HOME:process.env.HOME}});
 function status(){fs.writeFileSync(path.join(base,'service-state.json'),JSON.stringify({laptop:true,uid:process.getuid(),pid:process.pid,connected:!!owner,allowed:gate.check().allowed,phase,url:lastURL,frames,codec:browser.performance.codec}));}
 function stop(reason){allowed=false;browser.stop(reason);phase='idle';status();}
 browser.on('frame',frame=>{
@@ -59,6 +59,8 @@ const server=net.createServer(socket=>{
                 case 'mediaAction':result=await browser.mediaAction(m.action);break;
                 case 'mediaCapabilities':result=await browser.mediaCapabilities();break;
                 case 'audioTest':result=await browser.audioTest();break;
+                case 'audioStatus':result=browser.audioStatus();break;
+                case 'audioRoute':result=await browser.audioRoute(m.enabled);break;
                 case 'privacyStatus':result=await browser.privacyStatus();break;
                 case 'privacyConfigure':result=await browser.privacyConfigure(m.prefs);break;
                 case 'vaultUnlock':try{result=await browser.vaultUnlock(m.password);}finally{m.password=null;}break;

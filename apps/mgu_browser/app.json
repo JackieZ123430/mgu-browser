@@ -2,12 +2,23 @@
   "id": "mgu_browser",
   "title": "Browser",
   "description": "Browser mit Startseite, Verlauf, Lesezeichen und iDrive-Steuerung",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "vendor": "custom",
   "loggingId": "OA9B",
   "maxDiskUsage": 268435456,
   "iconGlyph": "WEB",
-  "signals": {},
+  "signals": {
+    "org.genivi.am.commandinterface.CommandControl": {
+      "_optional": "Vehicle speaker output",
+      "_instances": "1",
+      "_methods": ["connect", "disconnect", "getListMainConnections", "getListMainSources"]
+    },
+    "org.genivi.am.routinginterface.RoutingControlObserver": {
+      "_optional": "Vehicle speaker output",
+      "_instances": "1",
+      "_methods": ["hookSourceAvailablityStatusChange"]
+    }
+  },
   "screens": [
     {
       "name": "MAIN",

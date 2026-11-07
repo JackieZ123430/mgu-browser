@@ -91,7 +91,7 @@ module.exports={
             this.tabs.push(tab);
             const check=()=>{if(this.pipe!==pipe||this.epoch!==epoch||!this.tabs.includes(tab))throw new Error('Tabstart abgebrochen');this.requireAllowed();};
             const send=async(method,params)=>{check();const result=await pipe.send(method,params,tab.session);check();return result;};
-            await send('Page.enable');await send('Runtime.enable');await send('Network.enable');await send('Log.enable');
+            await send('Page.enable');await send('Runtime.enable');await send('Network.enable');await send('Log.enable');await send('WebAudio.enable').catch(()=>{});
             await this.applyLocale(tab.session,pipe);check();
             await this.installVideoFit(tab.session);check();
             if(this.options.mediaDisabled)await send('Fetch.enable',{patterns:[{urlPattern:'*',resourceType:'Document',requestStage:'Response'},{urlPattern:'*',resourceType:'Media',requestStage:'Request'}]});
@@ -119,7 +119,7 @@ module.exports={
         clearTimeout(this.navigationTimer);clearTimeout(this.inputTimer);clearTimeout(this.frameTimer);
         this.frameTimer=null;if(this.pendingFrame){this.pendingFrame.ack();this.pendingFrame=null;}
         this.pageGeneration++;this.lastInput=null;this.lastFrame=0;
-        this.lastMedia=null;this.emit('media',{fullscreen:false});
+        this.lastMedia=null;this.emit('media',Object.assign({fullscreen:false},this.mediaActivityState||{}));
         this.session=tab.session;this.target=tab.target;this.activeTab=id;this.mainFrame=tab.mainFrame;
         this.emitTabs();this.emit('tabSelected',{id,url:tab.url,title:tab.title||'',loading:!!tab.loading,popup:!!tab.popup});
         this.emit('input',{editable:false,password:false});

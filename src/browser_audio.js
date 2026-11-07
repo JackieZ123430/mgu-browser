@@ -37,7 +37,13 @@ function output(env,io){
 // Its graph is short, quiet and closed even when resuming the device fails.
 const tone='(async()=>{const A=window.AudioContext||window.webkitAudioContext;if(!A)throw new Error("AudioContext unavailable");const c=new A();let timer;try{await Promise.race([c.resume(),new Promise((_,reject)=>timer=setTimeout(()=>reject(new Error("Audio resume timeout")),1800))]);clearTimeout(timer);if(c.state!=="running")throw new Error("Audio not running");const o=c.createOscillator(),g=c.createGain(),t=c.currentTime;o.frequency.value=440;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.035,t+.03);g.gain.setValueAtTime(.035,t+.95);g.gain.linearRampToValueAtTime(0,t+1);o.connect(g);g.connect(c.destination);o.start(t);o.stop(t+1);await new Promise(resolve=>setTimeout(resolve,1100));return JSON.stringify({generated:true,durationMs:1000,audibleVerified:false});}finally{clearTimeout(timer);await c.close();}})()';
 const methods={
-    audioStatus(){return this.audio.status(!this.options.mediaDisabled);},
+    audioStatus(){return this.vehicleAudio?this.vehicleAudio.status(!this.options.mediaDisabled):this.audio.status(!this.options.mediaDisabled);},
+    async audioRoute(enabled){
+        if(typeof enabled!=='boolean')throw new Error('Ungültiger Audiozustand');
+        if(enabled){this.requireAllowed();if(this.options.mediaDisabled)throw new Error('Medien sind deaktiviert');}
+        if(!this.vehicleAudio)throw new Error('Fahrzeug-Audio ist in dieser Laufzeit nicht verfügbar');
+        return this.vehicleAudio.route(enabled);
+    },
     async audioTest(){
         this.requireAllowed();if(this.options.mediaDisabled)throw new Error('Medien sind deaktiviert');
         if(this.audioTestPending)throw new Error('Testton läuft bereits');

@@ -7,14 +7,31 @@ URLs, byte sizes and SHA-256 values.
 
 | Component | Version | Purpose |
 | --- | --- | --- |
-| `mgu_browser` | 0.11.0 | SDK-free OAP frontend and iDrive UI |
-| `mgu-browser` | 0.11.0 | Native backend, IPC and uplink broker |
+| `mgu_browser` | 0.12.0 | SDK-free OAP frontend and iDrive UI |
+| `mgu-browser` | 0.12.0 | Native backend, IPC and uplink broker |
 | `mgu-browser-engine` | 0.1.0 | Debian Chromium 156.0.8078.79 and private libraries |
 
-The frontend requires runtime 0.11.0, engine 0.1.0, `mgu-uplink` 0.7.3,
+The frontend requires runtime 0.12.0, engine 0.1.0, `mgu-uplink` 0.7.3,
 `mgu-render` 0.6.11 and `mgu-deploy` 0.7.17 or newer. Keep the official Store
 source enabled for the last three. The Store installs dependencies automatically.
 This release targets **ID7 / Linux x86_64**, not ID8 or other architectures.
+
+## Update to 0.12.0
+
+Close Browser, refresh the Releases source and update both Browser and Browser
+Runtime to **0.12.0**. Chromium Engine remains **0.1.0**. The runtime builds a
+new static privilege launcher and native audio bridge from the published MIT
+sources; unchanged helpers/codec still come from the hash-verified 0.10.0 base.
+Native source hashes, compiler flags and GLIBC ABI imports are recorded in
+`runtime-provenance.json`. No firmware audio library or CDM is redistributed.
+
+The frontend's AudioManager interfaces are optional so a unit lacking them
+can still install the browser. Audio activation requires a recognized unused
+CarLifeMedia source, the existing `mgu_alsa` group and stock SmartX plugin.
+It never steals another source connection or repairs foreign locks. Test the
+explicit tone, video/pause, tab switch and app close on the target headunit.
+Details and hardware limits: [audio](AUDIO.md). Protected playback additionally
+requires a separately authorized module; see [DRM](DRM.md).
 
 ## Update to 0.11.0
 
@@ -81,7 +98,7 @@ been installed on a real vehicle. BMW speaker output is not implemented.
 YouTube/subscription-provider playback is unconfirmed; no CDM is included.**
 See [testing](TESTING.md).
 
-The 0.11.0 update reuses the exact hash-verified native helpers, N-API modules
+The historical 0.11.0 update reuses the exact hash-verified native helpers, N-API modules
 and JPEG library from 0.10.0. Their C sources must match the pinned original
 hashes before the builder accepts this path. JavaScript, frontend and metadata
 are rebuilt; the engine is not repackaged from a newer build host. The new

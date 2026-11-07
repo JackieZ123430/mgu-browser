@@ -17,6 +17,7 @@ import sys
 import tarfile
 import tempfile
 import urllib.request
+from kit_shutdown import patch_shutdown
 
 ROOT = Path(__file__).resolve().parents[1]
 KIT_COMMIT = '9b5e9cf8a49399939d51d3458fb29b6a3cec8346'
@@ -110,6 +111,7 @@ def main():
         archive = work / 'kit.tar.gz'
         kit_archive(archive)
         extract_kit(archive, work)
+        patch_shutdown(work / 'kit')
         archive.unlink()
         fonts = ROOT / 'assets' / 'ui-fonts'
         if fonts.is_dir():

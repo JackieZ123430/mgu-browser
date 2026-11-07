@@ -30,6 +30,8 @@ node test/media_engine_smoke.js
 node test/offline_engine_smoke.js
 node test/emulator_media_smoke.js
 node test/chromium_audio_smoke.js
+node test/chromium_vehicle_audio_smoke.js
+node test/chromium_drm_smoke.js
 ```
 
 Die Tests erzeugen eigene temporäre Profile und Medien. Der Audiotest benutzt

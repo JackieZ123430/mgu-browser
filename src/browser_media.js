@@ -1,4 +1,5 @@
 'use strict';
+const DRM=require('./browser_drm');
 // Fixed expressions only: no page-provided scripts, selectors or input values.
 // Search open shadow roots and same-origin frames with a fixed work budget.
 const playerLocate=`
@@ -39,9 +40,46 @@ for(let i=0;!f&&root&&root!==document.body&&i<12&&hosts.some(h=>!root.contains(h
 for(let i=0;!f&&!customRoot&&root&&root!==document.body&&i<16&&deep(root,controlSelector).filter(enabled).length<2;i++)root=root.parentElement;
 const controls=root?deep(root,controlSelector).filter(e=>e!==v&&enabled(e)&&!(e.tagName==="INPUT"&&e.type!=="range")&&(e.matches("button,[role=button],input[type=range]")||e.tabIndex>=0)):[];
 `;
-const snapshot='JSON.stringify((()=>{'+playerLocate+'const media=v||customRoot,rect=media&&media.getBoundingClientRect(),playerMode=!!media&&(!!f||rect.width*rect.height>innerWidth*innerHeight*0.3),buttons=controls,mediaButtons=buttons.filter(b=>/play|pause|wiederg|abspiel|mute|stumm|fullscreen|vollbild|seek|rewind|forward/i.test([b.getAttribute("aria-label"),b.title,b.getAttribute("data-testid")].join(" "))),dedicatedPlayer=!!root&&root!==v&&!/^(BODY|HTML)$/.test(root.tagName),customSiteControls=!!media&&((dedicatedPlayer&&buttons.length>=2)||mediaButtons.length>=2||(mediaButtons.length>0&&!!root.querySelector("input[type=range],[role=slider]"))),hasSiteControls=!!media&&((v&&v.controls)||customSiteControls);return {fullscreen:!!f&&!!media,customPlayer:!!customRoot,rootTag:root&&root.tagName||"",playerMode,hasSiteControls,customSiteControls,controlCount:buttons.length,paused:v?!!v.paused:true,muted:v?!!v.muted:false,currentTime:v&&Number.isFinite(v.currentTime)?v.currentTime:0,duration:v&&Number.isFinite(v.duration)?v.duration:0};})())';
+// Inspect only activity in background tabs; retain no page text or addresses.
+const activityScript=`JSON.stringify((()=>{
+    const queue=[document],seen=new Set();let budget=6000,roots=0,playing=false,audible=false;
+    while(queue.length&&roots++<16&&budget>0){
+        const root=queue.shift();if(!root||seen.has(root))continue;seen.add(root);
+        const walker=(root.ownerDocument||root).createTreeWalker(root,1);let e;
+        while((e=walker.nextNode())&&budget-->0){
+            if(e.tagName==="VIDEO"||e.tagName==="AUDIO"){const active=!e.paused&&!e.ended;playing=playing||active;audible=audible||active&&!e.muted&&e.volume>0;}
+            if(e.shadowRoot)queue.push(e.shadowRoot);
+            if(e.tagName==="IFRAME"){try{if(e.contentDocument)queue.push(e.contentDocument);}catch(ignore){}}
+        }
+    }
+    return {playing,audible};
+})())`;
+const snapshot='JSON.stringify((()=>{'+playerLocate+'const media=v||customRoot,rect=media&&media.getBoundingClientRect(),playerMode=!!media&&(!!f||rect.width*rect.height>innerWidth*innerHeight*0.3),buttons=controls,mediaButtons=buttons.filter(b=>/play|pause|wiederg|abspiel|mute|stumm|fullscreen|vollbild|seek|rewind|forward/i.test([b.getAttribute("aria-label"),b.title,b.getAttribute("data-testid")].join(" "))),dedicatedPlayer=!!root&&root!==v&&!/^(BODY|HTML)$/.test(root.tagName),customSiteControls=!!media&&((dedicatedPlayer&&buttons.length>=2)||mediaButtons.length>=2||(mediaButtons.length>0&&!!root.querySelector("input[type=range],[role=slider]"))),hasSiteControls=!!media&&((v&&v.controls)||customSiteControls),elements=deep(document,"video,audio"),playing=elements.some(e=>!e.paused&&!e.ended),audible=elements.some(e=>!e.paused&&!e.ended&&!e.muted&&e.volume>0);return {hasMedia:elements.length>0||!!customRoot,playing,audible,fullscreen:!!f&&!!media,customPlayer:!!customRoot,rootTag:root&&root.tagName||"",playerMode,hasSiteControls,customSiteControls,controlCount:buttons.length,paused:v?!!v.paused:true,muted:v?!!v.muted:false,currentTime:v&&Number.isFinite(v.currentTime)?v.currentTime:0,duration:v&&Number.isFinite(v.duration)?v.duration:0};})())';
 const fitScript='if(!document.__mguVideoFitInstalled){document.__mguVideoFitInstalled=true;document.addEventListener("fullscreenchange",()=>{if(document.getElementById("mgu-video-fit"))return;const s=document.createElement("style");s.id="mgu-video-fit";s.textContent=":fullscreen video,video:fullscreen{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;object-position:center!important;transform:none!important;}:fullscreen button:focus,:fullscreen [role=button]:focus,:fullscreen [tabindex]:focus{outline:3px solid #78bfff!important;outline-offset:3px!important;}";document.documentElement.appendChild(s);});}';
 module.exports={
+    async mediaActivity(context){
+        const tabs=(this.tabs||[]).slice(0,8),cache=this.tabMediaActivity||(this.tabMediaActivity=new Map()),pipe=this.pipe;
+        await Promise.all(tabs.map(async tab=>{
+            try{const r=await pipe.send('Runtime.evaluate',{expression:activityScript,returnByValue:true},tab.session,1500);
+                if(context.valid()&&this.tabs.indexOf(tab)>=0&&!r.exceptionDetails)cache.set(tab.session,JSON.parse(r.result.value));
+            }catch(ignore){}
+        }));
+        if(!context.valid())throw Error('Webseite hat gewechselt');
+        const live=tabs.map(t=>t.session);cache.forEach((value,session)=>{if(live.indexOf(session)<0)cache.delete(session);});
+        let playing=false,audible=false;cache.forEach(state=>{playing=playing||!!state.playing;audible=audible||!!state.audible;});
+        return {playing,audible};
+    },
+    webAudioEvent(event){
+        const contexts=this.webAudioContexts||(this.webAudioContexts=new Map()),p=event.params||{},context=p.context;
+        if((event.method==='WebAudio.contextCreated'||event.method==='WebAudio.contextChanged')&&context&&typeof context.contextId==='string'){
+            if(contexts.size<64||contexts.has(context.contextId))contexts.set(context.contextId,{session:event.sessionId,state:context.contextState});
+        }else if(event.method==='WebAudio.contextWillBeDestroyed')contexts.delete(p.contextId);
+    },
+    webAudioActivity(){
+        let running=0;const sessions=this.tabs?this.tabs.map(t=>t.session):[this.session];
+        if(this.webAudioContexts)this.webAudioContexts.forEach((context,id)=>{if(sessions.indexOf(context.session)<0)this.webAudioContexts.delete(id);else if(context.state==='running')running++;});
+        return {running};
+    },
     mediaTask(task){
         const context=this.mediaContext(),work=(this.mediaQueue||Promise.resolve()).catch(()=>{}).then(()=>{if(!context.valid())throw new Error('Webseite hat gewechselt');return task(context);});
         this.mediaQueue=work.catch(()=>{});return work;
@@ -56,15 +94,18 @@ module.exports={
     async installVideoFit(session){await this.pipe.send('Page.addScriptToEvaluateOnNewDocument',{source:fitScript},session);return this.pipe.send('Runtime.evaluate',{expression:fitScript},session);},
     async mediaCapabilities(){
         const context=this.mediaContext();this.requireAllowed();if(!this.session)throw new Error('Zuerst eine HTTPS-Webseite öffnen');
-        const r=await context.send('Runtime.evaluate',{expression:'(async()=>{const v=document.createElement("video"),result={secure:isSecureContext,h264:!!v.canPlayType(\'video/mp4; codecs="avc1.42E01E"\'),vp9:!!v.canPlayType(\'video/webm; codecs="vp9"\'),widevine:false};if(navigator.requestMediaKeySystemAccess){try{await Promise.race([navigator.requestMediaKeySystemAccess("com.widevine.alpha",[{initDataTypes:["cenc"],videoCapabilities:[{contentType:\'video/mp4; codecs="avc1.42E01E"\'}]}]),new Promise((_,reject)=>setTimeout(reject,3500))]);result.widevine=true;}catch(e){}}return JSON.stringify(result);})()',awaitPromise:true,returnByValue:true});
-        return Object.assign(JSON.parse(r.result.value),{mediaEnabled:!this.options.mediaDisabled,audio:typeof this.audioStatus==='function'?this.audioStatus():{configured:false}});
+        const r=await context.send('Runtime.evaluate',{expression:DRM.probeScript,awaitPromise:true,returnByValue:true});
+        if(r.exceptionDetails||!r.result||typeof r.result.value!=='string')throw Error('Medienprüfung fehlgeschlagen');
+        const result=JSON.parse(r.result.value);result.drm=DRM.status(this.drm,result.drm);
+        return Object.assign(result,{mediaEnabled:!this.options.mediaDisabled,audio:typeof this.audioStatus==='function'?this.audioStatus():{configured:false}});
     },
     async inspectMedia(){
         if(!this.session||this.mediaQuery)return;
         const view=this.pageGeneration,session=this.session,context=this.mediaContext();this.mediaQuery=true;if(this.mediaAXGeneration!==view){this.mediaAXGeneration=view;this.mediaAXStamp=0;this.mediaAXCache=[];}
         try{const r=await context.send('Runtime.evaluate',{expression:snapshot,returnByValue:true});
             if(view!==this.pageGeneration||session!==this.session)return;
-            const state=JSON.parse(r.result.value);
+            const state=JSON.parse(r.result.value),activity=this.webAudioActivity(),htmlActivity=await this.mediaActivity(context);
+            state.webAudioRunning=activity.running;state.playing=htmlActivity.playing||activity.running>0;state.audible=htmlActivity.audible||activity.running>0;state.hasMedia=state.hasMedia||state.playing;
             if(state.playerMode&&state.customPlayer&&!state.hasSiteControls){
                 const stamp=Date.now();if(!this.mediaAXStamp||stamp-this.mediaAXStamp>3000){this.mediaAXStamp=stamp;this.mediaAXCache=await this.accessibleMediaControls(context);}const candidates=this.mediaAXCache||[];if(view!==this.pageGeneration||session!==this.session)return;
                 state.accessibleControls=candidates.length;
@@ -75,6 +116,7 @@ module.exports={
             this.mediaWasFullscreen=!!state.fullscreen;
             this.mediaHadCustomControls=!!state.playerMode&&(this.mediaHadCustomControls||!!state.customSiteControls);
             state.hasSiteControls=!!state.hasSiteControls||this.mediaHadCustomControls;
+            this.mediaActivityState={playing:state.playing,audible:state.audible,webAudioRunning:state.webAudioRunning};
             const key=JSON.stringify(state);
             if(key!==this.lastMedia){this.lastMedia=key;this.emit('media',state);}
         }catch(e){}finally{this.mediaQuery=false;}

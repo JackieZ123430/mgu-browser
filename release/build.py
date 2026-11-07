@@ -14,9 +14,10 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+from native_build import build_additions
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '0.11.0'
+VERSION = '0.12.0'
 ENGINE_VERSION = '0.1.0'
 ENGINE_PREFIX = '/var/opt/mgu-browser-engine/versions/' + ENGINE_VERSION + '/engine'
 NATIVE_INPUTS = ('backend_launch.c', 'browser_launch.c', 'peer_uid.c', 'jpeg_frame.c')
@@ -163,13 +164,14 @@ def build_engine(work, output):
     return tool(stage, {'id': 'mgu-browser-engine', 'kind': 'tool', 'version': ENGINE_VERSION, 'title': 'Browser Chromium engine (experimental)', 'mguHmi': ['ID7'], 'requires': {'mgu-deploy': '0.7.17'}, 'check': ['check.sh'], 'activate': ['node', 'activate.js'], 'deactivate': ['node', 'deactivate.js'], 'crashNames': ['chromium', 'chrome-sandbox', 'chrome_crashpad']}, output)
 
 
-def reuse_native(base, files):
+def reuse_native(base, files, rebuild_backend=False):
     """Reuse only the exact published Debian-12 native files, with source checks."""
     if sha(base) != BASE_RUNTIME_SHA256:
         raise RuntimeError('Runtime base differs from the immutable 0.10.0 artifact')
     inputs = {name: sha(ROOT / 'native' / name) for name in NATIVE_INPUTS}
-    if inputs != BASE_NATIVE_INPUTS:
-        raise RuntimeError('Native sources changed; rebuild on the Debian 12 release host')
+    reused_inputs = {name: value for name, value in inputs.items() if not (rebuild_backend and name == 'backend_launch.c')}
+    if any(value != BASE_NATIVE_INPUTS[name] for name, value in reused_inputs.items()):
+        raise RuntimeError('A reused native source changed; rebuild that helper instead of copying stale bytes')
     names = ('backend-launch', 'browser-launch', 'backend/peer_uid.node',
              'backend/jpeg_frame.node', 'backend/codec/libjpeg.so.62',
              'backend/codec/COPYRIGHT.libjpeg-turbo', 'LICENSE.musl')
@@ -179,6 +181,8 @@ def reuse_native(base, files):
             raise RuntimeError('Unexpected base runtime identity')
         manifest = {row['path']: row for row in metadata['files']}
         for name in names:
+            if rebuild_backend and name == 'backend-launch':
+                continue
             member = archive.getmember('files/' + name)
             if not member.isfile() or member.size > 16 * 1024 * 1024:
                 raise RuntimeError('Invalid native base file')
@@ -190,10 +194,11 @@ def reuse_native(base, files):
             target.write_bytes(data)
             target.chmod(0o755 if name in ('backend-launch', 'browser-launch') else 0o644)
     return {'baseUrl': BASE_RUNTIME_URL, 'baseSha256': BASE_RUNTIME_SHA256,
-            'nativeSources': inputs, 'nativeSourceCommit': '3c01fdfb600c38125ce2a874b77c1918521d7bf7'}
+            'nativeSources': reused_inputs, 'nativeSourceCommit': '3c01fdfb600c38125ce2a874b77c1918521d7bf7',
+            'replacedHelpers': ['backend-launch'] if rebuild_backend else []}
 
 
-def build_runtime(work, output, base=None):
+def build_runtime(work, output, base=None, native_sysroot=None):
     stage = work / 'runtime-tool'
     files = stage / 'files'
     legacy = {'native_reader.js', 'http_reader.js', 'html_page.js', 'html5_parser.js', 'park_gate.js', 'vehicle_signals.js'}
@@ -207,7 +212,7 @@ def build_runtime(work, output, base=None):
         copy(file, files / 'runtime' / file.name)
     native_record = None
     if base:
-        native_record = reuse_native(base, files)
+        native_record = reuse_native(base, files, rebuild_backend=bool(native_sysroot))
     else:
         for name in ['backend_launch', 'browser_launch']:
             run(['musl-gcc', '-static', '-O2', '-Wall', '-Wextra', '-Werror', '-ffile-prefix-map=' + str(ROOT) + '=.', ROOT / 'native' / (name + '.c'), '-o', files / name.replace('_', '-')])
@@ -220,8 +225,16 @@ def build_runtime(work, output, base=None):
         copy('/usr/lib/x86_64-linux-gnu/libjpeg.so.62', files / 'backend/codec/libjpeg.so.62')
         copy('/usr/share/doc/libjpeg62-turbo/copyright', files / 'backend/codec/COPYRIGHT.libjpeg-turbo')
         copy('/usr/share/doc/musl/copyright', files / 'LICENSE.musl')
-    record = {'version': VERSION, 'nativeSources': {name: sha(ROOT / 'native' / name) for name in NATIVE_INPUTS},
-              'engineComponent': ENGINE_VERSION, 'reusedNative': native_record}
+    built_native = None
+    if (ROOT / 'native/audio_bridge.c').is_file():
+        if not native_sysroot:
+            raise RuntimeError('Audio runtime requires --native-sysroot; never reuse a stale privilege launcher')
+        built_native = build_additions(ROOT, files, work, native_sysroot)
+    elif native_sysroot:
+        raise RuntimeError('Audio helper source is missing')
+    native_sources = list(NATIVE_INPUTS) + (['audio_bridge.c'] if built_native else [])
+    record = {'version': VERSION, 'nativeSources': {name: sha(ROOT / 'native' / name) for name in native_sources},
+              'engineComponent': ENGINE_VERSION, 'reusedNative': native_record, 'builtNative': built_native}
     (files / 'build-provenance.json').write_text(json.dumps(record, indent=2) + '\n')
     (output / 'runtime-provenance.json').write_text(json.dumps(record, indent=2) + '\n')
     copy(ROOT / 'LICENSE', files / 'LICENSE')
@@ -236,7 +249,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', required=True)
     parser.add_argument('--runtime-only', action='store_true', help='Keep the already published immutable engine dependency')
-    parser.add_argument('--runtime-base', type=Path, help='Reuse exact 0.10.0 native binaries after artifact and source SHA-256 checks')
+    parser.add_argument('--runtime-base', type=Path, help='Reuse unchanged 0.10.0 native helpers after artifact and per-source SHA-256 checks')
+    parser.add_argument('--native-sysroot', type=Path, help='Verified musl sysroot from release/native_build.py for changed/new audio helpers')
     args = parser.parse_args()
     if args.runtime_base and not args.runtime_only:
         parser.error('--runtime-base requires --runtime-only; keep the published engine unchanged')
@@ -249,7 +263,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='mgu-browser-release-') as temporary:
         work = Path(temporary)
         entries = [] if args.runtime_only else [build_engine(work, output)]
-        entries.append(build_runtime(work, output, args.runtime_base))
+        entries.append(build_runtime(work, output, args.runtime_base, args.native_sysroot))
     (output / 'components.json').write_text(json.dumps(entries, indent=2) + '\n')
     print(json.dumps(entries, indent=2))
 

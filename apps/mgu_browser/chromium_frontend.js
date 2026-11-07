@@ -4,6 +4,8 @@ const mgu=require('./kit/mgu'),{setImage}=require('./kit/record');
 const Gate=require('./visibility_gate'),Browser=require('./browser_client'),Controller=require('./browser_controller');
 const {BrowserState,inputURL}=require('./browser_state'),icon=require('./browser_icons'),installLayout=require('./browser_layout');
 const {BrowserLocale}=require('./browser_locale');
+const VehicleAudio=require('./browser_vehicle_audio');
+const shutdown=require('./browser_shutdown');
 const W=1600,H=520,IMAGE=700,BAR=58,TABS=42,SIDE=600;
 const C={bg:'#11151b',bar:'#181d25',field:'#252d38',panel:'#1b222c',line:'#343e4c',text:'#f4f6f9',muted:'#a2afc0',accent:'#78bfff'};
 const displayURL=value=>String(value||'').replace(/^https:\/\//,'').split(/[?#]/)[0];
@@ -17,6 +19,7 @@ mgu.run({async start(ctx){
     let tabs=[],activeTab='',wifiState={},wifiSSID='',wifiPassword='',wifiBusy=false,wifiInternet=null,wifiPoll=0;
     let media={fullscreen:false},mediaIndex=1,mediaUntil=0;
     let mediaCaps=null,mediaBusy=false,audioBusy=false;
+    let vehicleAudioStatus={reason:'idle'},audioWanted=false,audioSync=null,audioNote='',audioRetry=0;
     let wifiNetworks=[],wifiScanning=false,wifiScanError='',wifiOffset=0;
     let privacyState=null,privacyBusy=false,logins=[],loginOffset=0,privacyConfirmation=null,vaultSetup='';
     const videoActions=['back','toggle','forward','mute','exit'];
@@ -37,6 +40,56 @@ mgu.run({async start(ctx){
     const note=message=>{toast=message;toastUntil=Date.now()+3300;};
     store.onError=note;
     const safe=task=>Promise.resolve().then(typeof task==='function'?task:()=>task).catch(e=>{note(e.message);log.warn(e.message);});
+    const vehicleAudio=new VehicleAudio({signals:ctx.signals,visible:()=>gate.check().allowed,
+        start:()=>browser.request('audioRoute',{enabled:true}),
+        stop:()=>browser.child&&gate.check().allowed?browser.request('audioRoute',{enabled:false}):Promise.resolve(),
+        onStatus:state=>{vehicleAudioStatus=state;if(state.connected){audioNote='';audioRetry=0;}if(mediaCaps&&mediaCaps.audio)mediaCaps.audio.vehicle=state;}
+    });
+    function syncVehicleAudio(wanted){
+        audioWanted=!!wanted;
+        if(!audioWanted)return vehicleAudio.release();
+        if(audioSync)return audioSync;
+        audioSync=(async()=>{
+            const status=await browser.request('audioStatus');
+            if(!audioWanted||!gate.check().allowed)return;
+            if(status.route==='mgu-smartx'){
+                if(status.bridgeReady!==true){await vehicleAudio.release();throw new Error('audio-output-unavailable');}
+                await vehicleAudio.acquire();
+            }
+        })().then(result=>{audioSync=null;return result;},error=>{audioSync=null;throw error;});
+        return audioSync;
+    }
+    const audioError=error=>({
+        'audio-source-busy':'Audioquelle wird bereits verwendet.',
+        'audio-source-unavailable':'Fahrzeug-Audioquelle nicht verfügbar.',
+        'audio-service-unavailable':'Fahrzeug-Audiodienst nicht erreichbar.',
+        'audio-connect-refused':'Fahrzeug hat die Audioverbindung abgelehnt.',
+        'audio-connect-timeout':'Fahrzeug-Audioverbindung nicht bereit.',
+        'audio-output-unavailable':'Fahrzeug-Audioausgabe nicht bereit.',
+        'audio-route-interrupted':'Fahrzeug-Audio wurde unterbrochen. Wiedergabe pausieren und erneut starten.',
+        'audio-sdk-unavailable':'Fahrzeug-Audio wird von dieser Laufzeit nicht unterstützt.'
+    })[error.message]||'Fahrzeug-Audio konnte nicht verbunden werden.';
+    function audioLabel(audio){
+        if(audio&&audio.route==='mgu-smartx'){
+            if(vehicleAudioStatus.connected)return 'Fahrzeug-Audiokanal verbunden';
+            if(vehicleAudioStatus.reason==='connecting')return 'Fahrzeug-Audio wird verbunden ...';
+            if(vehicleAudioStatus.reason==='audio-source-busy')return 'Fahrzeug-Audiokanal bereits belegt';
+            if(vehicleAudioStatus.reason==='audio-route-interrupted')return 'Fahrzeug-Audio wurde unterbrochen';
+            if(vehicleAudioStatus.reason!=='idle')return 'Fahrzeug-Audioverbindung nicht bereit';
+            return audio.bridgeReady?'Fahrzeug-Audio bereit; startet bei Wiedergabe':'Fahrzeug-Audioausgabe nicht bereit.';
+        }
+        return audio&&audio.routeAvailable?'Audio-Ausgang erkannt; Fahrzeugton unbestätigt':'Kein Audio-Ausgang erkannt';
+    }
+    const syncAudio=()=>{
+        const wanted=gate.check().allowed&&(audioBusy||media.audible===true);
+        if(wanted&&Date.now()<audioRetry)return;
+        syncVehicleAudio(wanted).catch(e=>{if(e.message==='audio-not-visible')return;audioRetry=Date.now()+10000;if(audioNote!==e.message){audioNote=e.message;note(audioError(e));log.warn('vehicle audio: '+e.message);}});
+    };
+    shutdown.register(()=>{
+        closing=true;
+        const stop=()=>browser.stop('Browser beendet');
+        return syncVehicleAudio(false).then(stop,stop);
+    });
     async function navigate(value){
         const url=inputURL(value);if(!url){note('Bitte eine gueltige HTTPS-Adresse eingeben');return;}
         if(starting)return;starting=true;loading=true;landing=false;keyboard=null;panel=null;reading=false;webMode=false;currentURL=url;activity();
@@ -85,7 +138,7 @@ mgu.run({async start(ctx){
     }
     async function closeApp(){
         closing=true;pendingLaunch=false;keyboard=null;draft='';vaultSetup='';wifiPassword='';panel=null;frame=null;landing=true;loading=false;
-        await browser.stop('Browser geschlossen');await ui.close('MAIN');
+        await syncVehicleAudio(false).catch(()=>{});await browser.stop('Browser geschlossen');await ui.close('MAIN');
     }
     function launch(){
         if(!pendingLaunch||!serviceReady||!gate.check().allowed||closing)return;
@@ -95,6 +148,7 @@ mgu.run({async start(ctx){
     }
     const visible=()=>{
         const v=ui.isVisible('MAIN')&&(!ui.hasFocus||ui.hasFocus('MAIN'));gate.setVisible(v);
+        if(!v&&wasVisible)syncVehicleAudio(false).catch(()=>{});
         if(v&&!wasVisible){closing=false;pendingLaunch=true;launch();}wasVisible=v;
     };
     ui.onVisible(visible);if(ui.onFocus)ui.onFocus(visible);visible();setInterval(visible,100);
@@ -109,8 +163,10 @@ mgu.run({async start(ctx){
         if(ctx.display)ctx.display.focusKey='tgt:'+(t.url?'tab-'+t.id:'urlbar');
     });
     browser.on('blocked',reason=>{frame=null;editable=false;webMode=false;loading=false;resized='';if(ctx.display&&ctx.display.browserSetFullscreen)ctx.display.browserSetFullscreen(false);if(!closing&&!landing&&gate.check().allowed&&reason!=='Start')note(reason);});
+    browser.on('blocked',()=>{audioWanted=false;vehicleAudio.release().catch(()=>{});});
     browser.on('media',state=>{
         const changed=!!state.fullscreen!==!!media.fullscreen;media=state;
+        syncAudio();
         if(changed){
             if(ctx.display&&ctx.display.browserSetFullscreen)ctx.display.browserSetFullscreen(!!state.fullscreen);
             resized='';reading=false;keyboard=null;panel=null;webMode=false;mediaIndex=1;mediaUntil=Date.now()+5000;
@@ -221,8 +277,8 @@ mgu.run({async start(ctx){
     }
     async function testAudio(){
         if(audioBusy)return;audioBusy=true;
-        try{await browser.request('audioTest');mediaCaps=await browser.request('mediaCapabilities');note('Testton erzeugt. Hörbare Ausgabe am Gerät prüfen.');}
-        finally{audioBusy=false;}
+        try{try{await syncVehicleAudio(true);}catch(e){throw new Error(audioError(e));}await browser.request('audioTest');mediaCaps=await browser.request('mediaCapabilities');if(mediaCaps.audio)mediaCaps.audio.vehicle=vehicleAudioStatus;note('Testton erzeugt. Hörbare Ausgabe am Gerät prüfen.');}
+        finally{audioBusy=false;syncAudio();}
     }
     async function openPrivacy(){panel='privacy';keyboard=null;webMode=false;reading=false;privacyBusy=true;activity();try{privacyState=await browser.request('privacyStatus');}finally{privacyBusy=false;}}
     async function changePrivacy(name){privacyBusy=true;try{const prefs={};prefs[name]=!privacyState[name];privacyState=await browser.request('privacyConfigure',{prefs});}finally{privacyBusy=false;}}
@@ -427,9 +483,10 @@ mgu.run({async start(ctx){
         c.text('Vollbild zeigt das ganze Video ohne Beschnitt. Drehen und Drücken bleiben aktiv.',65,164,20,C.text);
         if(mediaCaps){
             c.text(mediaCaps.mediaEnabled?'Videowiedergabe in dieser Laufzeit aktiviert':'Videowiedergabe auf der Headunit noch nicht freigegeben',65,205,22,C.text);
-            c.text(mediaCaps.secure===false?'Widevine-Prüfung: zuerst eine HTTPS-Seite öffnen':mediaCaps.widevine?'Widevine erkannt - Anbieterwiedergabe noch einzeln zu prüfen':'Widevine nicht verfügbar - geschützte Streams sind nicht bestätigt',65,235,20,C.muted);
+            const drm=mediaCaps.drm||{};
+            c.text(drm.configuration==='configuration-rejected'?'DRM-Modul nicht verwendbar; Konfiguration prüfen':mediaCaps.secure===false?'Widevine-Prüfung: zuerst eine HTTPS-Seite öffnen':mediaCaps.widevine?'Widevine erkannt - Anbieterwiedergabe noch einzeln zu prüfen':drm.configuration==='no-cdm'?'Kein Widevine-Modul installiert; geschützte Streams benötigen ein eigenes Modul':'Widevine nicht verfügbar - geschützte Streams sind nicht bestätigt',65,235,20,C.muted);
             c.text('H.264: '+(mediaCaps.h264?'Ja':'Nein')+'   VP9: '+(mediaCaps.vp9?'Ja':'Nein'),65,265,18,C.muted);
-            c.text(mediaCaps.audio&&mediaCaps.audio.routeAvailable?'Audio-Ausgang erkannt; Fahrzeugton unbestätigt':'Kein Audio-Ausgang erkannt; BMW-Anbindung offen',65,295,18,C.muted);
+            c.text(audioLabel(mediaCaps.audio),65,295,18,C.muted);
         }
         [['YouTube','https://www.youtube.com/'],['Netflix','https://www.netflix.com/'],['Disney+','https://www.disneyplus.com/'],['Prime Video','https://www.primevideo.com/'],['Paramount+','https://www.paramountplus.com/']].forEach((item,i)=>button(c,64+i*296,320,278,44,item[0],()=>browser.newTab(item[1]),'stream-'+i));
         button(c,64,380,352,44,audioBusy?'Testton läuft ...':'Testton (1 s)',testAudio,'audio-test',{enabled:!audioBusy&&!!mediaCaps&&mediaCaps.mediaEnabled});

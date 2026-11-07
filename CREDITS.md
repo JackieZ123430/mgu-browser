@@ -29,6 +29,20 @@ keine fertige Store-Zertifizierung oder Unterstützung durch dessen Autoren.
 MGU-Store nennt GPL-3.0-or-later für seinen eigenen Code; dessen Bedingungen
 bleiben bei einer späteren tatsächlichen Übernahme gesondert zu beachten.
 
+## Öffentliche Fahrzeug-Audioforschung
+
+[JustAnotherPU/Moonride](https://github.com/JustAnotherPU/moonride) dokumentiert
+hörbare ID7-Ausgabe über CarLifeMedia, SmartX und den AudioManager.
+[Intels SmartXbar](https://github.com/intel/SmartXbar) und
+[AVB-AudioModules](https://github.com/intel/AVB-AudioModules) sowie die
+[öffentlichen ID7-Audionotizen](https://github.com/Vizualyse/idrive-apps/blob/main/knowledge/sound.md)
+liefern weitere Informationen zu PCM, Gruppen und Stream-Locks. Diese Quellen
+ermöglichen eine auf konkreten Schnittstellen beruhende Browser-Anbindung.
+Die eigene MIT-Implementierung übernimmt Protokollfakten, keinen GPL-Code und
+keine proprietären Audio-Bibliotheken. Lizenzen der verlinkten Projekte bleiben
+unverändert; eine Unterstützung dieses Browsers durch deren Autoren wird nicht
+behauptet.
+
 ## Weitere Bausteine
 
 - Chromium und Google Chrome: Web-Engine und Browserprotokoll.

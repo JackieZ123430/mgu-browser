@@ -18,6 +18,16 @@ function writeRoot(name,text,mode,gid){
     const fd=fs.openSync(name,fs.constants.O_WRONLY|fs.constants.O_CREAT|fs.constants.O_NOFOLLOW,mode);
     try{const s=fs.fstatSync(fd);if(!s.isFile()||s.uid!==0||s.nlink!==1)throw Error('Unsafe runtime output');fs.ftruncateSync(fd,0);fs.writeSync(fd,text);fs.fchownSync(fd,0,gid||0);fs.fchmodSync(fd,mode);}finally{fs.closeSync(fd);}
 }
+function audioIdentity(groupText,io){
+    io=io||fs;
+    const groups=String(groupText).split('\n').map(l=>l.split(':')).filter(g=>g[0]==='mgu_alsa');
+    if(groups.length!==1)return null;
+    const gid=Number(groups[0][2]);
+    if(!Number.isInteger(gid)||gid<=0||gid>65535)return null;
+    const paths=['/usr/lib/alsa-lib/libasound_module_pcm_smartx.so','/usr/lib64/alsa-lib/libasound_module_pcm_smartx.so','/usr/lib/x86_64-linux-gnu/alsa-lib/libasound_module_pcm_smartx.so'];
+    for(const file of paths){try{const st=io.lstatSync(file);if(st.isFile()&&!st.isSymbolicLink()&&st.uid===0&&!(st.mode&0o022))return {gid};}catch(e){}}
+    return null;
+}
 function prepare(){
     if(process.getuid()!==0)throw Error('Root setup required');
     for(const p of ['/var','/var/opt'])directory(p,0o755,0);
@@ -37,8 +47,9 @@ function prepare(){
     const resolver=base+'/network/resolv.conf';if(!fs.existsSync(resolver))writeRoot(resolver,'nameserver 127.0.0.1\noptions timeout:1 attempts:1\n',0o644,0);
     const network=base+'/network-status.json';if(!fs.existsSync(network))writeRoot(network,JSON.stringify({connected:false,updated:new Date().toISOString()}),0o640,application);
     else {readOwned(network,[0],16384);fs.chownSync(network,0,application);fs.chmodSync(network,0o640);}
-    const identity={ready:true,serviceUid:UID,appUid:application,engineRoot};
+    let audio=null;try{audio=audioIdentity(readOwned('/etc/group',[0],262144));}catch(e){/* Missing or unsafe optional audio infrastructure leaves browsing available. */}
+    const identity={ready:true,serviceUid:UID,appUid:application,engineRoot,audio};
     writeRoot(base+'/runtime-identity.json',JSON.stringify(identity)+'\n',0o644,0);
     return identity;
 }
-module.exports={appUid,readOwned,writeRoot,prepare};
+module.exports={appUid,readOwned,writeRoot,audioIdentity,prepare};

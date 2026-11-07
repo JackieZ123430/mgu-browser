@@ -1,65 +1,98 @@
-# Audio-Ausgabe und Testton
+# Fahrzeug-Audio ab 0.12.0
 
-Chromium kann HTML-Audio, Video-Ton und WebAudio an einen vorhandenen
-Linux-Audioausgang ausgeben. Die Browser-App erzeugt **keine BMW-Audioquelle**
-und bindet die Lautsprecher der MGU bisher nicht an. Ein erfolgreicher Testton
-im AudioContext beweist deshalb allein noch keine hörbare Ausgabe im Fahrzeug.
+Der Browser besitzt eine konkrete Anbindung an **SmartX/ALSA und den BMW AudioManager**
+für ID7. Die öffentlich dokumentierte Kombination ist Quelle `CarLifeMedia` (287),
+Lautsprechersenke 1024 und PCM `plug:smartx:CarLifeMedia_CF_48_STEREO`.
+Das ist eine auf anderen ID7-Fahrzeugen erprobte Schnittstelle, keine Bestätigung
+für jede Firmware oder die eigene Headunit. Der Browserstand 0.12.0 wurde hier
+mit echten Chromium-/ALSA-Prozessen und simuliertem AudioManager geprüft;
+ein hörbarer Fahrzeugtest steht aus.
 
-Unter **Einstellungen → Medien & Streaming** zeigt die Audio-Prüfung, ob der
-Backend-Benutzer einen PulseAudio-Unix-Socket oder ein ALSA-Wiedergabegerät
-erreichen darf. Fehlende Geräte, fehlende Rechte und beobachtete
-Chromium-Audiofehler werden als begrenzte Statuscodes gemeldet. Die Prüfung
-öffnet keine Geräte und verändert weder Lautstärke noch Fahrzeugdienste.
-Ein erreichbarer Socket oder Geräteknoten bestätigt noch keinen funktionierenden
-Stream und keinen Weg zu den Lautsprechern.
+## Wiedergabe und Audiofokus
 
-**Testton (1 s)** startet ausdrücklich einen leisen 440-Hz-Ton mit kurzer
-Ein-/Ausblendung. Dafür muss eine Webseite geöffnet und der Browser im
-Vordergrund sein. Der Test schließt seinen AudioContext anschließend; parallele
-Testtöne werden abgewiesen. Bitte den Test im abgestellten Fahrzeug ausführen
-und hörbare Ausgabe selbst bestätigen. Bei Stille ist die Audioanbindung weiter
-offen, selbst wenn der Browser die Tonerzeugung bestätigt. Die Fahrzeuglautstärke
-wird durch den Test nicht verändert.
+Bei hörbarer HTML-Audio-/Videowiedergabe oder laufendem WebAudio fordert die
+sichtbare Browser-App den Kanal an. Hintergrundtabs werden berücksichtigt.
+Die Firmware muss die erwartete Quelle als derzeit nicht verfügbar und ohne
+bestehende Verbindung melden. Eine von CarLife, Moonride oder einer anderen
+App benutzte Quelle wird nicht übernommen. Fehlende oder unbekannte
+AudioManager-Antworten lassen die Anforderung scheitern.
 
-## Vorhandene Linux-Ausgabe auswählen
+Die App merkt sich den ursprünglichen Verfügbarkeitswert und ausschließlich
+die selbst erzeugte Verbindungs-ID. Erst nach `CS_CONNECTED` öffnet der
+Ausgabeprozess das PCM-Gerät. Bei Pause/Ende, Fokusverlust und normalem
+Schließen endet die Ausgabe; nur die eigene Verbindung wird getrennt. Die
+ursprüngliche Verfügbarkeit wird wiederhergestellt, soweit kein anderer
+Teilnehmer die Quelle inzwischen benutzt. Provider-Neustarts und wiederverwendete
+IDs dürfen keine fremde Verbindung trennen. Nach einer Unterbrechung wird kein
+wiederholtes Verbinden gegen Telefon-/Systemfokus erzwungen; pausieren und
+neu starten erlaubt eine neue Anforderung.
 
-Der Browser verwendet standardmäßig Chromiums normale Audioauswahl. Für eine
-bereits eingerichtete und separat geprüfte ALSA-Ausgabe kann ein Administrator
-dem Backend-Dienst `MGU_BROWSER_ALSA_DEVICE` geben, beispielsweise mit einem
-systemd-Override:
+Die App besitzt einen begrenzten asynchronen Shutdown-Hook mit höchstens
+1,5 Sekunden Cleanup-Zeit. Ein Prozessabsturz, harte Abschaltung oder eine
+nicht antwortende Fahrzeug-API kann nicht mit einem normalen Schließen
+gleichgesetzt werden. Es gibt kein pauschales Aufräumen aller Verbindungen
+von Quelle 287 und keine Wiederherstellungsgarantie nach Stromverlust.
 
-```ini
-[Service]
-Environment=MGU_BROWSER_ALSA_DEVICE=hw:0,0
-```
+## Getrennte Audio-Laufzeiten
 
-Der Wert wird als einzelnes `--alsa-output-device`-Argument übergeben.
-`hw:0,0` ist lediglich ein Beispiel, kein für die MGU belegter Gerätebezeichner.
-Ein bestehender PulseAudio-Dienst kann über sein normales `PULSE_SERVER` und
-seine vorhandene Zugriffsberechtigung verwendet werden. Der Browser startet
-keinen Audiodaemon, verteilt keine Pulse-Cookies und erweitert keine Gruppen
-oder Geräteberechtigungen. Die Chromium-Sandbox bleibt aktiv.
+Chromium verwendet seine private ALSA-Bibliothek ausschließlich für eine
+S16-LE-/48-kHz-/Stereo-Dateiausgabe in eine private FIFO. Ein eigener
+unprivilegierter `audio-bridge`-Prozess lädt die **vorhandene System-ALSA** und
+deren vorhandenes SmartX-Plugin über den Firmware-Loader. BMW-Bibliotheken
+werden weder kopiert noch mit der privaten Chromium-libc vermischt.
 
-Die private Engine 0.1.0 liefert die verknüpften ALSA-/Pulse-Bibliotheken,
-aber keine neue ALSA-Systemkonfiguration und keine BMW-Stream-Anbindung.
-Benutzerdefinierte ALSA-PCMs benötigen daher die passende vorhandene
-Konfiguration und gegebenenfalls Plugins. Das Setzen einer Umgebungsvariable
-richtet diese Infrastruktur nicht ein. Änderungen an einem Systemdienst sollten
-erst bei geschlossener Browser-App aktiviert werden.
+Die FIFO und der interne Audiopuffer sind begrenzt. Die Ausgabe wird in
+Echtzeit getaktet. Bei getrenntem Kanal oder Rückstau werden Samples verworfen,
+sodass eine erneute Verbindung keinen alten Ton nachliefert. Browser-Ende
+beendet den eigenen Hilfsprozess. Die native Bridge importiert höchstens
+GLIBC-2.27-Symbole; der Privilegien-Launcher ist statisch gebaut. Die tatsächlich
+gebauten Helfer und ihre Compiler-/ABI-Prüfungen stehen in der Release-Provenienz.
 
-## Nachgewiesener Stand
+Die Runtime verwendet weiterhin UID 3911. Nur wenn die vorhandene Gruppe
+`mgu_alsa` und die benötigte Firmware-Konfiguration erkannt werden, erhält
+der Backend-Prozess diese primäre Gruppe; die registrierte App-Gruppe bleibt
+für IPC erhalten. Der Audioprozess läuft ohne Root-Rechte. Es werden keine
+Audio-Benutzer oder Gruppen angelegt und keine fremden Dienste umkonfiguriert.
 
-`node test/chromium_audio_smoke.js` prüft echtes Chromium unter einem
-unprivilegierten Linux-Benutzer mit aktivierter Sandbox. Eine private
-ALSA-Dateiausgabe mit gepuffertem FIFO-Verbraucher empfängt den expliziten
-Testton. Der Test verlangt PCM-Daten mit von null verschiedenen Samples und
-benötigt weder Netzwerk noch Lautsprecher. Das belegt Tonerzeugung und die
-Ausgabe an diesen konfigurierten ALSA-Ausgang. Es belegt keine BMW-Lautsprecher,
-keine Provider-Codecs und keine geschützten Streams.
+SmartX verwendet einen gemeinsam beschreibbaren Stream-Lock unter
+`/run/smartx/smartx_CarLifeMedia_CF_48_STEREO_p.lock`. Ein vorhandener Lock
+muss eine reguläre Datei ohne weitere Hardlinks und mit Gruppe `mgu_alsa`
+sowie Modus `0660` sein. Der Browser repariert, übernimmt oder entfernt keinen
+fremden Lock. Der Hilfsprozess verwendet beim Öffnen `umask 0007`, damit ein
+vom Plugin neu angelegter eigener Lock für die anderen Audioclients zugänglich
+bleibt. Server-seitiger Shared Memory und Benachrichtigungs-FIFOs bleiben unverändert.
 
-Die öffentliche Dokumentation von
-[idrive7-apps, Abschnitt 4.6](https://github.com/cauliflowermossgrape/idrive7-apps#46-media-cameras-and-the-drive-recorder)
-beschreibt Fahrzeug-Audio über AVB und BMWs Stream-Handler. Im geprüften App-Kit
-und im MGU Store wurde keine verwendbare öffentliche Lautsprecher-API gefunden.
-Für die verbleibende Integration sind die tatsächlichen Audiointerfaces,
-Audioquellen-/Fokusverwaltung und Berechtigungen der eigenen Headunit zu prüfen.
+## Live-Test über den Store
+
+Browser und Browser Runtime gemeinsam auf 0.12.0 aktualisieren; Engine bleibt
+0.1.0. Browser neu öffnen, eine Seite öffnen und unter
+**Einstellungen → Medien & Streaming → Testton (1 s)** testen. Der Test startet
+nur bewusst, leise und mit kurzer Ein-/Ausblendung. Anschließend ein normales
+ungeschütztes Video mit Ton abspielen, pausieren, zwischen Tabs wechseln und
+den Browser schließen. Bei belegter Quelle erscheint eine entsprechende Meldung.
+
+„Fahrzeug-Audiokanal verbunden“ bestätigt die AudioManager-Verbindung, nicht
+hörbare Lautsprecher. Eine erfolgreiche Tonerzeugung allein reicht ebenfalls
+nicht als Nachweis. Die Fahrzeuglautstärke wird nicht verändert.
+
+Auf Desktop-Linux bleiben die normale Audioauswahl sowie eine ausdrücklich
+konfigurierte `MGU_BROWSER_ALSA_DEVICE`-Ausgabe für Entwicklung erhalten.
+
+## Nachweise und Herkunft
+
+- `node test/chromium_vehicle_audio_smoke.js`: echtes sandboxed Chromium →
+  private ALSA → FIFO → nativer Prozess → System-ALSA-Dateisink; nichtleere
+  Audiosamples, begrenzte Ausgabe, verworfene Samples ohne alten Ton bei
+  Wiederverbindung und Prozessbereinigung.
+- AudioManager-Fixtures prüfen Kanalbesitz, belegte Quellen, verspätete
+  Antworten, Provider-Neustart, Unterbrechungen und geordnetes Freigeben.
+- [Moonride, a834a14](https://github.com/JustAnotherPU/moonride/blob/a834a14/apps/jap_moonride/main.js)
+  dokumentiert die ID7-Quelle und die AudioManager-Operationen.
+- [Intel AVB-AudioModules](https://github.com/intel/AVB-AudioModules)
+  dokumentiert den SmartX-Connector und dessen Gruppen-/Lock-Verhalten.
+- [Öffentliche ID7-Audionotizen](https://github.com/Vizualyse/idrive-apps/blob/main/knowledge/sound.md)
+  beschreiben die gemessenen Folgen falscher Lock-Rechte.
+
+Die Implementierung ist eigenständig MIT-lizenziert. Verwendet wurden
+Protokoll- und Verhaltensinformationen; GPL-Programmcode und proprietäre
+Firmware-Dateien wurden nicht übernommen.

@@ -2,6 +2,7 @@
 const fs=require('fs'),path=require('path'),assert=require('assert'),EventEmitter=require('events');
 const root=path.resolve(process.env.MGU_UI_SMOKE_ROOT||path.join(__dirname,'../dist/mgu_browser/source/javascript')),data=path.resolve(__dirname,'../.local/ui-smoke-070');
 fs.mkdirSync(data,{recursive:true});const storeFile=path.join(data,'browser-state.json');
+assert(fs.readFileSync(root+'/kit/mgu.js','utf8').includes("require('../browser_shutdown').run(() => process.exit(0))"),'Packaged kit must await bounded Browser shutdown cleanup');
 if(fs.existsSync(storeFile))fs.unlinkSync(storeFile);
 const {Recorder,play}=require(root+'/kit/record'),{Canvas}=require(root+'/kit/canvas');
 let browser,ready,tick,frame,closed=false,controllerInput,recorder;const timers=[];
@@ -22,6 +23,8 @@ class FakeBrowser extends EventEmitter{
         if(op==='privacyConfigure'){this.privacy=Object.assign(await this.request('privacyStatus'),args.prefs);return this.privacy;}
         if(op==='vaultList')return [];
         if(op==='audioTest'){this.calls.push('audio-test');return {generated:true,audibleVerified:false,durationMs:1000};}
+        if(op==='audioStatus')return {route:this.vehicleRoute?'mgu-smartx':'none',bridgeReady:!!this.vehicleRoute&&this.helperReady!==false,routeAvailable:false};
+        if(op==='audioRoute'){this.calls.push(args.enabled?'audio-route-start':'audio-route-stop');return {route:'mgu-smartx',routeAvailable:args.enabled};}
         if(op==='mediaFocus'||op==='mediaPress'){this.calls.push(op);return {};}
         if(op==='vaultUnlock'){assert.equal(args.password,'w'.repeat(12));this.privacy.locked=false;this.privacy.needsSetup=false;return this.privacy;}
         assert.equal(op,'mediaCapabilities');return {mediaEnabled:true,widevine:true,h264:true,vp9:true,audio:{routeAvailable:!!this.audioRoute,speakerVerified:false}};
@@ -34,7 +37,17 @@ class FakeBrowser extends EventEmitter{
 }
 const display={_place(){},_drawChrome(){},_claimTabs(){},_touch(){},_repaint(){},pageTargets:[],focusKey:null};
 const ui={onClick(){},onVisible(){},onFocus(){},isVisible(){return !closed;},hasFocus(){return true;},image(name,cv){frame=cv;display.pageTargets=cv.targets;},async close(){closed=true;}};
-const ctx={ui,display,dataDir:data,log:{info(){},warn(){}},controller:{onInput(fn){controllerInput=fn;}},hideButton(){},onTap(){},onScroll(){},loop(name,hz,fn){assert.equal(hz,12);tick=fn;},canvas(w,h){
+const vehicleCalls=[],vehicleConnections=[],vehicleSource={sourceID:287,name:'CarLifeMedia',availability:{availability:'A_UNAVAILABLE',availabilityReason:0}};
+const signals={proxy:async iface=>iface,onAvailable:async(proxy,fn)=>fn(true),call:async(proxy,method,args)=>{
+    vehicleCalls.push(method);
+    if(method==='getListMainSources')return {listSources:[vehicleSource]};
+    if(method==='getListMainConnections')return {listConnections:vehicleConnections.slice()};
+    if(method==='hookSourceAvailablityStatusChange'){vehicleSource.availability=args.availability;return {};}
+    if(method==='connect'){vehicleConnections.push({sourceID:287,sinkID:1024,mainConnectionID:31,connectionState:'CS_CONNECTED'});return {amError:'E_OK',mainConnectionID:31};}
+    if(method==='disconnect'){vehicleConnections.splice(0);return {amError:'E_OK'};}
+    throw Error('Unexpected AudioManager method');
+}};
+const ctx={ui,signals,display,dataDir:data,log:{info(){},warn(){}},controller:{onInput(fn){controllerInput=fn;}},hideButton(){},onTap(){},onScroll(){},loop(name,hz,fn){assert.equal(hz,12);tick=fn;},canvas(w,h){
     if(!recorder){recorder=new Recorder(w,h);const text=recorder.text.bind(recorder);recorder.text=(label,x,y,size,color,opts)=>{recorder.textCalls.push({label:String(label),x,y});return text(label,x,y,size,color,opts);};}
     recorder.reset();recorder.textCalls=[];recorder.extra=13;return recorder;
 }};
@@ -81,6 +94,10 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     await press('media-toggle');assert(browser.calls.includes('video-toggle'));
     browser.audioRoute=true;await press('settings');await press('streaming-settings');
     assert(frame.textCalls.some(t=>/vehicle sound unverified|Fahrzeugton unbestätigt/.test(t.label)),'An available output must not be presented as verified vehicle sound');
+    browser.vehicleRoute=true;await press('audio-test');await new Promise(r=>setImmediate(r));
+    assert(vehicleCalls.includes('connect')&&vehicleCalls.includes('disconnect'),'Vehicle test tone acquires and releases the owned AudioManager route');
+    assert(browser.calls.indexOf('audio-route-start')<browser.calls.lastIndexOf('audio-test'),'Vehicle output is ready before generating its tone');
+    assert(browser.calls.includes('audio-route-stop'));assert.equal(vehicleConnections.length,0);
     const streaming=new Canvas(1600,533);play(frame.words(),streaming);fs.writeFileSync(path.resolve(__dirname,'../.local/streaming-preview.png'),streaming.png());
     await press('stream-2');assert.equal(browser.url,'https://www.disneyplus.com/');
     await press('tab-close-test-2');
@@ -109,7 +126,18 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     browser.emit('tabSelected',{id:'popup-fixture',url:'',title:'',loading:false,popup:true});
     browser.emit('frame',{width:1280,height:380,rgba:Buffer.alloc(1280*380*4)});tick();
     assert(frame.targets.some(t=>t.key==='page-controller'),'A blank site popup displays web content instead of the browser start page');
+    browser.emit('media',{fullscreen:false,audible:true,playing:true});await new Promise(r=>setImmediate(r));
+    assert.equal(vehicleConnections.length,1,'Audible media automatically acquires the available vehicle route');
+    const disconnects=vehicleCalls.filter(m=>m==='disconnect').length;
+    browser.helperReady=false;browser.emit('media',{fullscreen:false,audible:true,playing:true});await new Promise(r=>setImmediate(r));
+    assert.equal(vehicleConnections.length,0,'A failed output helper must release its AudioManager route');
+    assert.equal(vehicleCalls.filter(m=>m==='disconnect').length,disconnects+1);
+    assert.equal(vehicleSource.availability.availability,'A_UNAVAILABLE','Helper failure restores source availability instead of holding radio audio');
+    browser.emit('media',{fullscreen:false,audible:false,playing:false});await new Promise(r=>setImmediate(r));
     await press('close');
     assert(closed,'Close must leave the app MAIN state');assert.equal(browser.child,null,'Close must stop Chromium');
+    const stops=browser.calls.filter(c=>c==='stop').length;let exited=false;
+    await require(root+'/browser_shutdown').run(()=>{exited=true;assert(browser.calls.filter(c=>c==='stop').length>stops,'MainApp shutdown must stop Browser before exiting');});
+    assert(exited,'Bounded cleanup must complete the requested MainApp exit');
     console.log('SDK UI: tabs, URL keyboard, masked hotspot settings, fullscreen controls, target bounds and app close passed');
 }finally{timers.forEach(clearInterval);}})().catch(e=>{console.error(e.stack);process.exitCode=1;});
