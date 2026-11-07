@@ -6,7 +6,8 @@ const {BrowserState,inputURL}=require('./browser_state'),icon=require('./browser
 const {BrowserLocale}=require('./browser_locale');
 const VehicleAudio=require('./browser_vehicle_audio');
 const shutdown=require('./browser_shutdown');
-const W=1600,H=520,IMAGE=700,BAR=58,TABS=42,SIDE=600;
+const QR=require('./qr_code');
+const W=1600,H=520,IMAGE=700,QR_IMAGE=701,BAR=58,TABS=42,SIDE=600;
 const C={bg:'#11151b',bar:'#181d25',field:'#252d38',panel:'#1b222c',line:'#343e4c',text:'#f4f6f9',muted:'#a2afc0',accent:'#78bfff'};
 const displayURL=value=>String(value||'').replace(/^https:\/\//,'').split(/[?#]/)[0];
 mgu.run({async start(ctx){
@@ -21,6 +22,7 @@ mgu.run({async start(ctx){
     let mediaCaps=null,mediaBusy=false,audioBusy=false;
     let vehicleAudioStatus={reason:'idle'},audioWanted=false,audioSync=null,audioNote='',audioRetry=0;
     let wifiNetworks=[],wifiScanning=false,wifiScanError='',wifiOffset=0;
+    let remoteState=null,remoteBusy=false,remoteQR='',remotePoll=0;
     let privacyState=null,privacyBusy=false,logins=[],loginOffset=0,privacyConfirmation=null,vaultSetup='';
     const videoActions=['back','toggle','forward','mute','exit'];
     const browser=new Browser({gate});
@@ -153,8 +155,14 @@ mgu.run({async start(ctx){
     };
     ui.onVisible(visible);if(ui.onFocus)ui.onFocus(visible);visible();setInterval(visible,100);
     browser.on('ready',()=>{serviceReady=true;resized='';if(!browser.child&&!frame)landing=true;launch();});
-    browser.on('frame',f=>{frame=f;setImage(IMAGE,f.width,f.height,f.rgba);});
-    browser.on('started',()=>{landing=!currentURL;resized='';activity();});
+    browser.on('frame',f=>{frame=f;setImage(IMAGE,f.width,f.height,f.rgba);nativeBridge.markDirty(IMAGE,f.dirty);});
+    browser.on('started',()=>{landing=!currentURL;resized='';activity();if(store.data.blockAds===false)safe(()=>browser.request('contentBlocking',{enabled:false}));});
+    browser.on('remote',v=>{
+        if(!v)return;
+        if(v.event==='connected'){if(remoteState)remoteState.phoneConnected=true;note('Handy verbunden');if(panel==='remote'){panel=null;landing=landing&&!currentURL;}}
+        else if(v.event==='opened'){note('Link vom Handy geöffnet');panel=panel==='remote'?null:panel;}
+        else if(v.event==='stopped'){remoteState=null;remoteQR='';}
+    });
     browser.on('tabs',value=>{tabs=value;activeTab=(tabs.find(t=>t.active)||{}).id||'';});
     browser.on('tabSelected',t=>{
         currentURL=t.url;title=t.title;landing=!t.url&&!t.popup;frame=null;page=null;finger=null;
@@ -280,6 +288,47 @@ mgu.run({async start(ctx){
         try{try{await syncVehicleAudio(true);}catch(e){throw new Error(audioError(e));}await browser.request('audioTest');mediaCaps=await browser.request('mediaCapabilities');if(mediaCaps.audio)mediaCaps.audio.vehicle=vehicleAudioStatus;note('Testton erzeugt. Hörbare Ausgabe am Gerät prüfen.');}
         finally{audioBusy=false;syncAudio();}
     }
+    // Phone remote control: show a QR code with a one-time link.
+    async function openRemote(fresh){
+        panel='remote';keyboard=null;webMode=false;reading=false;remoteBusy=true;activity();
+        try{
+            const status=await browser.request('remoteStatus');
+            remoteState=status.active&&!fresh?status:await browser.request('remoteStart');
+            showQR(remoteState.url);
+        }catch(e){remoteState={active:false,error:e.message};}
+        finally{remoteBusy=false;}
+    }
+    function showQR(url){
+        if(!url||url===remoteQR)return;
+        const code=QR.encode(url),scale=Math.max(4,Math.floor(300/(code.size+8))),img=QR.toRGBA(code,scale,[12,17,24],[255,255,255]);
+        setImage(QR_IMAGE,img.width,img.height,img.rgba);remoteQR=url;
+    }
+    async function stopRemote(){remoteState=await browser.request('remoteStop');remoteQR='';panel='settings';}
+    function drawRemote(c,bottom){
+        c.text('Mit Handy steuern',64,114,36,C.text);
+        const s=remoteState||{};
+        if(remoteBusy){c.text('Verbindung wird vorbereitet ...',65,170,22,C.muted);}
+        else if(!s.active){
+            c.text(s.error||'Die Handy-Steuerung ist ausgeschaltet.',65,170,22,'#ffbc8e');
+            c.text('Handy und BMW müssen im selben WLAN sein, z. B. über den Hotspot des Handys.',65,206,19,C.muted);
+            button(c,64,240,320,44,'Erneut versuchen',()=>openRemote(true),'remote-retry',{primary:true});
+        }else{
+            const side=300,x=64,y=140;
+            c.roundRect(x-8,y-8,side+16,side+16,12,'#ffffff');
+            if(remoteQR)c.image(QR_IMAGE,x,y,side,side);
+            const tx=420;
+            c.text(s.phoneConnected?'Handy ist verbunden':'Mit der Handy-Kamera scannen',tx,170,26,s.phoneConnected?'#7be0b5':C.text);
+            c.text('1. Kamera-App öffnen und den Code scannen.',tx,214,20,C.muted);
+            c.text('2. Am Handy Links senden, Text und Passwörter eingeben,',tx,246,20,C.muted);
+            c.text('    im Live-Bild tippen und scrollen.',tx,274,20,C.muted);
+            c.text('Funktioniert im WLAN des Fahrzeugs bzw. im Handy-Hotspot.',tx,314,18,C.muted);
+            c.text(String(s.url||'').replace(/^http:\/\//,''),tx,352,18,C.accent,{literal:true});
+            c.text('Endet nach 30 Minuten ohne Nutzung. Ein neuer Code macht den alten ungültig.',tx,386,17,C.muted);
+            button(c,tx,bottom-60,280,42,'Neuer Code',()=>openRemote(true),'remote-new');
+            button(c,tx+296,bottom-60,300,42,'Verbindung beenden',stopRemote,'remote-stop');
+        }
+        button(c,1288,bottom-60,246,42,'Zurueck',()=>{panel='settings';},'remote-back');
+    }
     async function openPrivacy(){panel='privacy';keyboard=null;webMode=false;reading=false;privacyBusy=true;activity();try{privacyState=await browser.request('privacyStatus');}finally{privacyBusy=false;}}
     async function changePrivacy(name){privacyBusy=true;try{const prefs={};prefs[name]=!privacyState[name];privacyState=await browser.request('privacyConfigure',{prefs});}finally{privacyBusy=false;}}
     async function openPasswords(){panel='passwords';loginOffset=0;logins=await browser.request('vaultList');}
@@ -338,8 +387,8 @@ mgu.run({async start(ctx){
     function belowTabs(c,fn){
         // Recorder.xf is an absolute device transform, not a logical translation.
         // Offset drawing and hit targets together so placement scaling stays intact.
-        const methods=['text','fillRect','roundRect','target'],originals={};
-        methods.forEach(name=>{originals[name]=c[name];c[name]=function(){const args=Array.prototype.slice.call(arguments);args[name==='text'?2:1]+=TABS;return originals[name].apply(c,args);};});
+        const methods=['text','fillRect','roundRect','target','image'],originals={};
+        methods.forEach(name=>{originals[name]=c[name];c[name]=function(){const args=Array.prototype.slice.call(arguments);args[name==='text'||name==='image'?2:1]+=TABS;return originals[name].apply(c,args);};});
         try{fn();}finally{methods.forEach(name=>{c[name]=originals[name];});}
     }
     function drawVideoControls(c,bottom){
@@ -385,6 +434,8 @@ mgu.run({async start(ctx){
         button(c,1170,79,364,42,'Internet / mobiler Hotspot',openNetwork,'network-settings');
         button(c,1170,139,364,42,'Medien & Streaming',openStreaming,'streaming-settings');
         button(c,1170,199,364,42,'Datenschutz & Logins',openPrivacy,'privacy-settings');
+        button(c,1170,259,364,42,'Mit Handy steuern (QR)',()=>openRemote(false),'remote-settings',{primary:true});
+        button(c,1170,319,364,42,store.data.blockAds?'Werbe- und Trackerblocker: Ein':'Werbe- und Trackerblocker: Aus',()=>{const next=!store.data.blockAds;store.set('blockAds',next);return browser.child?browser.request('contentBlocking',{enabled:next}):null;},'block-ads');
         c.text('STARTSEITE',65,157,15,C.muted);
         const homeText=keyboard==='homepage'?draft:store.data.homepage;
         c.text((homeText||ascii('Keine feste Seite - haeufig besuchte Seiten anzeigen')).slice(0,keyboard?67:115),65,190,21,C.text,{literal:true});
@@ -402,8 +453,11 @@ mgu.run({async start(ctx){
     }
     function drawPrivacy(c,bottom){
         c.text('Datenschutz & Logins',64,114,34,C.text);
-        const enabled=!!privacyState&&privacyState.supported&&!privacyState.locked&&!privacyBusy;
-        c.text(privacyBusy?'Geschützter Speicher wird geprüft ...':privacyState&&privacyState.error?privacyState.error:privacyState&&privacyState.supported?privacyState.locked?'Masterpasswort: Speicher zuerst entsperren':privacyState.protection:'Geschützter Speicher in dieser Laufzeit nicht verfügbar',65,157,18,C.muted);
+        // Cookies and site data use the device key; only the password vault
+        // needs the master password.
+        const enabled=!!privacyState&&privacyState.supported&&(privacyState.siteStorage||!privacyState.locked)&&!privacyBusy;
+        const vaultEnabled=!!privacyState&&privacyState.supported&&!privacyState.locked&&!privacyBusy;
+        c.text(privacyBusy?'Geschützter Speicher wird geprüft ...':privacyState&&privacyState.error?privacyState.error:privacyState&&privacyState.supported?privacyState.locked?'Cookies werden verschlüsselt gesichert. Passwörter: Speicher entsperren':privacyState.protection:'Geschützter Speicher in dieser Laufzeit nicht verfügbar',65,157,18,C.muted);
         if(privacyState&&privacyState.supported&&privacyState.locked&&!keyboard)button(c,1170,178,364,42,privacyState.needsSetup?'Masterpasswort einrichten':'Speicher entsperren',()=>{keyboard=privacyState.needsSetup?'vault-create':'vault-unlock';draft='';vaultSetup='';replaceDraft=false;keyMode='abc';upper=false;},'vault-unlock');
         c.text('Angemeldet bleiben',65,211,23,C.text);
         button(c,850,178,294,42,privacyState&&privacyState.rememberSessions?'Ein':'Aus',()=>changePrivacy('rememberSessions'),'remember-sessions',{enabled});
@@ -414,8 +468,8 @@ mgu.run({async start(ctx){
         button(c,64,354,390,42,'Website-Daten löschen / abmelden',()=>confirmPrivacy('Website-Daten löschen und alle Websites abmelden?',async()=>{privacyState=await browser.request('clearBrowserData',{kind:'sites'});landing=true;currentURL='';title='';}), 'clear-sites',{enabled});
         button(c,470,354,290,42,'HTTP-Cache löschen',()=>confirmPrivacy('Gespeicherten HTTP-Cache löschen?',async()=>{privacyState=await browser.request('clearBrowserData',{kind:'cache'});}), 'clear-cache',{enabled});
         button(c,776,354,290,42,'Verlauf löschen',()=>confirmPrivacy('Den lokalen Browser-Verlauf löschen?',async()=>store.clearHistory()),'clear-history');
-        button(c,1082,354,452,42,'Passwortverwaltung',openPasswords,'passwords',{enabled});
-        c.text('Speichern erfolgt beim Beenden. Ohne Sitzungen bleiben Logins nur bis zum Schließen.',65,439,17,C.muted);
+        button(c,1082,354,452,42,'Passwortverwaltung',openPasswords,'passwords',{enabled:vaultEnabled});
+        c.text('Cookies und Logins werden laufend gesichert, auch bei Zündung aus. Ohne Sitzungen bleiben sie nur bis zum Schließen.',65,439,17,C.muted);
         button(c,64,bottom-52,680,42,'Sitzungsspeicher zurücksetzen',()=>confirmPrivacy('Gespeicherte Website-Anmeldungen und Cache zurücksetzen? Passwörter bleiben erhalten.',async()=>{privacyState=await browser.request('clearBrowserData',{kind:'sessions-reset'});landing=true;currentURL='';title='';}),'reset-sessions',{enabled});
         button(c,1288,bottom-52,246,42,'Zurueck',()=>{panel='settings';},'privacy-back');
     }
@@ -526,6 +580,7 @@ mgu.run({async start(ctx){
         else if(panel==='streaming')belowTabs(cv,()=>drawStreaming(cv,bottom-TABS));
         else if(panel==='network')belowTabs(cv,()=>drawNetwork(cv,bottom-TABS));
         else if(panel==='settings')belowTabs(cv,()=>drawSettings(cv,bottom-TABS));
+        else if(panel==='remote')belowTabs(cv,()=>drawRemote(cv,bottom-TABS));
         else if(landing||panel==='library')belowTabs(cv,()=>drawStart(cv,bottom-TABS));
         else if(frame&&gate.check().allowed){
             page={x:0,y:top,w:W-(keyboard?SIDE:0),h:bottom-top};
@@ -543,6 +598,7 @@ mgu.run({async start(ctx){
         if(media.fullscreen&&!media.hasSiteControls)drawVideoControls(cv,bottom);
         if(keyboard){cv.targets=cv.targets.filter(t=>t.y<BAR+TABS||t.x+t.w<=W-SIDE);belowTabs(cv,()=>drawKeyboard(cv,bottom-TABS));}
         if(panel==='network'&&!wifiBusy&&Date.now()-wifiPoll>2500){wifiPoll=Date.now();safe(refreshWifi);}
+        if(panel==='remote'&&remoteState&&remoteState.active&&!remoteBusy&&Date.now()-remotePoll>2000){remotePoll=Date.now();safe(async()=>{const s=await browser.request('remoteStatus');if(panel==='remote'){remoteState=s;showQR(s.url);}});}
         const focused=ctx.display&&ctx.display.focusKey,focusedKey=focused&&focused.slice(0,4)==='tgt:'?focused.slice(4):'';
         const hint=Date.now()<toastUntil?toast:!webMode&&!keyboard&&!panel&&!landing&&tipLabels[focusedKey];
         if(hint&&!media.fullscreen){const w=Math.min(W-32,ascii(hint).length*10+42);cv.roundRect((W-w)/2,bottom-42,w,31,8,'#253243');cv.text(ascii(hint),(W-w)/2+20,bottom-20,17,C.text);}

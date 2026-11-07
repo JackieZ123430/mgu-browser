@@ -12,8 +12,11 @@ class BrowserSession extends EventEmitter {
         super();this.options=options;this.gate=options.gate;this.child=null;this.pipe=null;
         this.audio=Audio.output(Object.assign({},process.env,options.env||{}));this.webAudioContexts=new Map();this.drm=DRM.status();
         this.vehicleAudio=options.vehicleAudio?new VehicleAudioBridge(options.vehicleAudio):null;
-        this.session=null;this.epoch=0;this.lastFrame=0;this.decoding=false;this.profile=null;
-        this.performance={codec:JPEG?'jpeg-native':'png-js',frames:0,decodeMs:0,encodedBytes:0};
+        this.session=null;this.epoch=0;this.lastFrame=0;this.lastDecodeStart=0;this.decoding=false;this.profile=null;
+        // 30 fps ceiling. The frontend only receives changed rows, so this costs
+        // little on static pages and keeps scrolling and video fluid.
+        this.frameInterval=options.frameInterval||33;
+        this.performance={codec:JPEG?'jpeg-native':'png-js',frames:0,dropped:0,decodeMs:0,encodedBytes:0};
         this.closing=Promise.resolve();
         this.viewport=options.viewport||{width:960,height:540};
         this.locale=options.locale||'en-GB';
@@ -43,7 +46,16 @@ class BrowserSession extends EventEmitter {
         if(epoch!==this.epoch||this.profile!==profile||!this.gate.check().allowed){if(this.vehicleAudio)await this.vehicleAudio.stop();removeProfile(profile,this.options.profileRoot);throw new Error('Browserstart abgebrochen');}
         const args=['--headless','--disable-gpu','--remote-debugging-pipe','--no-first-run','--no-default-browser-check','--lang='+this.locale,
             '--disable-sync','--disable-background-networking','--disable-extensions','--disable-component-update',
-            '--disable-breakpad','--disable-dev-shm-usage','--disk-cache-size=16777216','--media-cache-size=8388608',
+            '--disable-breakpad','--disable-dev-shm-usage','--disk-cache-size=67108864','--media-cache-size=16777216',
+            // Fixed cookie encryption key store: there is no desktop keyring on
+            // the MGU. Without this Chromium may pick a different backend per
+            // start and refuse to read the restored cookie database.
+            '--password-store=basic','--use-mock-keychain',
+            // Discrete wheel steps: smooth scrolling produced dozens of
+            // intermediate frames per gesture that the screencast cannot keep up with.
+            '--disable-smooth-scrolling',
+            '--disable-features=Translate,MediaRouter,OptimizationHints,AutofillServerCommunication,InterestFeedContentSuggestions',
+            '--renderer-process-limit=4',
             '--window-size='+this.viewport.width+','+this.viewport.height,'--user-data-dir='+this.profile,'about:blank'];
         if(this.options.mediaDisabled)args.push('--disable-blink-features=WebCodecs');
         if(this.options.mediaDisabled||this.vehicleAudio&&!vehicleOutput)args.push('--mute-audio');
@@ -63,10 +75,11 @@ class BrowserSession extends EventEmitter {
             const version=await pipe.send('Browser.getVersion');this.emit('version',version.product);
             this.userAgent=version.userAgent;
             await pipe.send('Browser.setDownloadBehavior',{behavior:'deny'});
+            try{await this.restoreCookies(pipe);}catch(e){this.emit('diagnostic','Saved cookies could not be restored');}
             await pipe.send('Target.setDiscoverTargets',{discover:true});
             if(epoch!==this.epoch)throw new Error('Browserstart abgebrochen');
             await this._newTab(url||'');
-            this.emit('started');
+            this.emit('started');this.scheduleCookieCheckpoint();
         } catch(e) {this.stop('Browserstart fehlgeschlagen');throw e;}
     }
     send(method,params,timeoutMs) {
@@ -108,26 +121,34 @@ class BrowserSession extends EventEmitter {
             }else send('Fetch.continueRequest',{requestId:p.requestId}).catch(()=>{});
             return;
         }
-        if(event.method==='Page.screencastFrame') {
-            const epoch=this.epoch,view=this.pageGeneration,pipe=this.pipe,sid=this.session,params=event.params;
-            const ack=()=>pipe.send('Page.screencastFrameAck',{sessionId:params.sessionId},sid).catch(()=>{});
-            const work=()=>{
-                if(epoch!==this.epoch||view!==this.pageGeneration||this.decoding||!this.gate.check().allowed){ack();return;}
-                this.decoding=true;
-                const started=monotonic(),encoded=Buffer.from(params.data,'base64');
-                Promise.resolve().then(()=>JPEG?JPEG.decode(encoded):PNG.decode(encoded)).then(frame=>{
-                    this.performance.frames++;this.performance.decodeMs+=monotonic()-started;this.performance.encodedBytes+=encoded.length;
-                    if(this.performance.frames===1||this.performance.frames%30===0)this.emit('performance',this.performance);
-                    if(epoch===this.epoch&&view===this.pageGeneration&&this.gate.check().allowed){this.lastFrame=monotonic();this.emit('frame',frame);}
-                }).catch(e=>{if(epoch===this.epoch)this.emit('fault',e);}).then(()=>{this.decoding=false;ack();});
-            };
-            const wait=70-(monotonic()-this.lastFrame);
-            if(wait>0){
-                if(this.pendingFrame)this.pendingFrame.ack();
-                this.pendingFrame={work,ack};
-                if(!this.frameTimer)this.frameTimer=setTimeout(()=>{this.frameTimer=null;const p=this.pendingFrame;this.pendingFrame=null;if(p)p.work();},wait);
-            }else work();
-        }
+        if(event.method==='Page.loadEventFired')this.scheduleCookieCheckpoint(3000);
+        if(event.method==='Page.screencastFrame')this.screencastFrame(event);
+    }
+    // Latest-frame-wins pipeline. A frame is acknowledged when its decode
+    // starts, so Chromium already encodes the next one meanwhile; frames that
+    // arrive during a decode replace each other and only the newest is shown.
+    screencastFrame(event){
+        const params=event.params,pipe=this.pipe,sid=event.sessionId;
+        const ack=()=>{if(pipe&&!pipe.closed)pipe.send('Page.screencastFrameAck',{sessionId:params.sessionId},sid).catch(()=>{});};
+        if(this.pendingFrame){this.pendingFrame.ack();this.performance.dropped++;}
+        this.pendingFrame={params,ack,epoch:this.epoch,view:this.pageGeneration};
+        this.pumpFrames();
+    }
+    pumpFrames(){
+        if(this.decoding||!this.pendingFrame||this.frameTimer)return;
+        const wait=this.frameInterval-(monotonic()-this.lastDecodeStart);
+        if(wait>1){this.frameTimer=setTimeout(()=>{this.frameTimer=null;this.pumpFrames();},wait);return;}
+        const p=this.pendingFrame;this.pendingFrame=null;p.ack();
+        if(p.epoch!==this.epoch||p.view!==this.pageGeneration||!this.gate.check().allowed)return;
+        this.decoding=true;this.lastDecodeStart=monotonic();
+        const epoch=p.epoch,view=p.view,started=this.lastDecodeStart;
+        Promise.resolve().then(()=>{const encoded=Buffer.from(p.params.data,'base64');this.performance.encodedBytes+=encoded.length;
+            // The phone remote control shows this exact picture; no second encode.
+            if(this.listenerCount('screencastJpeg'))this.emit('screencastJpeg',{data:encoded,type:JPEG?'image/jpeg':'image/png'});return JPEG?JPEG.decode(encoded):PNG.decode(encoded);}).then(frame=>{
+            this.performance.frames++;this.performance.decodeMs+=monotonic()-started;
+            if(this.performance.frames===1||this.performance.frames%60===0)this.emit('performance',this.performance);
+            if(epoch===this.epoch&&view===this.pageGeneration&&this.gate.check().allowed){this.lastFrame=monotonic();this.emit('frame',frame);}
+        }).catch(e=>{if(epoch===this.epoch)this.emit('fault',e);}).then(()=>{this.decoding=false;this.pumpFrames();});
     }
     tap(x,y) {
         return this.inputTask(async context=>{
@@ -135,6 +156,8 @@ class BrowserSession extends EventEmitter {
             x=Math.max(0,Math.min(this.viewport.width-1,x));y=Math.max(0,Math.min(this.viewport.height-1,y));
             await context.send('Input.dispatchMouseEvent',{type:'mousePressed',x,y,button:'left',clickCount:1});
             await context.send('Input.dispatchMouseEvent',{type:'mouseReleased',x,y,button:'left',clickCount:1});this.inspectInput();
+            // Consent banners and logins set cookies right after a tap.
+            this.scheduleCookieCheckpoint(2500);
         });
     }
     text(value) {
@@ -200,24 +223,28 @@ class BrowserSession extends EventEmitter {
         if(this.pendingPopups)this.pendingPopups.clear();
         this.tabs=[];this.activeTab=null;this.pageGeneration++;this.emitTabs();
         this.lastMedia=null;this.emit('media',{fullscreen:false,playing:false,audible:false,webAudioRunning:0});
-        clearTimeout(this.navigationTimer);clearTimeout(this.inputTimer);this.lastInput=null;
+        clearTimeout(this.navigationTimer);clearTimeout(this.inputTimer);clearTimeout(this.cookieTimer);this.cookieTimer=null;this.lastInput=null;
         clearTimeout(this.frameTimer);this.frameTimer=null;if(this.pendingFrame){this.pendingFrame.ack();this.pendingFrame=null;}
         const child=this.child,pipe=this.pipe,profile=this.profile;this.child=null;this.pipe=null;this.session=null;this.profile=null;this.epoch++;
         if(child) {
             // Clear the page immediately and ask Chromium to close normally.
             // Avoid an unconditional SIGKILL, which is unsuitable on this MGU.
             this.emit('blocked',reason||'Browser geschlossen');
-            if(pipe&&!pipe.closed)pipe.send('Browser.close',{},null,2000).catch(()=>{});
+            // Take a last cookie snapshot (bounded to 1.5 s) before asking
+            // Chromium to close, then close the pipe.
+            if(pipe)pipe.cancelPending(new Error(reason||'Browser geschlossen'));
+            const finalSnapshot=pipe&&!pipe.closed?this.snapshotCookies(pipe,1500).catch(()=>{}):Promise.resolve();
+            finalSnapshot.then(()=>{if(pipe&&!pipe.closed)pipe.send('Browser.close',{},null,2000).catch(()=>{});}).then(()=>{if(pipe)setTimeout(()=>pipe.close(new Error(reason||'Browser geschlossen')),2100);});
             let exited=child.exitCode!==null||child.signalCode!==null,forced=false,interrupted=false,cleaned=false,termTimer,killTimer,deadline;
             this.closing=new Promise(resolve=>{
                 const cleanup=()=>{if(cleaned)return;cleaned=true;clearTimeout(termTimer);clearTimeout(killTimer);clearTimeout(deadline);setTimeout(async()=>{try{await audioClosing;if(this.options.profileStore&&!forced&&!interrupted&&child.exitCode===0&&!child.signalCode)await this.options.profileStore.capture(profile);else if(this.options.profileStore)this.options.profileStore.skipCapture=false;}catch(e){this.emit('diagnostic','Geschützte Sitzung konnte nicht gespeichert werden');}finally{try{removeProfile(profile,this.options.profileRoot);}catch(e){this.emit('diagnostic','Profile cleanup failed');}this.shutdownFault=null;resolve();}},500);};
                 if(exited)cleanup();else child.once('close',()=>{exited=true;cleanup();});
-                if(!exited)deadline=setTimeout(()=>{this.shutdownFault=new Error('Browser-Prozess nicht beendet. Backend-Neustart erforderlich.');this.emit('fault',this.shutdownFault);resolve();},9000);
+                if(!exited)deadline=setTimeout(()=>{this.shutdownFault=new Error('Browser-Prozess nicht beendet. Backend-Neustart erforderlich.');this.emit('fault',this.shutdownFault);resolve();},11000);
             });
             const signal=name=>{if(!exited&&child.pid){interrupted=true;try{process.kill(-child.pid,name);}catch(e){try{child.kill(name);}catch(ignore){}}}};
-            if(!exited){termTimer=setTimeout(()=>signal('SIGTERM'),2500);killTimer=setTimeout(()=>{if(!exited){forced=true;this.emit('diagnostic','Browser reagiert nicht; eigene Prozessgruppe wird beendet');signal('SIGKILL');}},5500);}
+            if(!exited){termTimer=setTimeout(()=>signal('SIGTERM'),4000);killTimer=setTimeout(()=>{if(!exited){forced=true;this.emit('diagnostic','Browser reagiert nicht; eigene Prozessgruppe wird beendet');signal('SIGKILL');}},7000);}
         }
-        if(pipe)pipe.close(new Error(reason||'Browser geschlossen'));
+        if(pipe&&!child)pipe.close(new Error(reason||'Browser geschlossen'));
         if(!child)this.closing=audioClosing;
     }
     destroy() {clearInterval(this.watch);clearInterval(this.mediaWatch);this.stop('App geschlossen');}
@@ -227,6 +254,8 @@ Object.assign(BrowserSession.prototype,require('./browser_input'));
 Object.assign(BrowserSession.prototype,require('./browser_media'));
 Object.assign(BrowserSession.prototype,Audio.methods);
 Object.assign(BrowserSession.prototype,require('./browser_privacy'));
+Object.assign(BrowserSession.prototype,require('./browser_cookies'));
+Object.assign(BrowserSession.prototype,require('./browser_performance'));
 // Node 8 has no recursive rm. Never follow links when clearing our temporary
 // profile, and accept only the direct session directory we created ourselves.
 function removeProfile(profile,root){

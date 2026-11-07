@@ -39,7 +39,7 @@ int main(int argc,char **argv) {
     if(unshare(CLONE_NEWNS)||mount(NULL,"/",NULL,MS_REC|MS_PRIVATE,NULL)||mount(resolver,"/etc/resolv.conf",NULL,MS_BIND,NULL)){perror("private browser resolver");return 125;}
     /* A real aggregate quota, including IndexedDB, caches and temporary files.
      * This mount exists only in the service namespace and vanishes on stop. */
-    char options[128];snprintf(options,sizeof options,"size=128m,nr_inodes=16384,mode=0700,uid=%u,gid=%u",uid,app);
+    char options[128];snprintf(options,sizeof options,"size=384m,nr_inodes=32768,mode=0700,uid=%u,gid=%u",uid,app);
     if(mount("mgu-browser-work",work,"tmpfs",MS_NODEV|MS_NOSUID|MS_NOEXEC,options)||
        !work_directory("/var/opt/mgu-browser/work/home",uid,app)||!work_directory("/var/opt/mgu-browser/work/tmp",uid,app)||
        !work_directory("/var/opt/mgu-browser/work/cache",uid,app)||!work_directory("/var/opt/mgu-browser/work/profiles",uid,app)){

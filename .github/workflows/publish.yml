@@ -2,15 +2,17 @@ name: Publish audited Browser release
 
 on:
   push:
-    branches: [main]
+    # main publishes; claude/** branches run the identical build and checks
+    # without the final publish step (release rehearsal).
+    branches: [main, 'claude/**']
     paths:
-      - release/0.12.0/**
+      - release/0.13.0/**
   workflow_dispatch:
     inputs:
       version:
         description: Audited release metadata version
         required: true
-        default: '0.12.0'
+        default: '0.13.0'
 
 permissions:
   contents: read
@@ -27,7 +29,7 @@ jobs:
     permissions:
       contents: write
     env:
-      RELEASE_VERSION: ${{ inputs.version || '0.12.0' }}
+      RELEASE_VERSION: ${{ inputs.version || '0.13.0' }}
     steps:
       - name: Check out publication controls
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -102,7 +104,14 @@ jobs:
           "$RUNNER_TEMP/packages/mgu_browser@$RELEASE_VERSION.tgz"
           "$RUNNER_TEMP/packages/mgu-browser@$RELEASE_VERSION.tgz"
           "$RUNNER_TEMP/packages/catalog.json"
+      - name: Keep rehearsal packages
+        if: github.ref != 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-rehearsal
+          path: ${{ runner.temp }}/packages
       - name: Publish verified immutable assets, then switch Store catalog
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-

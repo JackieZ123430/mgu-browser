@@ -27,7 +27,7 @@ test('Site deletion serializes a concurrent browser start before restore',{skip:
 });
 test('Corrupt session archive can be reset without deleting the password vault',async()=>{
     const dir=fixture();try{const store=new SecureBrowserData(dir+'/protected');await store.unlock('dummy corruption master phrase');await store.configure({rememberSessions:true});await store.saveLogin('https://example.org','dummy-user','dummy-secret');
-        fs.writeFileSync(dir+'/protected/sessions.bin','corrupt-fixture');await assert.rejects(()=>store.restore(dir+'/profile'));await store.resetSessions();assert.equal((await store.archiveAsync()).length,0);assert.equal((await store.listLogins()).length,1);
+        fs.writeFileSync(dir+'/protected/sessions.bin','corrupt-fixture');await store.restore(dir+'/profile');assert(fs.existsSync(dir+'/protected/sessions.bin.damaged'));assert.match(store.error,/beschädigt/);await store.resetSessions();assert.equal((await store.archiveAsync()).length,0);assert.equal((await store.listLogins()).length,1);
     }finally{remove(dir);}
 });
 test('Archive processing yields and concurrent initial setup preserves one master key',async()=>{

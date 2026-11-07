@@ -21,7 +21,16 @@ class Channel extends EventEmitter {
             if(type===1){let m;try{m=JSON.parse(b.toString('utf8'));}catch(e){this.socket.destroy();return;}this.emit('json',m);}else this.emit('frame',b);
         }
     }
-    send(type,body){if(this.socket.destroyed)return false;const h=Buffer.alloc(8);h.writeUInt32LE(type);h.writeUInt32LE(body.length,4);return this.socket.write(Buffer.concat([h,body]));}
+    send(type,body){return this.sendParts(type,[body]);}
+    // Writes header and payload parts without concatenating them, so a frame
+    // band is never copied again on the way to the socket.
+    sendParts(type,parts){
+        if(this.socket.destroyed)return false;let length=0;for(const p of parts)length+=p.length;
+        const h=Buffer.alloc(8);h.writeUInt32LE(type);h.writeUInt32LE(length,4);
+        this.socket.cork();let ok=this.socket.write(h);for(const p of parts)if(p.length)ok=this.socket.write(p)&&ok;
+        this.socket.uncork();return ok;
+    }
+    pending(){return this.socket.writableLength||this.socket.bufferSize||0;}
     json(value){
         let body=Buffer.from(JSON.stringify(value));
         if(body.length>MAX_JSON)body=Buffer.from(JSON.stringify(value&&Number.isInteger(value.id)?{id:value.id,error:'Browser-Nachricht zu groß'}:{event:'fault',value:'Browser-Nachricht zu groß'}));

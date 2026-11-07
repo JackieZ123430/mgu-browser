@@ -2,7 +2,7 @@
   "id": "mgu_browser",
   "title": "Browser",
   "description": "Browser mit Startseite, Verlauf, Lesezeichen und iDrive-Steuerung",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "vendor": "custom",
   "loggingId": "OA9B",
   "maxDiskUsage": 268435456,

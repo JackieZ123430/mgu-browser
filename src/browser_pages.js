@@ -93,6 +93,7 @@ module.exports={
             const send=async(method,params)=>{check();const result=await pipe.send(method,params,tab.session);check();return result;};
             await send('Page.enable');await send('Runtime.enable');await send('Network.enable');await send('Log.enable');await send('WebAudio.enable').catch(()=>{});
             await this.applyLocale(tab.session,pipe);check();
+            await this.applyPagePerformance(tab.session,pipe);check();
             await this.installVideoFit(tab.session);check();
             if(this.options.mediaDisabled)await send('Fetch.enable',{patterns:[{urlPattern:'*',resourceType:'Document',requestStage:'Response'},{urlPattern:'*',resourceType:'Media',requestStage:'Request'}]});
             await this._selectTab(tab.id);check();
@@ -115,6 +116,8 @@ module.exports={
         const pipe=this.pipe,epoch=this.epoch;
         const check=()=>{this.requireAllowed();if(this.pipe!==pipe||this.epoch!==epoch||!this.tabs.includes(tab))throw new Error('Tabwechsel abgebrochen');};
         const send=async(method,params,session)=>{check();const result=await pipe.send(method,params,session||tab.session);check();return result;};
+        const previous=this.tabs.find(t=>t.session===this.session);
+        if(previous)previous.mediaActive=!!(this.mediaActivityState&&(this.mediaActivityState.playing||this.mediaActivityState.audible));
         if(this.session){await send('Page.stopScreencast',{},this.session).catch(()=>{});check();await send('Emulation.setFocusEmulationEnabled',{enabled:false},this.session).catch(()=>{});check();}
         clearTimeout(this.navigationTimer);clearTimeout(this.inputTimer);clearTimeout(this.frameTimer);
         this.frameTimer=null;if(this.pendingFrame){this.pendingFrame.ack();this.pendingFrame=null;}
@@ -123,10 +126,11 @@ module.exports={
         this.session=tab.session;this.target=tab.target;this.activeTab=id;this.mainFrame=tab.mainFrame;
         this.emitTabs();this.emit('tabSelected',{id,url:tab.url,title:tab.title||'',loading:!!tab.loading,popup:!!tab.popup});
         this.emit('input',{editable:false,password:false});
+        await this.lifecycle(previous,tab);check();
         await send('Page.bringToFront');
         await send('Emulation.setFocusEmulationEnabled',{enabled:true});
         await this.resize(this.viewport.width,this.viewport.height);check();
-        await send('Page.startScreencast',{format:this.performance.codec==='jpeg-native'?'jpeg':'png',quality:82,maxWidth:1280,maxHeight:720,everyNthFrame:1});
+        await send('Page.startScreencast',{format:this.performance.codec==='jpeg-native'?'jpeg':'png',quality:75,maxWidth:1280,maxHeight:720,everyNthFrame:1});
         this.emit('loading',!!tab.loading);this.scheduleNavigation();this.inspectInput();
     }
 };

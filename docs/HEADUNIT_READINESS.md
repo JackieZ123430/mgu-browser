@@ -8,7 +8,7 @@ Status: **Privater Hardware-Test auf der eigenen Headunit; keine allgemeine Inst
 Am 5. November 2026 wurden App und Backend 0.9.1 mit dem offiziellen
 MGU-Deploy-Werkzeug zusammen installiert. MGU Store 0.9.21 ist ebenfalls
 installiert. Die Node-8-/N-API-Prüfung auf diesem Gerät ist bestanden.
-Ein privates, auf 128 MiB und 16384 Inodes begrenztes tmpfs für das aktive
+Ein privates, auf 384 MiB und 32768 Inodes begrenztes tmpfs (bis 0.12: 128 MiB) für das aktive
 Profil, HOME, Cache und temporäre Dateien wird vor der Rechteabgabe angelegt.
 Es ist nodev/nosuid/noexec und besteht nur im Mount-Namespace des Dienstes.
 Die bestehende private Chromium-Engine wurde anhand ihres SHA-256 bestätigt.
@@ -71,7 +71,7 @@ migriert werden, damit der Backend-Dienst Verbindungswechsel lesen kann.
 | Node / N-API / glibc | Auf diesem Gerät: Node 8.16.2 / N-API 4, beide Addons geladen; andere Geräte bleiben ungeprüft |
 | Engine / Sandbox | Tatsächliche Sandbox-Aktivierung, passende Bibliotheken, Dateirechte und Kernel-Funktionen |
 | Ressourcen | Wirksame Dienstlimits, Messungen unter MGU-Speicherdruck, keine Neustarts oder Watchdog-Auslösung |
-| Datenträger | Harte Arbeitsprofil-Grenze von 128 MiB auf diesem Gerät geprüft; Verhalten bei vollständig belegtem Profil und Speicherdruck noch offen |
+| Datenträger | Arbeitsprofil-Grenze ab 0.13.0: 384 MiB (128 MiB-Grenze war auf diesem Gerät geprüft); Verhalten bei vollständig belegtem Profil und Speicherdruck noch offen |
 | Netzwerk | Richtige Benutzer-IDs, freie Routing-Slots, kein fremdes Subnetz, CarPlay-/BMW-WLAN-Koexistenz |
 | Medien | BMW-Lautsprecher, Codecs und zulässige passende DRM/CDM-Bereitstellung auf der Zielplattform |
 | Bedienung | Disney-eigene Buttons nach dem Fix erneut testen; echte Dreh-/Druck-/Touchpad-Ereignisse separat prüfen |

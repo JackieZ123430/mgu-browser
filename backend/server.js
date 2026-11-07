@@ -21,10 +21,11 @@ const audioGid=Number(process.env.MGU_BROWSER_AUDIO_GID);
 const vehicleAudio=Number.isInteger(audioGid)&&audioGid>0&&audioGid<=65535?{binary:'/var/opt/mgu-browser/current/audio-bridge',gid:audioGid}:null;
 const browser=new Browser({gate,mediaDisabled:false,cdmConfig:'/var/opt/mgu-browser/cdm.json',binary:'/var/opt/mgu-browser/current/browser-launch',profileRoot:'/var/opt/mgu-browser/work/profiles',profileStore,viewport:{width:1280,height:384},vehicleAudio,env:{FONTCONFIG_FILE:ENGINE+'/fonts.conf',CHROME_DEVEL_SANDBOX:ENGINE+'/chrome-sandbox'}});
 function stop(reason){allowed=false;browser.stop(reason);phase='idle';status();}
-browser.on('frame',frame=>{
-    if(!owner||!gate.check().allowed||(owner.socket.writableLength||owner.socket.bufferSize||0)>2*1024*1024)return;
-    const header=Buffer.alloc(12);header.writeUInt32LE(generation);header.writeUInt32LE(frame.width,4);header.writeUInt32LE(frame.height,8);owner.send(2,Buffer.concat([header,frame.rgba]));
-});
+const {RemoteControl}=require('./remote_control');
+const remote=new RemoteControl({browser});
+remote.on('remote',value=>{if(owner)owner.json({event:'remote',value});});
+const frameSender=require('./frame_delta').sender({owner:()=>owner,allowed:()=>gate.check().allowed,generation:()=>generation});
+browser.on('frame',frame=>frameSender.send(frame));
 ['started','blocked','fault','version','navigation','navigationState','loading','input','tabs','tabSelected','media'].forEach(event=>browser.on(event,value=>{if(owner)owner.json({event,value:value&&value.message||value});}));
 browser.on('performance',value=>fs.writeFileSync('/var/opt/mgu-browser/data/render-performance.json',JSON.stringify(value)));
 browser.on('started',()=>{phase='running';status();[3000,12000,25000].forEach(ms=>setTimeout(()=>{if(browser.child)browser.pageInfo().then(r=>fs.writeFileSync('/var/opt/mgu-browser/data/page-diagnostic.json',r.result.value)).catch(()=>{});},ms));});
@@ -47,7 +48,8 @@ const server=net.createServer(socket=>{
     channel.on('frame',()=>socket.destroy());
     channel.on('json',async message=>{
         if(!message||typeof message!=='object')return socket.destroy();
-        if(message.op==='state'){
+        if(message.op==='keyframe'){frameSender.reset();return;}
+        if(message.op==='state'){if(message.frames===2)channel.frameProtocol=2;
             if(typeof message.allowed!=='boolean'||!Number.isInteger(message.generation)||message.generation<0||message.generation>0xffffffff)return socket.destroy();
             const changed=allowed!==(message.allowed===true)||generation!==(Number(message.generation)>>>0);
             const next=message.allowed===true;generation=Number(message.generation)>>>0;updated=now();
@@ -96,6 +98,10 @@ const server=net.createServer(socket=>{
                 case 'wifiConnect':result=await wifi({op:'connect',ssid:message.ssid,password:message.password});message.password=null;break;
                 case 'wifiReconnect':result=await wifi({op:'reconnect'});break;
                 case 'wifiScan':result=await wifi({op:'scan'});break;
+                case 'remoteStart':result=await remote.start();break;
+                case 'remoteStop':result=remote.stop('user');break;
+                case 'remoteStatus':result=remote.status();break;
+                case 'contentBlocking':result=await browser.setContentBlocking(message.enabled===true);break;
                 case 'stop':browser.stop('Browser geschlossen');break;
                 default:throw new Error('Unbekannter Browser-Befehl');
             }
@@ -114,4 +120,4 @@ setInterval(()=>{
     if(state.connected&&(state.updated!==lastNetworkStamp||((!lastNetwork||!lastNetwork.https)&&now()-lastNetworkProbe>15000))){lastNetworkStamp=state.updated;lastNetworkProbe=now();networkProbe().then(result=>{lastNetwork=result;fs.writeFileSync('/var/opt/mgu-browser/data/network-status.json',JSON.stringify(result));if(owner)owner.json({event:'network',value:result});});}
 },2000);
 let shuttingDown=false;
-for(const sig of ['SIGTERM','SIGINT'])process.on(sig,async()=>{if(shuttingDown)return;shuttingDown=true;stop('Backend beendet');if(owner)owner.socket.destroy();server.close();const timeout=setTimeout(()=>process.exit(0),18000);timeout.unref();await browser.closing;process.exit(0);});
+for(const sig of ['SIGTERM','SIGINT'])process.on(sig,async()=>{if(shuttingDown)return;shuttingDown=true;remote.destroy();stop('Backend beendet');if(owner)owner.socket.destroy();server.close();const timeout=setTimeout(()=>process.exit(0),18000);timeout.unref();await browser.closing;process.exit(0);});

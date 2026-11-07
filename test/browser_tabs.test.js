@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),EE=require('events');
 const Pages=require('../src/browser_pages');
 function fixture(){
-    const calls=[],b=Object.assign(new EE(),Pages,{options:{},pipe:{send:async(method,params)=>{calls.push({method,params});return {}; }},epoch:1,tabQueue:Promise.resolve(),tabs:[{id:'tab-1',target:'opener',session:'session-1'}],activeTab:'tab-1',requireAllowed(){}});
+    const calls=[],b=Object.assign(new EE(),Pages,require('../src/browser_performance'),{options:{},pipe:{send:async(method,params)=>{calls.push({method,params});return {}; }},epoch:1,tabQueue:Promise.resolve(),tabs:[{id:'tab-1',target:'opener',session:'session-1'}],activeTab:'tab-1',requireAllowed(){}});
     b.on('fault',e=>calls.push({fault:e.message}));
     b._attachTab=async(target,info)=>{calls.push({attached:target,info});b.tabs.push({id:target,target,session:target});b.activeTab=target;};
     b._selectTab=async id=>{b.activeTab=id;};b._newTab=async()=>{b.tabs.push({id:'replacement',target:'replacement'});b.activeTab='replacement';};
