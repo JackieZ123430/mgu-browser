@@ -80,7 +80,8 @@ static void stop_signal(int sig) { (void)sig; stopping = 1; }
 static void open_timeout(int sig) {
     (void)sig;
     static const char message[] = "ERROR alsa-timeout\n";
-    (void)write(STDOUT_FILENO, message, sizeof(message) - 1);
+    ssize_t sent = write(STDOUT_FILENO, message, sizeof(message) - 1);
+    (void)sent;
     _exit(2);
 }
 static void report(const char *message) { puts(message); fflush(stdout); }
