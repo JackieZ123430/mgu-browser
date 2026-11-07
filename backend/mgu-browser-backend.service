@@ -9,14 +9,15 @@ ExecStart=/usr/bin/node /var/opt/mgu-browser/current/runtime/launch.js
 Restart=no
 KillMode=control-group
 TimeoutStopSec=20
+# Full CPU access (no quota) and raised priority for Chromium's software
+# rendering; no realtime class, so the stock HMI keeps its own scheduling.
 MemoryAccounting=yes
-MemoryLimit=768M
+MemoryLimit=1536M
 CPUAccounting=yes
-CPUQuota=300%
-CPUShares=512
-Nice=0
-TasksMax=256
-OOMScoreAdjust=500
+CPUShares=1024
+Nice=-5
+TasksMax=384
+OOMScoreAdjust=0
 Environment=HOME=/var/opt/mgu-browser/data
 UMask=0077
 

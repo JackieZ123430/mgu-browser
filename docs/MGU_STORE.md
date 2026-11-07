@@ -82,7 +82,7 @@ Engines live under `/var/opt/mgu-browser-engine/versions/<version>/engine`.
 Their interpreter and library paths point to that immutable version. BMW system
 libraries are not replaced. Setup validates the engine and root-owned setuid
 sandbox; Chromium and the backend run unprivileged with sandbox/TLS checks
-enabled. Temporary profiles use a private 128 MiB noexec/nosuid tmpfs.
+enabled. Temporary profiles use a private 384 MiB noexec/nosuid tmpfs (128 MiB up to 0.12).
 
 Close Browser before updating. Updates/rollback use the official deployer's
 version directories and `current` links. Roll back the affected component in
