@@ -1,6 +1,6 @@
 {
   "version": "0.12.0",
-  "sourceCommit": "8c381587355f03ca8cc249046f4f6bba44c4e7f5",
+  "sourceCommit": "374055793140592c28c2c1bb08ffc7492547eb70",
   "date": "2026-11-07",
   "environment": {
     "platform": "unprivileged Linux x86_64",
@@ -47,7 +47,8 @@
       "distributedWithRuntime": false
     },
     "audioManager": "State-machine and exact packaged SDK UI tests use an authored fake provider; release-own-route on writer exit and shutdown hook passed",
-    "physicalVehicleSpeakersTested": false
+    "physicalVehicleSpeakersTested": false,
+    "fortifiedCompile": "Explicit -D_FORTIFY_SOURCE=3 build with -Werror passed ABI audit and full PCM fixture on both host and isolated GLIBC 2.27 runtime"
   },
   "drm": {
     "emeApiAvailable": true,
@@ -80,8 +81,8 @@
   "localArtifactEvidence": {
     "meaning": "These exact local build artifacts passed the local tests. CI compiles the audited source again, tests its own exact helpers and publishes its generated hashes; compiler-dependent binaries need not be byte-identical.",
     "mgu-browser@0.12.0.tgz": {
-      "size": 308695,
-      "sha256": "9493e6bbacac04b735bb9b20b5d6476164973fea1a3ceb42d755f792347d1134"
+      "size": 308694,
+      "sha256": "85f6f5396b509994fe37d17cf5cac588f6b7eb84ca7dcf7538dc0aafc61451ca"
     },
     "mgu_browser@0.12.0.tgz": {
       "size": 1824982,

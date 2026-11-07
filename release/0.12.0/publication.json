@@ -2,9 +2,9 @@
   "repository": "pllanaio/mgu-browser",
   "version": "0.12.0",
   "tag": "v0.12.0",
-  "sourceCommit": "8c381587355f03ca8cc249046f4f6bba44c4e7f5",
+  "sourceCommit": "374055793140592c28c2c1bb08ffc7492547eb70",
   "storeCommit": "8cfae23db27e51d86f84e65b13ce0592668d8df9",
   "title": "MGU Browser 0.12.0 \u2014 experimental ID7 audio/media update",
   "previousCatalogSha256": "eb6dac7577d61d3a8e9e38e9a7721d7f798e0b30b490733fe453108a5d28a842",
-  "sourceInputsSha256": "35e9f9dd15ca7caa3ec4a65c06de107afdd1804c45fe73af37e535c2323f89c0"
+  "sourceInputsSha256": "982380368169a07989d0866895615f3202d6e9952446ec77a6a444a18acea29a"
 }

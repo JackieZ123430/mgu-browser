@@ -14,7 +14,7 @@
   "backend/mgu-browser-backend.service": "38d44d1a141f02c7f388a0b0e66776de98eb4821dc4931a4f9515ca6f1523bc9",
   "backend/server.js": "823550919247718ad621ec9f4cdb86e849fecfdc4522601e4a9a26b0ae99da25",
   "mgu-repo.json": "51a88a7fd2e13e56629e2b4eece6161e6c73ed3c599c73746f212017efc3510a",
-  "native/audio_bridge.c": "585db057c49cd0e7cbeaf92b340d45ba3b89b9f8fe7ba1fffd8bda6997898607",
+  "native/audio_bridge.c": "140f0d471814fda260feb007c07baa5fb5b93ebc8a547855afc9f46d1e54440d",
   "native/backend_launch.c": "afd04b9df9d8ea077e645977b4e971d7c0cb580fbd84b03fd3860d1ec82f0573",
   "native/browser_dpapi.cs": "41067f5a43b24941ce2a2f7ed5963816ce781838c5c648e628bb7fec0daad5a5",
   "native/browser_launch.c": "ddf4c9d8839586d63a7aab47ce9deb183fb807f9016bc30f8e72e3f5e7391143",
