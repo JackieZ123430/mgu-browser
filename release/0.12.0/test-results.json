@@ -1,0 +1,98 @@
+{
+  "version": "0.12.0",
+  "sourceCommit": "8c381587355f03ca8cc249046f4f6bba44c4e7f5",
+  "date": "2026-11-07",
+  "environment": {
+    "platform": "unprivileged Linux x86_64",
+    "node": "24.22.1",
+    "chromium": "156.0.8078.79 Debian 13",
+    "sandbox": "enabled",
+    "tlsVerification": "enabled"
+  },
+  "core": {
+    "command": "node --test test/*.test.js",
+    "passed": 74,
+    "failed": 0,
+    "skipped": 0
+  },
+  "publisher": {
+    "command": "python3 release/test_publish.py",
+    "passed": 9,
+    "failed": 0,
+    "scope": "Offline upload ordering, existing-asset immutability, build mutation, tag/state consistency, concurrent catalog guard and catalog rollback"
+  },
+  "realChromium": {
+    "offline_input_smoke.js": "passed",
+    "chromium_tabs_smoke.js": "passed",
+    "media_engine_smoke.js": "passed",
+    "emulator_media_smoke.js": "passed",
+    "chromium_audio_smoke.js": "passed",
+    "chromium_restore_smoke.js": "passed",
+    "chromium_drm_smoke.js": "passed"
+  },
+  "videoEvidence": "Authored H.264/AAC and VP8/Opus playback decoded video frames/audio; media controls, fullscreen containment and exit passed",
+  "vehicleAudioBridge": {
+    "command": "MGU_AUDIO_BRIDGE=<exact-unpacked-runtime>/files/audio-bridge MGU_AUDIO_LOADER=<isolated-Ubuntu18>/lib/x86_64-linux-gnu/ld-2.27.so MGU_AUDIO_LIBRARY_PATH=<old-lib>:<old-usr-lib> node test/chromium_vehicle_audio_smoke.js",
+    "passed": true,
+    "helperSha256": "1447756f2e7afe7f6708942ef112cfca5ebc07254eb8c3ce835b3c3194115c86",
+    "pcmBytes": 163840,
+    "evidence": "Real sandboxed Chromium WebAudio -> private FIFO -> exact packaged helper -> real system ALSA file PCM, nonzero tone, paced output, pause/disconnected discard, reacquire without stale replay, child cleanup and muted output when helper fails",
+    "isolatedRuntime": {
+      "glibc": "2.27-3ubuntu1.6",
+      "libdl": "2.27-3ubuntu1.6",
+      "libasound": "1.1.3-5ubuntu0.6",
+      "source": "Public Ubuntu 18 archives pinned by size/SHA-256 from cryptographically verified Ubuntu InRelease and Packages index",
+      "fixtureScript": "test/prepare_audio_abi_fixture.py",
+      "hostInstallation": false,
+      "distributedWithRuntime": false
+    },
+    "audioManager": "State-machine and exact packaged SDK UI tests use an authored fake provider; release-own-route on writer exit and shutdown hook passed",
+    "physicalVehicleSpeakersTested": false
+  },
+  "drm": {
+    "emeApiAvailable": true,
+    "clearKeyAvailable": true,
+    "widevine": "NotSupportedError",
+    "authorizedCdmInstalled": false,
+    "protectedPlaybackVerified": false,
+    "evidence": "Local EME/MediaKeys diagnostics and HTML/WebAudio activity across tabs passed; configuration/path/manifest/ELF guards tested without proprietary native code",
+    "limits": "No CDM, license exchange, real streaming provider, protected decoding, HDCP or device certification was tested"
+  },
+  "node8": {
+    "version": "8.16.2",
+    "syntax": "all distributed JavaScript checked",
+    "actualEngine": "sandboxed Chromium startup, page focus/press and explicit AudioContext graph passed"
+  },
+  "frontend": "Fresh final packaged SDK-free frontend UI passed, including helper-exit AudioManager release and patched SDK shutdown hook",
+  "store": {
+    "version": "0.12.0",
+    "storeSourceCommit": "8cfae23db27e51d86f84e65b13ce0592668d8df9",
+    "deployValidatorVersion": "0.8.4",
+    "artifactValidation": "passed",
+    "catalogParser": "passed",
+    "sourceByteEquality": "all distributed JavaScript modules and frontend UI match the final source checkout",
+    "nativeAddons": "both loaded successfully",
+    "nativeProvenance": "new backend-launch is static musl; new audio-bridge uses firmware interpreter, explicitly needs libdl.so.2 and imports at most GLIBC 2.17; source/helper hashes and unchanged base payloads validated",
+    "syntheticDonorPreparation": "passed; proprietary SDK omitted from uploaded frontend",
+    "engine": "0.1.0 retained exactly from v0.10.0 catalog",
+    "limits": "Artifact validation does not install on a headunit or exercise real systemd/firmware behavior"
+  },
+  "localArtifactEvidence": {
+    "meaning": "These exact local build artifacts passed the local tests. CI compiles the audited source again, tests its own exact helpers and publishes its generated hashes; compiler-dependent binaries need not be byte-identical.",
+    "mgu-browser@0.12.0.tgz": {
+      "size": 308695,
+      "sha256": "9493e6bbacac04b735bb9b20b5d6476164973fea1a3ceb42d755f792347d1134"
+    },
+    "mgu_browser@0.12.0.tgz": {
+      "size": 1824982,
+      "sha256": "98c1525a184bf062a8cf4db1d78a661f24ae378264ce81998a93e34295be8826"
+    }
+  },
+  "limits": [
+    "No real headunit installation/update/rollback performed for 0.12.0",
+    "BMW speaker output, firmware AudioManager and SmartX interoperability require a live vehicle test",
+    "No authorized Widevine module installed and no protected provider playback verified",
+    "Physical controller touchpad, hard power loss and actual standby/ignition lifecycle not tested",
+    "Cross-origin/closed-shadow form inspection, downloads and browser permission dialogs remain incomplete"
+  ]
+}
