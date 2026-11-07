@@ -2,9 +2,9 @@
   "repository": "pllanaio/mgu-browser",
   "version": "0.13.0",
   "tag": "v0.13.0",
-  "sourceCommit": "9c1433a2a0931b0cd4f76a01751cf45d657fb01e",
+  "sourceCommit": "7d96c2995ff43c7d5a5c47bbd091e2643fd828d4",
   "storeCommit": "8cfae23db27e51d86f84e65b13ce0592668d8df9",
   "title": "MGU Browser 0.13.0 \u2014 performance, persistent cookies and phone remote control",
   "previousCatalogSha256": "7c14ae2659d3582aacc7e4b4dc29f58fde00c159a839a593d0fd3b61eb4d107f",
-  "sourceInputsSha256": "f2240e2907987d5dde85afe0e2b46a16debc0f5da9b032b0e552b116216b052a"
+  "sourceInputsSha256": "789614a16ad3e35cbc672cd5e963aadb515cfdc598284b45148492b60c7d6454"
 }
