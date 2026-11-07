@@ -1,0 +1,10 @@
+{
+  "repository": "pllanaio/mgu-browser",
+  "version": "0.13.1",
+  "tag": "v0.13.1",
+  "sourceCommit": "84ba61ddb94fc3ccf7a2d1bf36af467ab0df9a87",
+  "storeCommit": "8cfae23db27e51d86f84e65b13ce0592668d8df9",
+  "title": "MGU Browser 0.13.1 \u2014 migration from private installations",
+  "previousCatalogSha256": "ef39c7c40b94e913ddc2f76aad48d827eafb214af29dd13c24c7fbd201b98a98",
+  "sourceInputsSha256": "ea4979d031dba4de516a16e078c4253b9064f8a768bc00b35e96ddab29e699f5"
+}
