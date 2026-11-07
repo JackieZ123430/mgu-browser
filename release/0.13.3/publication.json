@@ -1,0 +1,10 @@
+{
+  "repository": "pllanaio/mgu-browser",
+  "version": "0.13.3",
+  "tag": "v0.13.3",
+  "sourceCommit": "47d6f41f90ad5645ace07ff9ea5713bd6ffd3cd9",
+  "storeCommit": "8cfae23db27e51d86f84e65b13ce0592668d8df9",
+  "title": "MGU Browser 0.13.3 \u2014 repair native backend startup and failed-update recovery",
+  "previousCatalogSha256": "fe674f4a80853d19805390700ac7120bcd1b5ac55e939b84a7ccf41ba054a15f",
+  "sourceInputsSha256": "bfc68d59b7dcf1a2d4a9fe2fb58adb0f49bcab9a6268c6529263f5f6fd2313dd"
+}

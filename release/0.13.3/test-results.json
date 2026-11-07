@@ -1,0 +1,294 @@
+{
+  "version": "0.13.3",
+  "sourceCommit": "47d6f41f90ad5645ace07ff9ea5713bd6ffd3cd9",
+  "date": "2026-11-07",
+  "environment": {
+    "platform": "Unprivileged Linux x86_64 host; disposable Ubuntu 18 containers with SYS_ADMIN for private mounts",
+    "nodeHost": "24.22.1",
+    "nodeRuntime": "8.16.2",
+    "engine": "Pinned published Chromium engine 0.1.0: Chrome/156.0.8078.79",
+    "sandbox": "enabled",
+    "tlsVerification": "enabled"
+  },
+  "core": {
+    "command": "node --test test/*.test.js",
+    "passed": 103,
+    "failed": 0,
+    "skipped": 0
+  },
+  "publisher": {
+    "command": "python3 release/test_publish.py",
+    "passed": 9,
+    "failed": 0
+  },
+  "regressionReproduction": {
+    "publishedVersions": [
+      "0.13.1",
+      "0.13.2"
+    ],
+    "cleanStartup": "Both exit 125 before backend socket creation: 384 MiB mount rejected by stale 128 MiB capacity guard",
+    "nativeOnlyDifferential": "Published 0.13.2 JavaScript plus only the corrected native launcher passed all four startup cases",
+    "fix": "One WORK_MIB constant supplies both mount size and capacity ceiling; isolation flags retained"
+  },
+  "packagedStartup": {
+    "command": "python3 test/runtime_service_smoke.py --runtime <exact-final-runtime.tgz> --engine <immutable-engine-0.1.0.tgz>",
+    "passed": 4,
+    "failed": 0,
+    "launcherOverride": null,
+    "runtimeSha256": "210cceb88167bd2d4913ccbb9c0d4600e1c0f026ddf7a0806e9bfb1a49b86d92",
+    "image": "ubuntu@sha256:152dc042452c496007f07ca9127571cb9c29697f42acbfad72324b2bb2e43c98",
+    "node": {
+      "url": "https://nodejs.org/dist/v8.16.2/node-v8.16.2-linux-x64.tar.xz",
+      "archiveSha256": "88617a293f5828cc94ee99c94a43fbea12b989e34fe643fc14885a14748a8da6",
+      "pinSource": "https://nodejs.org/dist/v8.16.2/SHASUMS256.txt"
+    },
+    "engine": {
+      "sha256": "0b6a73c964354214262d01f2d9bec2d0ab253cac8d27de04708912e804ef0874",
+      "version": "0.1.0",
+      "url": "https://github.com/pllanaio/mgu-browser/releases/download/v0.10.0/mgu-browser-engine%400.1.0.tgz"
+    },
+    "environment": {
+      "endpoint": "unix:///var/run/docker.sock",
+      "securityOptions": [
+        "name=seccomp,profile=builtin",
+        "name=rootless",
+        "name=cgroupns"
+      ],
+      "cgroupVersion": "2",
+      "systemdAndResourceLimitsTested": false
+    },
+    "cases": [
+      {
+        "version": "0.13.3",
+        "node": "v8.16.2",
+        "appUid": 13001,
+        "audio": false,
+        "legacy": "",
+        "legacyNetworkStatus": false,
+        "legacyUid": false,
+        "success": true,
+        "ready": true,
+        "peerUidRejected": true,
+        "socket": {
+          "uid": 3911,
+          "gid": 13001,
+          "mode": "660"
+        },
+        "backendGid": 3911,
+        "groups": [
+          13001
+        ],
+        "workMiB": 384,
+        "moved": [],
+        "rendered": {
+          "version": "Chrome/156.0.8078.79",
+          "frame": {
+            "width": 1280,
+            "height": 384,
+            "rgbaBytes": 1966080
+          },
+          "transientFrames": 0
+        },
+        "activationBootProof": {
+          "skipped": "proc-owner-outside-container-root",
+          "procUid": 65534
+        },
+        "launcherReady": true,
+        "statusSymlinkProof": true,
+        "installedCheck": true
+      },
+      {
+        "version": "0.13.3",
+        "node": "v8.16.2",
+        "appUid": 14876,
+        "audio": true,
+        "legacy": "",
+        "legacyNetworkStatus": false,
+        "legacyUid": false,
+        "success": true,
+        "ready": true,
+        "peerUidRejected": true,
+        "socket": {
+          "uid": 3911,
+          "gid": 14876,
+          "mode": "660"
+        },
+        "backendGid": 301,
+        "groups": [
+          301,
+          14876
+        ],
+        "workMiB": 384,
+        "moved": [],
+        "rendered": {
+          "version": "Chrome/156.0.8078.79",
+          "frame": {
+            "width": 1280,
+            "height": 384,
+            "rgbaBytes": 1966080
+          },
+          "transientFrames": 0
+        },
+        "activationBootProof": {
+          "skipped": "proc-owner-outside-container-root",
+          "procUid": 65534
+        },
+        "launcherReady": true,
+        "statusSymlinkProof": true,
+        "installedCheck": true
+      },
+      {
+        "version": "0.13.3",
+        "node": "v8.16.2",
+        "appUid": 13001,
+        "audio": false,
+        "legacy": "all",
+        "legacyNetworkStatus": false,
+        "legacyUid": false,
+        "success": true,
+        "ready": true,
+        "peerUidRejected": true,
+        "socket": {
+          "uid": 3911,
+          "gid": 13001,
+          "mode": "660"
+        },
+        "backendGid": 3911,
+        "groups": [
+          13001
+        ],
+        "workMiB": 384,
+        "moved": [
+          "data.legacy-1794085095738",
+          "network.legacy-1794085095738",
+          "work.legacy-1794085095738"
+        ],
+        "rendered": {
+          "version": "Chrome/156.0.8078.79",
+          "frame": {
+            "width": 1280,
+            "height": 384,
+            "rgbaBytes": 1966080
+          },
+          "transientFrames": 0
+        },
+        "activationBootProof": {
+          "skipped": "proc-owner-outside-container-root",
+          "procUid": 65534
+        },
+        "launcherReady": true,
+        "statusSymlinkProof": true,
+        "installedCheck": true
+      },
+      {
+        "version": "0.13.3",
+        "node": "v8.16.2",
+        "appUid": 14876,
+        "audio": true,
+        "legacy": "all",
+        "legacyNetworkStatus": false,
+        "legacyUid": false,
+        "success": true,
+        "ready": true,
+        "peerUidRejected": true,
+        "socket": {
+          "uid": 3911,
+          "gid": 14876,
+          "mode": "660"
+        },
+        "backendGid": 301,
+        "groups": [
+          301,
+          14876
+        ],
+        "workMiB": 384,
+        "moved": [
+          "data.legacy-1794085101853",
+          "network.legacy-1794085101853",
+          "work.legacy-1794085101853"
+        ],
+        "rendered": {
+          "version": "Chrome/156.0.8078.79",
+          "frame": {
+            "width": 1280,
+            "height": 384,
+            "rgbaBytes": 1966080
+          },
+          "transientFrames": 0
+        },
+        "activationBootProof": {
+          "skipped": "proc-owner-outside-container-root",
+          "procUid": 65534
+        },
+        "launcherReady": true,
+        "statusSymlinkProof": true,
+        "installedCheck": true
+      }
+    ],
+    "evidence": "Actual Node 8 root launcher, private resolver/mount namespace, 384 MiB noexec/nosuid/nodev tmpfs, UID 3911 and app/audio groups, socket ownership/mode, rejected wrong peer UID, authenticated ready/audioStatus, fd3 readiness, root-owned 0644 status, preserved symlink victim and legacy markers, sandboxed Chromium and actual 1280x384 projected RGBA frames; installed check.sh succeeded in every case",
+    "activationBootProofLimit": "Local rootless Docker exposes host /proc files as unmapped UID 65534, so only this additional root/proc ownership proof is explicitly unavailable locally. No production trust check was weakened. The same fixture runs against rootful Docker in the publication workflow.",
+    "limits": "No real systemd, firmware AudioManager/SmartX or physical headunit is exercised; the engine is actual, not a stub"
+  },
+  "serviceActivation": {
+    "command": "node test/store_service_activation_smoke.js <pinned-Store> <built-runtime.tgz>",
+    "passed": true,
+    "officialPolicy": "Unchanged official Store applyRestarts on the actual built runtime manifest leaves an already failed ordinary update stopped",
+    "recovery": "Packaged activation starts failed/inactive units after both names are proven boot-loaded; first-install gate returns reboot-pending and performs no hot start; activating unit uses bounded idempotent start",
+    "ownershipModel": "This Store policy integration uses authored systemctl/ownership fixtures; core tests also cover unsafe files/directories, hardlinks, symlinks, current-boot snapshot authority and recovery failure"
+  },
+  "runtimeReadiness": {
+    "deadlineMs": 15000,
+    "passed": true,
+    "evidence": "Protected fresh running status must match installed build version and app UID, reference a live supervisor, and match actual backend socket UID/GID/mode; status running is emitted only after backend listen callback sends exact fd3 sentinel",
+    "coreRegressionCases": [
+      "starting to ready without real sleeps",
+      "old running version rejected",
+      "permanent failure times out",
+      "missing app registration skips IPC",
+      "stale/foreign/dead/unsafe evidence rejected"
+    ]
+  },
+  "node8": {
+    "version": "8.16.2",
+    "syntax": "All distributed JavaScript checked",
+    "readyPipeSmoke": "passed",
+    "actualRuntime": "Full packaged startup and real Chromium rendering passed in all four container cases"
+  },
+  "frontend": {
+    "source": "Fresh final SDK-free release package",
+    "uiSmoke": {
+      "en-GB": "passed",
+      "de-DE": "passed"
+    },
+    "evidence": "Localized QR camera instructions, actual projected QR image, renew/stop controls and existing browser controls; test-only English/German assertion fixed without production UI edits",
+    "qrDecoderClaim": false
+  },
+  "store": {
+    "storeSourceCommit": "8cfae23db27e51d86f84e65b13ce0592668d8df9",
+    "deployValidatorVersion": "0.8.4",
+    "artifactValidation": "passed",
+    "catalogParser": "passed",
+    "sourceByteEquality": "All distributed JavaScript, frontend UI, runtime helpers, installed check.sh and both service unit files match final source",
+    "nativeProvenance": "New static backend-launch and system-loader audio-bridge source/binary hashes and ABI validated; explicit libdl dependency; unchanged base payloads verified",
+    "nativeAddons": "both loaded successfully",
+    "syntheticDonorPreparation": "passed; proprietary SDK omitted",
+    "engine": "0.1.0 catalog entry retained exactly"
+  },
+  "localArtifactEvidence": {
+    "meaning": "These exact local archives passed the local tests. CI compiles the locked source again and tests its own exact helpers before publishing generated hashes; native bytes may differ across trusted compilers.",
+    "mgu-browser@0.13.3.tgz": {
+      "size": 337329,
+      "sha256": "210cceb88167bd2d4913ccbb9c0d4600e1c0f026ddf7a0806e9bfb1a49b86d92"
+    },
+    "mgu_browser@0.13.3.tgz": {
+      "size": 1848003,
+      "sha256": "ab754351641336a23ec57bdeca84b57dbc157cae565a348ca751cd44f6c3c623"
+    }
+  },
+  "limits": [
+    "No physical MGU installation/update/rollback performed by this test environment",
+    "Actual MGU systemd/resource policy, firmware audio routing, speakers and power/standby lifecycle remain unqualified",
+    "No authorized Widevine module, license exchange or protected provider playback verified for this patch",
+    "Physical phone/controller behavior is not certified by UI or loopback fixtures"
+  ]
+}

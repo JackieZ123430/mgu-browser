@@ -1,0 +1,16 @@
+# MGU Browser 0.13.3
+
+Behebt den reproduzierten Startfehler „Browser-Dienst noch nicht bereit“ in 0.13.1 und 0.13.2: Der native Launcher legte 384 MiB Arbeitsspeicher an, prüfte anschließend gegen eine alte 128-MiB-Grenze und beendete sich mit Code 125, bevor der Backend-Socket entstand. Eine gemeinsame Konstante hält Mount und Prüfung jetzt konsistent. Die 384-MiB-Grenze und `noexec`/`nosuid`/`nodev` bleiben erhalten.
+
+- Ein bereits ausgefallener Dienst kann nach dem Update wieder starten. Der Aktivierungshook startet ausschließlich die beiden Browser-Dienste und nur, wenn beide Namen nachweislich von recmgr beim aktuellen Headunit-Start geladen wurden. Die Neustartpflicht einer frischen Installation bleibt erhalten.
+- Dienste warten auf den persistenten Mount und schreiben ins Journal. Die vorhandenen Neustartregeln bleiben erhalten.
+- „Dienst läuft“ erscheint erst nach dem tatsächlichen Backend-Ready-Signal vom geöffneten Socket. Geschützte Statusdatei, Versionsbindung und begrenzte Bereitschaftsprüfung verhindern falsche Erfolgsmeldungen und den alten Statusdatei-Symlink-Schreibpfad.
+- Performance-, Tab-, Handy-Fernbedienungs- und Migrationsfunktionen aus 0.13 bleiben erhalten.
+
+**Update:** Quelle `pllanaio/mgu-browser` auf **Releases**, Katalog aktualisieren und **Browser sowie Browser Runtime auf 0.13.3** aktualisieren. Engine bleibt **0.1.0**. Falls der Store einen Headunit-Neustart verlangt, diesen durchführen und den Browser anschließend neu öffnen.
+
+**Nachweis:** Die veröffentlichten 0.13.1/0.13.2-Pakete reproduzieren Code 125 auch ohne alte Benutzerdaten. Die veröffentlichten 0.13.2-JavaScript-Dateien starten mit allein korrigiertem nativen Helfer. Das exakte finale 0.13.3-Paket besteht vier isolierte Ubuntu-18-/Node-8-Starts mit echten Mounts, Privilegienabgabe, App-UID-/Gruppenprüfung, authentifiziertem IPC und gepinnter sandboxed Chromium-Engine: jeweils echte 1280 × 384 RGBA-Ausgabe und erfolgreicher installierter Runtime-Check. Frische und alte Verzeichnisse sowie Audio-Gruppe vorhanden/nicht vorhanden sind abgedeckt. Hinzu kommen 103/103 Kerntests, neun Publisher-Tests, offizieller Store-Validator und Restart-Policy-Test sowie die frisch gepackte SDK-Oberfläche in Deutsch und Englisch.
+
+**Grenzen:** Der isolierte Test ersetzt keinen Test der tatsächlichen MGU-Firmware, ihres systemd oder ihrer Lautsprecher. Der zusätzliche recmgr-/proc-Eigentümernachweis war im lokalen rootless Docker wegen UID 65534 für Host-proc-Dateien nicht ausführbar; die Produktionsprüfung bleibt strikt, und die CI führt denselben Test in rootful Docker aus. Geschützte Anbieterwiedergabe, ein autorisierter CDM und physische Fahrzeug-/Handybedienung wurden für diesen Patch nicht nachgewiesen. Details stehen in `test-results.json`, `build-verification.json` und `runtime-provenance.json`.
+
+Die Veröffentlichung bindet geprüfte Quellen an einen vollständigen Commit, baut die eigenen nativen Helfer neu und prüft ihre ABI und die tatsächlich erzeugten Pakete. Binärbytes können zwischen Compiler-Versionen abweichen; die endgültigen Prüfsummen gehören zum geprüften CI-Build. Unveränderte Engine und Drittanbieterquellen bleiben in [v0.10.0](https://github.com/pllanaio/mgu-browser/releases/tag/v0.10.0) verfügbar. Kein proprietäres SDK, Widevine, Konto oder Profil wird verteilt.
