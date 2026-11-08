@@ -11,7 +11,7 @@
 // are answered; the session ends on request, after 30 minutes without use, or
 // when the backend stops. Every browser action still requires the browser app
 // to be in the foreground (the existing visibility gate).
-const http=require('http'),crypto=require('crypto'),os=require('os'),EventEmitter=require('events');
+const http=require('http'),fs=require('fs'),crypto=require('crypto'),os=require('os'),EventEmitter=require('events');
 const URLPolicy=require('./url_policy'),{inputURL}=require('./browser_state'),Metadata=require('./browser_metadata');
 const page=require('./remote_page');
 const PORT=39123,IDLE_MS=30*60*1000,CLIENT_MS=8000,BODY_LIMIT=512*1024;
@@ -28,9 +28,16 @@ function privateAddress(address){
 }
 // The address the phone can reach: the hotspot client interface first, then
 // the car's own access point, then (development) any private IPv4.
-function localAddress(interfaces){
+// The address the phone can reach: the Wi-Fi uplink first (the head unit
+// joined the phone's own hotspot, wlan1 or wlan0), then the BMW access
+// point, then (development) any private IPv4.
+function uplinkName(){
+    try{const lease=JSON.parse(fs.readFileSync('/run/mgu-uplink/lease.json','utf8'));return /^wlan[0-9]$/.test(lease.interface)?lease.interface:null;}catch(e){return null;}
+}
+function localAddress(interfaces,uplink){
     const list=interfaces||os.networkInterfaces();
-    for(const name of ['wlan0','wlan_bridge']){
+    const preferred=[uplink===undefined?uplinkName():uplink,'wlan1','wlan0','wlan_bridge'].filter(Boolean);
+    for(const name of preferred){
         const hit=(list[name]||[]).find(a=>a.family==='IPv4'&&!a.internal&&privateAddress(a.address));
         if(hit)return hit.address;
     }

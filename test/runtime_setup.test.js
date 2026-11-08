@@ -46,3 +46,19 @@ test('Folders of an older installation with other owners are moved aside, never 
         assert.equal(setAside(path.join(root,'absent'),[0]),null);
     }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+test('Phone remote firewall covers the Wi-Fi uplink and is only rewritten when rules are missing',()=>{
+    const fw=require('../runtime/remote_firewall');
+    const lease={readFileSync:()=>JSON.stringify({interface:'wlan1',ip:'172.20.10.3',prefix:28})};
+    assert.deepEqual(fw.interfaces(lease),['wlan_bridge','wlan0','wlan1']);
+    assert.deepEqual(fw.interfaces({readFileSync:()=>JSON.stringify({interface:'wlan2'})}),['wlan_bridge','wlan0','wlan1','wlan2']);
+    const names=fw.interfaces(lease);
+    const missing=[{chain:['inet','mgu_uplink','input'],present:true,text:'table inet mgu_uplink {\n chain input {\n  iifname "wlan1" counter drop # handle 5\n }\n}'}];
+    const commands=fw.plan(missing,names);
+    assert(commands.some(c=>/insert rule inet mgu_uplink input iifname "wlan1" ip saddr 172\.16\.0\.0\/12 tcp dport 39123 counter accept/.test(c)),'hotspot subnet allowed after mgu-uplink rebuilt its table');
+    const present=[{chain:['inet','mgu_uplink','input'],present:true,text:fw.rules(names).filter(r=>r.chain==='input').map((r,i)=>r.rule+' counter packets 3 bytes 180 accept comment "'+fw.TAG+'" # handle '+(10+i)).join('\n')}];
+    assert.deepEqual(fw.plan(present,names),[],'unchanged rules are not rewritten every 5 s');
+    const {localAddress}=require('../src/remote_control');
+    const ifs={wlan_bridge:[{family:'IPv4',address:'192.168.2.1',internal:false}],wlan1:[{family:'IPv4',address:'172.20.10.3',internal:false}]};
+    assert.equal(localAddress(ifs,'wlan1'),'172.20.10.3','QR code points at the hotspot address');
+    assert.equal(localAddress({wlan_bridge:ifs.wlan_bridge},null),'192.168.2.1','BMW Wi-Fi without uplink');
+});

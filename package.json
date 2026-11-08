@@ -1,6 +1,6 @@
 {
   "name": "mgu-native-browser",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "private": true,
   "description": "Experimental iDrive 7 browser with native controller UI and a separate Chromium backend",
   "scripts": {

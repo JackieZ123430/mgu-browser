@@ -6,7 +6,7 @@
 // the backend ("Browser-Dienst noch nicht bereit" alone said nothing).
 const cp=require('child_process'),fs=require('fs'),setup=require('./setup');
 if(process.getuid()!==0)throw Error('Root service launcher required');
-let child=null,stopping=false,timer=null,version='';
+let child=null,keeper=null,stopping=false,timer=null,version='';
 try{version=JSON.parse(fs.readFileSync(__dirname+'/../build-provenance.json','utf8')).version||'';}catch(e){/* development tree */}
 const startup=require('./startup_status').open(version);
 function status(state,extra){
@@ -23,9 +23,13 @@ function start(){
     // Leftovers of the private 0.9.x installation (old engine folder).
     try{const r=require('./legacy_cleanup').cleanup();if(r.removed)console.log('Removed the unused 0.9.x Chromium engine folder');}
     catch(e){console.error('Legacy cleanup skipped: '+e.message);}
-    // Phone remote control: open its port in the WLAN before dropping root.
+    // Phone remote control: a root keeper (started before the privilege drop)
+    // keeps its port open on the BMW Wi-Fi and on the Wi-Fi uplink (phone
+    // hotspot), also after mgu-uplink rebuilds its firewall table.
     try{const r=require('./remote_firewall').apply();console.log('Remote control firewall: '+JSON.stringify(r));}
     catch(e){console.error('Remote control firewall not applied: '+e.message);}
+    try{if(!keeper){keeper=cp.spawn(process.execPath,[__dirname+'/remote_firewall.js','watch'],{stdio:'inherit'});keeper.on('exit',()=>{keeper=null;});}}
+    catch(e){console.error('Remote control firewall keeper not started: '+e.message);}
     const args=['--uid',String(identity.serviceUid),'--app-uid',String(identity.appUid)];
     if(identity.audio)args.push('--audio-gid',String(identity.audio.gid));
     status('starting',{appUid:identity.appUid});
@@ -48,6 +52,6 @@ function start(){
     // systemd (Restart=always) starts the service again after the backend ends.
     child.on('exit',(code,signal)=>{finished=true;if(!stopping)status('backend_exited',{code,signal,afterSeconds:Math.round((Date.now()-started)/1000)});process.exit(stopping?0:(signal?1:code||1));});
 }
-for(const sig of ['SIGTERM','SIGINT'])process.on(sig,()=>{stopping=true;clearTimeout(timer);status('stopped');if(child)child.kill(sig);else process.exit(0);});
+for(const sig of ['SIGTERM','SIGINT'])process.on(sig,()=>{stopping=true;clearTimeout(timer);status('stopped');if(keeper)try{keeper.kill('SIGTERM');}catch(e){}if(child)child.kill(sig);else process.exit(0);});
 process.on('exit',()=>startup.close());
 start();
