@@ -15,6 +15,13 @@ Ab 0.13.0 lässt sich der Browser vom Handy aus bedienen.
 
 ## Netzwerk
 
+Ab 0.16.1 funktioniert die Fernbedienung auch, wenn die HeadUnit nur am
+Hotspot des Handys hängt (mgu-uplink über `wlan1` oder `wlan0`): Der QR-Code
+zeigt dann die Hotspot-Adresse der HeadUnit, und ein Root-Wächter setzt die
+Freigabe alle 5 s neu, falls mgu-uplink seine Firewall-Tabelle nach einer
+Neuverbindung neu aufgebaut hat.
+
+
 Handy und MGU müssen sich erreichen können: entweder ist die MGU mit dem
 Hotspot des Handys verbunden (Standardfall), oder das Handy ist im WLAN des
 Fahrzeugs. Die Laufzeit gibt dafür beim Start TCP-Port **39123** frei, nur auf

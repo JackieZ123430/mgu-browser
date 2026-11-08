@@ -1,0 +1,10 @@
+{
+  "repository": "pllanaio/mgu-browser",
+  "version": "0.16.1",
+  "tag": "v0.16.1",
+  "sourceCommit": "55245dd116b78f2011527d6dc34693d606fa02e1",
+  "storeCommit": "8cfae23db27e51d86f84e65b13ce0592668d8df9",
+  "title": "MGU Browser 0.16.1 \u2014 phone remote over the phone hotspot",
+  "previousCatalogSha256": "3f6cca2d3169f362e2aded4d900adbd4f69a455f75a761b8a05cdc8a345b2191",
+  "sourceInputsSha256": "901409a90f0acf9a8163ae688db282f187cdaced923b05d9752b54b3ba2858ea"
+}
