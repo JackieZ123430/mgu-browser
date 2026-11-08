@@ -5,11 +5,16 @@
 // keeps an encrypted snapshot from Storage.getCookies and restores it with
 // Storage.setCookies before the first page loads.
 const crypto=require('crypto');
+const {cookieRecord}=require('./secure_browser_data');
 const CHECKPOINT_MS=10000;
 const BATCH=50;
 function digest(cookies){
-    const h=crypto.createHash('sha1');
-    for(const c of cookies)h.update(c.domain+'\0'+c.path+'\0'+c.name+'\0'+c.value+'\0'+(c.expires||0)+'\n');
+    const stable=value=>value&&typeof value==='object'&&!Array.isArray(value)?Object.keys(value).sort().reduce((out,key)=>{out[key]=stable(value[key]);return out;},{}):value;
+    // Flags and partition scope are part of stored cookie state too. A site
+    // may change them without changing the token's name, value or expiry.
+    const records=cookies.map(cookie=>JSON.stringify(stable(cookieRecord(cookie)))).sort();
+    const h=crypto.createHash('sha256');
+    for(const record of records)h.update(record+'\n');
     return h.digest('hex');
 }
 module.exports={

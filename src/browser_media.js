@@ -54,6 +54,7 @@ let root=f||customRoot&&customRoot.parentElement||v&&v.parentElement;
 for(let i=0;!f&&root&&root!==document.body&&i<12&&hosts.some(h=>!root.contains(h));i++)root=root.parentElement;
 for(let i=0;!f&&!customRoot&&root&&root!==document.body&&i<16&&deep(root,controlSelector).filter(enabled).length<2;i++)root=root.parentElement;
 const controls=root?deep(root,controlSelector).filter(e=>e!==v&&enabled(e)&&!(e.tagName==="INPUT"&&e.type!=="range")&&(e.matches("button,[role=button],input[type=range]")||e.tabIndex>=0)):[];
+const domPlayerAccessible=!!v&&(!customRoot||customRoot.contains(v)||(()=>{let node=v;for(let i=0;node&&i<8;i++){node=node.getRootNode().host;if(node===customRoot)return true;}return false;})());
 `;
 // Inspect only activity in background tabs; retain no page text or addresses.
 const activityScript=`JSON.stringify((()=>{
@@ -71,7 +72,8 @@ const activityScript=`JSON.stringify((()=>{
     }
     return {playing,audible};
 })())`;
-const snapshot='JSON.stringify((()=>{'+playerLocate+'const media=v||customRoot,rect=media&&media.getBoundingClientRect(),playerMode=!!media&&(!!f||rect.width*rect.height>innerWidth*innerHeight*0.3),buttons=controls,mediaButtons=buttons.filter(b=>/play|pause|wiederg|abspiel|mute|stumm|fullscreen|vollbild|seek|rewind|forward/i.test([b.getAttribute("aria-label"),b.title,b.getAttribute("data-testid")].join(" "))),dedicatedPlayer=!!root&&root!==v&&!/^(BODY|HTML)$/.test(root.tagName),customSiteControls=!!media&&((dedicatedPlayer&&buttons.length>=2)||mediaButtons.length>=2||(mediaButtons.length>0&&!!root.querySelector("input[type=range],[role=slider]"))),hasSiteControls=!!media&&((v&&v.controls)||customSiteControls),elements=deep(document,"video,audio"),playing=elements.some(e=>!e.paused&&!e.ended),audible=elements.some(e=>!e.paused&&!e.ended&&!e.muted&&e.volume>0);return {hasMedia:elements.length>0||!!customRoot,playing,audible,fullscreen:!!f&&!!media,customPlayer:!!customRoot,rootTag:root&&root.tagName||"",playerMode,hasSiteControls,customSiteControls,controlCount:buttons.length,paused:v?!!v.paused:true,muted:v?!!v.muted:false,currentTime:v&&Number.isFinite(v.currentTime)?v.currentTime:0,duration:v&&Number.isFinite(v.duration)?v.duration:0};})())';
+const snapshot='JSON.stringify((()=>{'+playerLocate+'const media=v||customRoot,rect=media&&media.getBoundingClientRect(),playerMode=!!media&&(!!f||rect.width*rect.height>innerWidth*innerHeight*0.3),buttons=controls,mediaButtons=buttons.filter(b=>/play|pause|wiederg|abspiel|mute|stumm|fullscreen|vollbild|seek|rewind|forward/i.test([b.getAttribute("aria-label"),b.title,b.getAttribute("data-testid")].join(" "))),dedicatedPlayer=!!root&&root!==v&&!/^(BODY|HTML)$/.test(root.tagName),customSiteControls=!!media&&((dedicatedPlayer&&buttons.length>=2)||mediaButtons.length>=2||(mediaButtons.length>0&&!!root.querySelector("input[type=range],[role=slider]"))),hasSiteControls=!!media&&((v&&v.controls)||customSiteControls),elements=deep(document,"video,audio"),playing=elements.some(e=>!e.paused&&!e.ended),audible=elements.some(e=>!e.paused&&!e.ended&&!e.muted&&e.volume>0);return {hasMedia:elements.length>0||!!customRoot,domPlayerAccessible:domPlayerAccessible,playing,audible,fullscreen:!!f&&!!media,customPlayer:!!customRoot,rootTag:root&&root.tagName||"",playerMode,hasSiteControls,customSiteControls,controlCount:buttons.length,paused:v?!!v.paused:true,muted:v?!!v.muted:false,currentTime:v&&Number.isFinite(v.currentTime)?v.currentTime:0,duration:v&&Number.isFinite(v.duration)?v.duration:0};})())';
+const ownMediaState='function(){if(!this.isConnected||!/^(VIDEO|AUDIO)$/.test(this.tagName))return null;const playing=!this.paused&&!this.ended;let node=this,customPlayer=false;for(let i=0;node&&i<8;i++){node=node.getRootNode().host;if(node&&/^(DISNEY-WEB-PLAYER|DISNEY-WEB-PLAYER-UI|HIVE-VIDEO)$/.test(node.tagName)){customPlayer=true;break;}}return {playing,audible:playing&&!this.muted&&this.volume>0,paused:!!this.paused,muted:!!this.muted,customPlayer,currentTime:Number.isFinite(this.currentTime)?this.currentTime:0,duration:Number.isFinite(this.duration)?this.duration:0};}';
 // Keep a site's own video/container geometry. Forcing every nested video to
 // absolute 100% dimensions can collapse its zero-height inner layout in native
 // player fullscreen. Only a video which is itself fullscreen needs viewport fit.
@@ -95,6 +97,60 @@ const fullscreenScript='(async()=>{'+playerLocate+`
     await target.requestFullscreen();return !!doc.fullscreenElement;
 })()`;
 module.exports={
+    clearAccessibleMedia(session){
+        const cache=this.accessibleMediaCache;if(!cache)return;
+        for(const [key,record] of cache){
+            if(session!==undefined&&key!==session)continue;
+            cache.delete(key);
+            record.pipe.send('Runtime.releaseObjectGroup',{objectGroup:record.group},key,1000).catch(()=>{});
+        }
+    },
+    async accessibleMediaActivity(context,state,retried){
+        const cache=this.accessibleMediaCache||(this.accessibleMediaCache=new Map()),pipe=this.pipe;
+        const tabs=this.tabs||[],eligible=state.customPlayer&&state.domPlayerAccessible!==true;
+        const live=record=>context.valid()&&this.pipe===pipe&&cache.get(record.tab.session)===record&&tabs.indexOf(record.tab)>=0;
+        for(const [session,record] of cache)if(record.pipe!==pipe||tabs.indexOf(record.tab)<0)this.clearAccessibleMedia(session);
+        const tab=tabs.find(item=>item.session===context.session);let foreground=cache.get(context.session);
+        if(foreground&&!foreground.objects.length&&!eligible){this.clearAccessibleMedia(context.session);foreground=null;}
+        if(eligible&&tab&&(!foreground||!foreground.objects.length&&Date.now()-foreground.scannedAt>=3000)){
+            if(foreground)this.clearAccessibleMedia(context.session);
+            foreground={tab,pipe,group:'mgu-media-'+(this.accessibleMediaSequence=(this.accessibleMediaSequence||0)+1),objects:[],scannedAt:Date.now(),unknown:false};
+            cache.set(context.session,foreground);
+            try{
+                // Accessibility exposes media players in closed components.
+                // Resolve only those nodes and read their own playback flags;
+                // never change shadow-root mode or inspect protected content.
+                const tree=await context.send('Accessibility.getFullAXTree',{depth:12},1500);
+                const candidates=(tree.nodes||[]).filter(node=>node.backendDOMNodeId&&/^(Video|Audio)$/i.test(node.role&&node.role.value||'')),nodes=candidates.slice(0,8);
+                if(candidates.length>8)foreground.unknown=true;
+                await Promise.all(nodes.map(async node=>{
+                    try{const result=await context.send('DOM.resolveNode',{backendNodeId:node.backendDOMNodeId,objectGroup:foreground.group},1500);
+                        if(live(foreground)&&result.object&&result.object.objectId)foreground.objects.push(result.object.objectId);
+                    }catch(ignore){foreground.unknown=true;}
+                }));
+                if(!foreground.objects.length)foreground.unknown=true;
+            }catch(ignore){foreground.unknown=true;}
+            if(!live(foreground))return {playing:false,audible:false,unknown:true};
+        }
+        const result={playing:false,audible:false,unknown:false};let rescan=false;
+        await Promise.all(Array.from(cache.values()).map(async record=>{
+            if(!live(record))return;let connected=0;
+            if(record.unknown)result.unknown=true;
+            await Promise.all(record.objects.map(async objectId=>{
+                try{
+                    const reply=await pipe.send('Runtime.callFunctionOn',{objectId,functionDeclaration:ownMediaState,returnByValue:true},record.tab.session,1500);
+                    if(!live(record))return;
+                    const own=reply.result&&reply.result.value;
+                    if(reply.exceptionDetails||!own){result.unknown=true;return;}
+                    connected++;result.playing=result.playing||own.playing===true;result.audible=result.audible||own.audible===true;
+                    if(record.tab.session===context.session&&(!result.primary||own.customPlayer&&!result.primary.customPlayer||own.customPlayer===result.primary.customPlayer&&own.playing&&!result.primary.playing))result.primary=own;
+                }catch(ignore){if(live(record))result.unknown=true;}
+            }));
+            if(live(record)&&record.objects.length&&!connected){this.clearAccessibleMedia(record.tab.session);if(record.tab.session===context.session&&eligible&&!retried)rescan=true;}
+        }));
+        if(rescan)return this.accessibleMediaActivity(context,state,true);
+        return result;
+    },
     async mediaActivity(context){
         // The foreground snapshot already includes its HTML media. Only query
         // other tabs here; avoid a second full DOM scan and CDP roundtrip for
@@ -142,13 +198,24 @@ module.exports={
     },
     async inspectMedia(){
         if(!this.session||this.mediaQuery)return;
-        const view=this.pageGeneration,session=this.session,context=this.mediaContext();this.mediaQuery=true;if(this.mediaAXGeneration!==view){this.mediaAXGeneration=view;this.mediaAXStamp=0;this.mediaAXCache=[];}
-        try{const r=await context.send('Runtime.evaluate',{expression:snapshot,returnByValue:true});
+        const view=this.pageGeneration,session=this.session,pipe=this.pipe,context=this.mediaContext();this.mediaQuery=true;if(this.mediaAXGeneration!==view){this.mediaAXGeneration=view;this.mediaAXStamp=0;this.mediaAXCache=[];}
+        try{const r=await context.send('Runtime.evaluate',{expression:snapshot,returnByValue:true},1500);
             if(view!==this.pageGeneration||session!==this.session)return;
-            const state=JSON.parse(r.result.value),activity=this.webAudioActivity(),htmlActivity=await this.mediaActivity(context);
-            state.webAudioRunning=activity.running;state.playing=state.playing||htmlActivity.playing||activity.running>0;state.audible=state.audible||htmlActivity.audible||activity.running>0;state.hasMedia=state.hasMedia||state.playing;
+            const state=JSON.parse(r.result.value),activity=this.webAudioActivity();
+            const combined=await Promise.all([this.mediaActivity(context),this.accessibleMediaActivity(context,state)]),htmlActivity=combined[0],accessibleActivity=combined[1];
+            if(!context.valid())return;
+            if(!state.domPlayerAccessible&&accessibleActivity.primary){for(const name of ['paused','muted','currentTime','duration'])state[name]=accessibleActivity.primary[name];}
+            delete state.domPlayerAccessible;state.activityUnknown=accessibleActivity.unknown;
+            state.webAudioRunning=activity.running;state.playing=state.playing||htmlActivity.playing||accessibleActivity.playing||activity.running>0;state.audible=state.audible||htmlActivity.audible||accessibleActivity.audible||activity.running>0;state.hasMedia=state.hasMedia||state.playing;
             if(state.playerMode&&state.customPlayer&&!state.hasSiteControls){
-                const stamp=Date.now();if(!this.mediaAXStamp||stamp-this.mediaAXStamp>3000){this.mediaAXStamp=stamp;this.mediaAXCache=await this.accessibleMediaControls(context);}const candidates=this.mediaAXCache||[];if(view!==this.pageGeneration||session!==this.session)return;
+                const stamp=Date.now();if(!this.mediaAXStamp||stamp-this.mediaAXStamp>3000){
+                    this.mediaAXStamp=stamp;
+                    // Optional control discovery must not invalidate an actual
+                    // media snapshot or the media node's confirmed own flags.
+                    try{const controls=await this.accessibleMediaControls(context);if(!context.valid())return;this.mediaAXCache=controls;}
+                    catch(ignore){if(!context.valid())return;}
+                }
+                const candidates=this.mediaAXCache||[];if(!context.valid())return;
                 state.accessibleControls=candidates.length;
                 if(candidates.length>=2){state.hasSiteControls=true;state.customSiteControls=true;}
             }
@@ -158,9 +225,22 @@ module.exports={
             this.mediaHadCustomControls=!!state.playerMode&&(this.mediaHadCustomControls||!!state.customSiteControls);
             state.hasSiteControls=!!state.hasSiteControls||this.mediaHadCustomControls;
             this.mediaActivityState={playing:state.playing,audible:state.audible,webAudioRunning:state.webAudioRunning};
+            this.lastMediaSession=session;this.lastMediaView=view;this.lastMediaPipe=pipe;
             const key=JSON.stringify(state);
             if(key!==this.lastMedia){this.lastMedia=key;this.emit('media',state);}
-        }catch(e){}finally{this.mediaQuery=false;}
+        }catch(ignore){
+            if(context.valid()){
+                // A busy renderer is missing evidence, not fresh silence or
+                // fresh sound. Preserve this view's controls, but never carry
+                // its last audible flag into navigation/tab reset messages.
+                let previous={};
+                if(this.lastMediaSession===session&&this.lastMediaView===view&&this.lastMediaPipe===pipe&&this.lastMedia){try{previous=JSON.parse(this.lastMedia)||{};}catch(ignored){}}
+                const state=Object.assign({fullscreen:false,hasMedia:false,playerMode:false,paused:true,muted:false},previous,{playing:previous.playing===true,audible:false,webAudioRunning:0,activityUnknown:true});
+                this.mediaActivityState={playing:state.playing,audible:false,webAudioRunning:0,activityUnknown:true};
+                this.lastMediaSession=session;this.lastMediaView=view;this.lastMediaPipe=pipe;
+                const key=JSON.stringify(state);if(key!==this.lastMedia){this.lastMedia=key;this.emit('media',state);}
+            }
+        }finally{this.mediaQuery=false;}
     },
     async accessibleMediaControls(context){
         context=context||this.mediaContext();const result=await context.send('Accessibility.getFullAXTree',{depth:12},3000);

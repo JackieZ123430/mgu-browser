@@ -7,14 +7,59 @@ URLs, byte sizes and SHA-256 values.
 
 | Component | Version | Purpose |
 | --- | --- | --- |
-| `mgu_browser` | 0.14.0 | SDK-free OAP frontend and iDrive UI |
-| `mgu-browser` | 0.14.0 | Native backend, IPC and uplink broker |
+| `mgu_browser` | 0.15.0 | SDK-free OAP frontend and iDrive UI |
+| `mgu-browser` | 0.15.0 | Native backend, IPC and uplink broker |
 | `mgu-browser-engine` | 0.1.0 | Debian Chromium 156.0.8078.79 and private libraries |
 
-The frontend requires runtime 0.14.0, engine 0.1.0, `mgu-uplink` 0.7.3,
+The frontend requires runtime 0.15.0, engine 0.1.0, `mgu-uplink` 0.7.3,
 `mgu-render` 0.6.11 and `mgu-deploy` 0.7.17 or newer. Keep the official Store
 source enabled for the last three. The Store installs dependencies automatically.
 This release targets **ID7 / Linux x86_64**, not ID8 or other architectures.
+
+## Update to 0.15.0: resources, occupied CarLifeMedia and native foreground
+
+Close Browser, refresh Releases and update **both Browser and Browser Runtime
+to 0.15.0**. Engine remains **0.1.0**. Browser can now reclaim the verified
+287/CarLifeMedia source by disconnecting that source's existing connections
+across sinks before creating its own connection to 1024. Other audio sources
+and foreign SmartX lock files are not changed; release removes only the newly
+owned connection. Displaced connections are not recreated automatically.
+
+The frontend makes an actual SDK foreground request and waits for observed
+visibility/focus before completing acquisition. Check the explicit tone,
+ordinary video playback and pause/app-close behavior on the target headunit.
+Both packaged UI locales are mandatory CI gates; simulated HMI/AudioManager
+responses are not hardware qualification. See [AUDIO.md](AUDIO.md).
+
+The native 0.14.0 pacing, video/controller improvements and all existing engine,
+PCM and startup checks are retained. Follow any Store headunit-restart request.
+
+The backend unit uses `MemoryLimit=infinity` and `TasksMax=infinity`,
+`CPUShares=8192`, `Nice=-10`, and best-effort I/O priority 0. It sets no CPU quota,
+CPU affinity or realtime scheduler class. These remove service-level caps and
+increase scheduling priority; they reserve no physical memory or CPUs. The
+private 384 MiB noexec/nosuid/nodev filesystem remains a separate storage quota.
+Chromium also loses the former fixed four-renderer cap. Actual Chromium/Linux
+UA and Client Hints are consistent, and cookie checkpoint changes include flags
+and partition scope. Consent and authored Secure/HttpOnly/host-scoped cookies
+survived an engine hard kill locally; this does not qualify physical power loss.
+
+The exact-package driver now requires identity and cookie-hard-kill tests in
+addition to video/audio, site fullscreen and controller tests. The packaged SDK
+UI remains mandatory in English and German. Public Netflix/Disney pages loading
+and a synthetic-email step do not verify the reported account error fixed or
+protected playback. Netflix `/login` is email-first, with no guaranteed direct
+password form; server CAPTCHA decisions cannot be disabled or auto-solved by
+this update. See [TESTING.md](TESTING.md) for current evidence and limits.
+
+Passive AX media reads fix the authored closed-shadow player's false audio
+state. Unknown media status may retain an existing route for at most 4 seconds;
+it never acquires a new route. Backend disconnection releases audio and clears
+the frozen picture; readiness can reload the current URL/home only while the
+app is visible and focused. The exact-package gate requires 11 audio/video stages
+and five scripts, plus packaged SDK UI in both languages. A real Google search
+still produced HTTP429/network-traffic CAPTCHA; no CAPTCHA interaction or
+provider-error resolution is claimed.
 
 ## Update to 0.14.0: video and fullscreen
 
@@ -55,7 +100,7 @@ post-drop check refuses the mount. No backend socket can be created. A shared
 native constant now defines both the mount size and its maximum check. The
 384 MiB quota and noexec/nosuid/nodev isolation are retained.
 
-Refresh Releases and update **both Browser and Browser Runtime to 0.14.0**.
+Refresh Releases and update **both Browser and Browser Runtime to 0.15.0**.
 Engine stays **0.1.0**. Activation can recover stopped services only after
 trusted current-boot recmgr evidence proves both Browser service names were
 loaded. Fresh registration or unavailable evidence produces a Store reboot
@@ -95,9 +140,10 @@ Native source hashes, compiler flags and GLIBC ABI imports are recorded in
 `runtime-provenance.json`. No firmware audio library or CDM is redistributed.
 
 The frontend's AudioManager interfaces are optional so a unit lacking them
-can still install the browser. Audio activation requires a recognized unused
+can still install the browser. Audio activation requires the verified
 CarLifeMedia source, the existing `mgu_alsa` group and stock SmartX plugin.
-It never steals another source connection or repairs foreign locks. Test the
+Since 0.15.0, occupied connections of source 287 can be displaced as described
+above; connections of other sources and foreign locks remain untouched. Test the
 explicit tone, video/pause, tab switch and app close on the target headunit.
 Details and hardware limits: [audio](AUDIO.md). Protected playback additionally
 requires a separately authorized module; see [DRM](DRM.md).
@@ -162,10 +208,10 @@ vehicle services in this fixture are simulated; whole-car boot, recovery-manager
 power loss and every firmware version are not qualified by that test.
 
 Earlier private frontend 0.9.1/runtime 0.9.2 displayed websites and accepted
-iDrive on the author's ID7. **The new 0.10.0 package integration has not yet
-been installed on a real vehicle. BMW speaker output is not implemented.
-YouTube/subscription-provider playback is unconfirmed; no CDM is included.**
-See [testing](TESTING.md).
+iDrive on the author's ID7. The installation-fixture results above describe
+the historical 0.10.0 integration. The current release implements the separate
+AudioManager/SmartX route, while actual vehicle speakers and provider playback
+remain unqualified here. No CDM is included. See [testing](TESTING.md).
 
 The historical 0.11.0 update reuses the exact hash-verified native helpers, N-API modules
 and JPEG library from 0.10.0. Their C sources must match the pinned original

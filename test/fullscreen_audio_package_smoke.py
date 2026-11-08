@@ -75,6 +75,8 @@ def main():
               (ROOT / 'test/chromium_fullscreen_audio_smoke.js', '/fullscreen-smoke.js'),
               (ROOT / 'test/media_fullscreen_smoke.js', '/media-fullscreen-smoke.js'),
               (ROOT / 'test/controller_video_smoke.js', '/controller-video-smoke.js'),
+              (ROOT / 'test/browser_identity_smoke.js', '/browser-identity-smoke.js'),
+              (ROOT / 'test/chromium_persistence_smoke.js', '/cookie-persistence-smoke.js'),
               (node, '/usr/bin/node'), (runtime, '/runtime.tgz'),
               (engine, '/engine.tgz'), (archive, '/old-alsa.deb'), (clip, '/clip.webm')]
     for source, target in inputs:

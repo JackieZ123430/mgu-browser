@@ -2,7 +2,7 @@
 
 An experimental native browser UI for BMW MGU / iDrive 7, backed by a separate
 Chromium process, with a local SDK app emulator for development.
-Version 0.14.0 publishes an **experimental ID7/x86_64 Store catalog** with
+Version 0.15.0 publishes an **experimental ID7/x86_64 Store catalog** with
 the frontend, native runtime and private Chromium engine. Add
 `pllanaio/mgu-browser` as a GitHub source and select **Releases** for complete
 installation and updates. Existing `main` sources must switch to Releases
@@ -14,6 +14,50 @@ Widevine binary or BMW SDK is distributed, and provider playback is unconfirmed.
 See [installation, dependencies and rollback](docs/MGU_STORE.md).
 
 The [full German README](README.md) describes features and verified limits.
+
+## CarLifeMedia, foreground and available resources in 0.15.0
+
+The backend service removes its own RAM and task caps, raises regular CPU and
+best-effort I/O priority, and sets no CPU quota or fixed CPU affinity. The
+private 384 MiB filesystem still bounds profiles, cache and temporary files;
+it is not a process-RAM limit. Physical resources and operating-system limits
+still apply. No physical-headunit speed gain is asserted without measurement.
+
+When the audio source is occupied, Browser may take over the verified
+**287 / CarLifeMedia** source. It rechecks each connection identity, disconnects
+only that source's routes, then creates its own 287-to-1024 connection. Other
+sources and foreign SmartX lock files stay untouched. Release disconnects only
+the newly owned connection; displaced routes are not automatically recreated.
+
+The app requests native foreground through the SDK and requires subsequently
+observed visibility and focus. A local focus flag alone is insufficient.
+Retries and waits are bounded; focus loss or invalid replies abort acquisition.
+See [audio behavior and limits](docs/AUDIO.md).
+
+Update **both Browser and Browser Runtime to 0.15.0**; Engine stays **0.1.0**.
+The 0.14.0 video timing, fullscreen and controller improvements remain included.
+Actual headunit speakers and firmware focus still require vehicle testing.
+
+Chromium also chooses its renderer count without the earlier fixed four-process
+cap. User-Agent and Client Hints consistently report the actual Chromium/Linux
+identity. Cookie checkpoints now include flags and partition scope; authored
+consent and Secure/HttpOnly/host-scoped cookies survived a hard engine kill.
+
+Passive media-state reads now cover closed-shadow players. The authored
+Disney-like fixture produced real nonblack video and PCM, with mute/zero volume,
+pause/end/navigation/tab-close releasing the route. Unknown state may retain
+only an existing route for up to four seconds and cannot acquire a new one.
+A backend disconnect releases audio and clears the frozen picture; when ready
+returns, an active visible/focused app reloads its URL or home page.
+
+Public Netflix/Disney pages loaded. A reserved example email advanced with both
+old and new UA, so the reported generic account error was not reproduced or
+verified fixed. `/login` remains email-first; a hidden password DOM node is not
+a direct password form. A real Google search still returned HTTP429 and a
+network-traffic/CAPTCHA page with normalized UA; no CAPTCHA interaction was
+performed. Google controls that server-side; Browser cannot guarantee its
+removal and does not automatically solve challenges. See
+[test evidence and limits](docs/TESTING.md).
 
 ## Video timing and fullscreen in 0.14.0
 
@@ -34,7 +78,7 @@ test kept 89 delivered frames while Node CPU time fell from 389 to 252 ms.
 These are scoped local comparisons, not universal website or MGU frame-rate claims.
 See [test evidence and limits](docs/TESTING.md).
 
-Update **both Browser and Browser Runtime to 0.14.0**; Engine remains **0.1.0**.
+Update **both Browser and Browser Runtime to 0.15.0**; Engine remains **0.1.0**.
 The startup fix, migration, iDrive and phone-remote features remain included.
 Live YouTube testing was blocked by a proxy HTTP 403 in this environment.
 Physical BMW audio and protected provider playback still need separate qualification.
@@ -44,7 +88,7 @@ Physical BMW audio and protected provider playback still need separate qualifica
 Versions 0.13.0–0.13.2 mounted a 384 MiB working filesystem but still rejected
 anything above 128 MiB after dropping privileges. The backend exited 125
 before opening its socket. Mount and validation now share one limit. Updating
-Browser and Runtime to 0.14.0 also recovers a stopped service where the current
+Browser and Runtime to 0.15.0 also recovers a stopped service where the current
 boot registration permits it; otherwise Store requests a reboot. The engine
 remains 0.1.0. Readiness now requires an actual backend notification.
 
@@ -84,20 +128,27 @@ See [audio](docs/AUDIO.md) and [tests](docs/TESTING.md).
 The official desktop Chrome build with its own unchanged Widevine CDM has
 played an authorized public Shaka/Sintel encrypted test stream in an isolated
 local session. This does not certify any subscription provider or the real MGU.
-Netflix currently fails before its password step. Disney+ login has reached the
-profile-PIN step and confirmed visible playback, fullscreen and controller
-play/pause in the laptop emulator. YouTube, Prime Video and
-Paramount+ require further qualification. Audible vehicle output from the new integration is also unconfirmed.
+Current public Netflix and Disney pages load; that is not a protected-playback
+or authenticated-account result. The reported Netflix generic error remains
+unresolved; the public synthetic-email probe advanced with both UA versions.
+Earlier Disney login/playback observations belong to a historical laptop test.
+The authored closed-shadow player's audio-detection issue is locally corrected
+and tested with real PCM plus mute/pause/end; this is no provider-playback result. YouTube, Prime Video, Paramount+ and audible vehicle output need
+separate qualification.
 Media is enabled in the backend. An earlier private build rendered muted test
 video on the author's MGU; the new packaging still needs hardware qualification.
 Chromium does not provide a CDM. Version 0.12.0 adds the separate BMW audio route.
 
-Version 0.9.0 adds opt-in encrypted session and HTTP-cache persistence, separate
-site/cache/history clearing, and an explicit origin-bound password manager.
+Session/cookie persistence is now enabled by default with a protected local
+site key; HTTP-cache persistence remains a separate opt-in. Cookie checkpoints
+run during the session and include scope/flags; other profile storage is saved
+on clean shutdown. Separate site/cache/history clearing and an explicit
+origin-bound password manager are available.
 Windows DPAPI wraps the laptop key; the MGU backend has a portable master-password
-mode with PBKDF2-SHA256 and AES-256-GCM. Both share the same storage format and
-browser code. Real-MGU qualification is pending. Clean shutdown is required to
-save the latest state; sudden power loss is not fully covered. Website-provided
+mode for the separate password vault with PBKDF2-SHA256 and AES-256-GCM.
+Both share the same storage format and browser code. Real-MGU qualification is
+pending. Changes after the last cookie checkpoint or profile snapshot can still
+be lost; an engine hard-kill test does not qualify physical power failure. Website-provided
 video controls take precedence, with native controls used only as fallback.
 Proprietary SDK files, credentials, vehicle data, firmware dumps and CDMs are
 excluded. Original code is MIT licensed; dependencies retain their licenses,

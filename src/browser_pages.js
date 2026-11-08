@@ -30,6 +30,7 @@ module.exports={
             this.tabTask(async()=>{
                 if(this.pipe!==pipe||this.epoch!==epoch)return;
                 const tab=this.tabs.find(t=>t.target===targetId);if(!tab)return;
+                if(this.clearAccessibleMedia)this.clearAccessibleMedia(tab.session);
                 const index=this.tabs.indexOf(tab),active=this.activeTab===tab.id;
                 this.tabs=this.tabs.filter(t=>t!==tab);
                 if(active){if(this.tabs.length)await this._selectTab(this.tabs[Math.min(index,this.tabs.length-1)].id);else await this._newTab('');}
@@ -44,7 +45,9 @@ module.exports={
     async applyLocale(session,pipe){
         pipe=pipe||this.pipe;
         const language=this.locale.split('-')[0];
-        await pipe.send('Network.setUserAgentOverride',{userAgent:this.userAgent,acceptLanguage:this.locale+','+language+';q=0.9',platform:'Linux x86_64'},session);
+        const identity={userAgent:this.userAgent,acceptLanguage:this.locale+','+language+';q=0.9',platform:'Linux x86_64'};
+        if(this.userAgentMetadata)identity.userAgentMetadata=this.userAgentMetadata;
+        await pipe.send('Network.setUserAgentOverride',identity,session);
         // Same-origin popups can share their opener's renderer and inherit its
         // locale override. Chromium permits only one CDP owner per renderer.
         try{await pipe.send('Emulation.setLocaleOverride',{locale:this.locale},session);}
@@ -72,6 +75,7 @@ module.exports={
         const index=this.tabs.indexOf(tab),active=this.activeTab===id;
         if(this.tabs.length===1){await this._newTab('');}
         else if(active)await this._selectTab(this.tabs[index===this.tabs.length-1?index-1:index+1].id);
+        if(this.clearAccessibleMedia)this.clearAccessibleMedia(tab.session);
         this.tabs=this.tabs.filter(t=>t!==tab);await this.pipe.send('Target.closeTarget',{targetId:tab.target});this.emitTabs();
     });},
     async _newTab(url){
@@ -101,7 +105,7 @@ module.exports={
             else this.updateTab(tab);
             this.emitTabs();return {id:tab.id};
         }catch(e){
-            if(tab)this.tabs=this.tabs.filter(t=>t!==tab);
+            if(tab){if(this.clearAccessibleMedia)this.clearAccessibleMedia(tab.session);this.tabs=this.tabs.filter(t=>t!==tab);}
             if(this.pipe===pipe&&this.epoch===epoch){
                 await pipe.send('Target.closeTarget',{targetId}).catch(()=>{});
                 if(tab&&this.activeTab===tab.id){const prior=this.tabs.find(t=>t.id===previous);if(prior)await this._selectTab(prior.id).catch(()=>{});else{this.activeTab=null;this.session=null;this.target=null;}}

@@ -48,6 +48,10 @@ async function continuity(label){
     }
     return {stage:label,wallMs,pcmBytes:bytes.length,clockAdvance:ended-started,nonblackFrames:lastVisibleFrame-frame};
 }
+async function syncDetectedRoute(playing,audible,label){
+    await until(async()=>{await browser.inspectMedia();return media.playing===playing&&media.audible===audible&&!media.activityUnknown;},label+': exact media activity');
+    await browser.audioRoute(media.audible);assert.equal(browser.audioStatus().routeAvailable,audible,label+': detected activity controls the owned output');
+}
 (async()=>{try{
     console.log('Fullscreen audio Chromium: '+cp.execFileSync(browser.options.binary,['--version'],{encoding:'utf8',timeout:5000}).trim());
     const clip=process.env.MGU_FULLSCREEN_TEST_CLIP?{status:0,stdout:fs.readFileSync(process.env.MGU_FULLSCREEN_TEST_CLIP)}:cp.spawnSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','testsrc2=size=320x180:rate=30','-f','lavfi','-i','sine=frequency=440:sample_rate=48000','-t','12','-c:v','libvpx','-b:v','180k','-c:a','libopus','-b:a','48k','-f','webm','pipe:1'],{maxBuffer:3*1024*1024});
@@ -72,5 +76,28 @@ async function continuity(label){
     assert.equal(fs.statSync(sink).size,releasedBytes,'Disconnected output must discard PCM without writing to the sink');
     assert(releasedAdvance>releasedWall/1000*.82&&releasedAdvance<releasedWall/1000*1.18,'Disconnected output must also keep video clock near real time');
     results.push({stage:'route-released',wallMs:releasedWall,pcmBytes:0,clockAdvance:releasedAdvance});
+    // Closed components deliberately hide their media from querySelectorAll.
+    // The browser may read the accessible media node's own flags through CDP,
+    // while preserving the component's closed shadow root and video content.
+    const closedFixture='document.body.innerHTML="<audio id=unrelated muted></audio><disney-web-player id=host style=display:block;width:100vw;height:100vh></disney-web-player>";const closed=host.attachShadow({mode:"closed"});window.video=document.createElement("video");video.style="width:100%;height:100%;object-fit:contain";video.loop=true;video.volume=.2;video.src="data:video/webm;base64,'+clip.stdout.toString('base64')+'";closed.appendChild(video);video.play()';
+    await value(closedFixture);
+    await until(async()=>await value('video.currentTime>.2'),'Closed-component video decodes');
+    await syncDetectedRoute(true,true,'closed-shadow playing');results.push(await continuity('closed-shadow-playing'));
+    assert.equal(await value('host.shadowRoot===null'),true,'The component must stay closed');
+    assert(browser.accessibleMediaCache.get(browser.session).objects.length>0,'Actual accessible media handle is cached');
+    await value('video.muted=true;true');await syncDetectedRoute(true,false,'closed-shadow muted');
+    const mutedBytes=fs.statSync(sink).size;await delay(250);assert.equal(fs.statSync(sink).size,mutedBytes,'Muted closed player releases the PCM output');
+    await value('video.muted=false;true');await syncDetectedRoute(true,true,'closed-shadow unmuted');results.push(await continuity('closed-shadow-unmuted'));
+    await value('video.volume=0;true');await syncDetectedRoute(true,false,'closed-shadow zero volume');
+    await value('video.volume=.2;true');await syncDetectedRoute(true,true,'closed-shadow volume restored');results.push(await continuity('closed-shadow-volume-restored'));
+    await value('video.pause();true');await syncDetectedRoute(false,false,'closed-shadow paused');
+    const pausedBytes=fs.statSync(sink).size;await delay(250);assert.equal(fs.statSync(sink).size,pausedBytes,'Paused closed player releases the PCM output');
+    await value('video.play()');await syncDetectedRoute(true,true,'closed-shadow resumed');results.push(await continuity('closed-shadow-resumed'));
+    await value('video.loop=false;video.currentTime=video.duration-.15;video.play()');await until(async()=>await value('video.ended'),'Closed player reaches its real end');await syncDetectedRoute(false,false,'closed-shadow ended');
+    await browser.clearTab();await until(()=>browser.accessibleMediaCache.size===0,'Navigation releases accessible media objects');
+    await value(closedFixture);await until(async()=>await value('video.currentTime>.1'),'Replacement closed player decodes');await value('video.pause();true');await browser.inspectMedia();
+    const oldTab=browser.tabs.find(tab=>tab.session===browser.session);await until(async()=>{await browser.inspectMedia();const record=browser.accessibleMediaCache.get(oldTab.session);return record&&record.objects.length>0;},'Replacement target has a cached media handle');
+    await browser.newTab('');await browser.closeTab(oldTab.id);assert.equal(browser.accessibleMediaCache.has(oldTab.session),false,'Closing a target releases accessible media objects');
+    results.push({stage:'closed-shadow-muted-paused-ended',pcmBytes:0,closedShadowPreserved:true,ownFlags:true,unrelatedDomAudio:true,navigationReleased:true,tabCloseReleased:true});
     console.log('Actual video/PCM continuity: '+JSON.stringify({codec:browser.performance.codec,stages:results}));
 }finally{browser.destroy();await browser.closing;assert.equal(path.dirname(dir),os.tmpdir());if(fs.rmSync)fs.rmSync(dir,{recursive:true,force:true});else cp.execFileSync('/bin/rm',['-rf','--',dir]);}})().catch(error=>{console.error(error.stack);console.error('Fixture diagnostics (last 8 KiB):'+diagnostics);process.exitCode=1;});

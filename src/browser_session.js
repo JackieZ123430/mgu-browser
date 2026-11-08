@@ -2,6 +2,7 @@
 const cp=require('child_process'),fs=require('fs'),path=require('path'),EventEmitter=require('events');
 const CdpPipe=require('./cdp_pipe'),PNG=require('./png_frame'),URLPolicy=require('./url_policy');
 const Metadata=require('./browser_metadata');
+const Identity=require('./browser_identity');
 const Audio=require('./browser_audio'),DRM=require('./browser_drm');
 const VehicleAudioBridge=require('./browser_audio_bridge');
 let JPEG=null;try{JPEG=require('./jpeg_frame.node');}catch(e){}
@@ -55,7 +56,6 @@ class BrowserSession extends EventEmitter {
             // intermediate frames per gesture that the screencast cannot keep up with.
             '--disable-smooth-scrolling',
             '--disable-features=Translate,MediaRouter,OptimizationHints,AutofillServerCommunication,InterestFeedContentSuggestions',
-            '--renderer-process-limit=4',
             '--window-size='+this.viewport.width+','+this.viewport.height,'--user-data-dir='+this.profile,'about:blank'];
         if(this.options.mediaDisabled)args.push('--disable-blink-features=WebCodecs');
         if(this.options.mediaDisabled||this.vehicleAudio&&!vehicleOutput)args.push('--mute-audio');
@@ -73,7 +73,7 @@ class BrowserSession extends EventEmitter {
         pipe.on('event',event=>{if(epoch===this.epoch)this.event(event);});
         try {
             const version=await pipe.send('Browser.getVersion');this.emit('version',version.product);
-            this.userAgent=version.userAgent;
+            const identity=Identity.create(version);this.userAgent=identity.userAgent;this.userAgentMetadata=identity.metadata;
             await pipe.send('Browser.setDownloadBehavior',{behavior:'deny'});
             try{await this.restoreCookies(pipe);}catch(e){this.emit('diagnostic','Saved cookies could not be restored');}
             await pipe.send('Target.setDiscoverTargets',{discover:true});
@@ -96,6 +96,7 @@ class BrowserSession extends EventEmitter {
         if(!tab)return;
         const active=event.sessionId===this.session;
         if(event.method.indexOf('WebAudio.')===0){this.webAudioEvent(event);return;}
+        if(event.method==='Runtime.executionContextsCleared'||event.method==='Page.frameNavigated'&&!event.params.frame.parentId)this.clearAccessibleMedia(event.sessionId);
         if(event.method==='Page.frameNavigated'&&!event.params.frame.parentId){if(active){this.pageGeneration++;this.focusedMediaControl=null;this.focusedMediaObject=null;this.lastMedia=null;this.emit('media',Object.assign({fullscreen:false},this.mediaActivityState||{}));}tab.mainFrame=event.params.frame.id;tab.url=URLPolicy.allowed(event.params.frame.url)?event.params.frame.url:'';this.emitTabs();}
         if(event.method==='Page.navigatedWithinDocument'&&event.params.frameId===tab.mainFrame){tab.url=URLPolicy.allowed(event.params.url)?event.params.url:'';this.emitTabs();}
         if(event.method==='Page.frameStartedLoading'&&event.params.frameId===tab.mainFrame){tab.loading=true;this.emitTabs();}
@@ -226,6 +227,7 @@ class BrowserSession extends EventEmitter {
         return this.send('Runtime.evaluate',{expression:'JSON.stringify({ready:document.readyState,visible:document.visibilityState,scripts:document.scripts.length,resources:performance.getEntriesByType("resource").length})',returnByValue:true});
     }
     stop(reason) {
+        this.clearAccessibleMedia();
         const audioClosing=this.vehicleAudio?this.vehicleAudio.stop():Promise.resolve();
         this.webAudioContexts.clear();
         if(this.pendingPopups)this.pendingPopups.clear();

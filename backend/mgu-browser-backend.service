@@ -13,14 +13,17 @@ StandardOutput=journal
 StandardError=journal
 KillMode=control-group
 TimeoutStopSec=20
-# Full CPU access (no quota) and raised priority for Chromium's software
-# rendering; no realtime class, so the stock HMI keeps its own scheduling.
+# Let Chromium use available RAM, threads and all CPUs without app-level caps.
+# Regular CPU and best-effort I/O priority favour foreground browser work;
+# the service stays in the normal scheduler rather than a realtime class.
 MemoryAccounting=yes
-MemoryLimit=1536M
+MemoryLimit=infinity
 CPUAccounting=yes
-CPUShares=1024
-Nice=-5
-TasksMax=384
+CPUShares=8192
+Nice=-10
+TasksMax=infinity
+IOSchedulingClass=best-effort
+IOSchedulingPriority=0
 OOMScoreAdjust=0
 Environment=HOME=/var/opt/mgu-browser/data
 UMask=0077

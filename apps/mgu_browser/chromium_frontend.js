@@ -20,7 +20,7 @@ mgu.run({async start(ctx){
     let tabs=[],activeTab='',wifiState={},wifiSSID='',wifiPassword='',wifiBusy=false,wifiInternet=null,wifiPoll=0;
     let media={fullscreen:false},mediaIndex=1,mediaUntil=0;
     let mediaCaps=null,mediaBusy=false,audioBusy=false;
-    let vehicleAudioStatus={reason:'idle'},audioWanted=false,audioSync=null,audioNote='',audioRetry=0;
+    let vehicleAudioStatus={reason:'idle'},audioWanted=false,audioSync=null,audioNote='',audioRetry=0,audioKnownUntil=0,audioUnknownTimer=null;
     let wifiNetworks=[],wifiScanning=false,wifiScanError='',wifiOffset=0;
     let remoteState=null,remoteBusy=false,remoteQR='',remotePoll=0;
     let privacyState=null,privacyBusy=false,logins=[],loginOffset=0,privacyConfirmation=null,vaultSetup='';
@@ -43,26 +43,39 @@ mgu.run({async start(ctx){
     store.onError=note;
     const safe=task=>Promise.resolve().then(typeof task==='function'?task:()=>task).catch(e=>{note(e.message);log.warn(e.message);});
     const vehicleAudio=new VehicleAudio({signals:ctx.signals,visible:()=>gate.check().allowed,
+        requestFocus:async()=>{
+            const wanted=()=>audioWanted&&!closing&&ui.isVisible('MAIN');
+            if(!wanted())throw new Error('audio-not-visible');
+            // Request actual HMI foreground through the SDK. Local focus flags
+            // alone would not bring the Browser in front of another app.
+            await ui.open('MAIN');
+            if(!wanted())throw new Error('audio-not-visible');
+            if(ui.hasFocus&&!ui.hasFocus('MAIN'))throw new Error('audio-focus-unavailable');
+            visible();
+        },
         start:()=>browser.request('audioRoute',{enabled:true}),
         stop:()=>browser.child&&gate.check().allowed?browser.request('audioRoute',{enabled:false}):Promise.resolve(),
         onStatus:state=>{vehicleAudioStatus=state;if(state.connected){audioNote='';audioRetry=0;}if(mediaCaps&&mediaCaps.audio)mediaCaps.audio.vehicle=state;}
     });
     function syncVehicleAudio(wanted){
         audioWanted=!!wanted;
-        if(!audioWanted)return vehicleAudio.release();
+        if(!audioWanted){audioSync=null;clearTimeout(audioUnknownTimer);audioUnknownTimer=null;audioKnownUntil=0;return vehicleAudio.release();}
         if(audioSync)return audioSync;
-        audioSync=(async()=>{
+        const work=(async()=>{
             const status=await browser.request('audioStatus');
-            if(!audioWanted||!gate.check().allowed)return;
+            if(audioSync!==work||!audioWanted||!gate.check().allowed)throw new Error('audio-not-visible');
             if(status.route==='mgu-smartx'){
                 if(status.bridgeReady!==true){await vehicleAudio.release();throw new Error('audio-output-unavailable');}
                 await vehicleAudio.acquire();
             }
-        })().then(result=>{audioSync=null;return result;},error=>{audioSync=null;throw error;});
-        return audioSync;
+        })().then(result=>{if(audioSync===work)audioSync=null;return result;},error=>{if(audioSync===work)audioSync=null;throw error;});
+        audioSync=work;return work;
     }
     const audioError=error=>({
-        'audio-source-busy':'Audioquelle wird bereits verwendet.',
+        'audio-source-busy':'Audioquelle konnte nicht übernommen werden.',
+        'audio-takeover-refused':'Audioquelle konnte nicht übernommen werden.',
+        'audio-takeover-timeout':'Audioquelle wurde nicht rechtzeitig freigegeben.',
+        'audio-focus-unavailable':'Browser konnte nicht in den Vordergrund wechseln.',
         'audio-source-unavailable':'Fahrzeug-Audioquelle nicht verfügbar.',
         'audio-service-unavailable':'Fahrzeug-Audiodienst nicht erreichbar.',
         'audio-connect-refused':'Fahrzeug hat die Audioverbindung abgelehnt.',
@@ -83,7 +96,15 @@ mgu.run({async start(ctx){
         return audio&&audio.routeAvailable?'Audio-Ausgang erkannt; Fahrzeugton unbestätigt':'Kein Audio-Ausgang erkannt';
     }
     const syncAudio=()=>{
-        const wanted=gate.check().allowed&&(audioBusy||media.audible===true);
+        clearTimeout(audioUnknownTimer);audioUnknownTimer=null;
+        const now=Date.now();
+        if(media.audible===true)audioKnownUntil=now+4000;
+        else if(media.activityUnknown!==true)audioKnownUntil=0;
+        // A timed-out player query may briefly keep our existing route. It
+        // cannot start a new route or hold one indefinitely without evidence.
+        const hold=audioWanted&&media.audible!==true&&media.activityUnknown===true&&now<audioKnownUntil;
+        if(hold){audioUnknownTimer=setTimeout(()=>{audioUnknownTimer=null;syncAudio();},audioKnownUntil-now);if(audioUnknownTimer.unref)audioUnknownTimer.unref();}
+        const wanted=gate.check().allowed&&(audioBusy||media.audible===true||hold);
         if(wanted&&Date.now()<audioRetry)return;
         syncVehicleAudio(wanted).catch(e=>{if(e.message==='audio-not-visible')return;audioRetry=Date.now()+10000;if(audioNote!==e.message){audioNote=e.message;note(audioError(e));log.warn('vehicle audio: '+e.message);}});
     };
@@ -147,7 +168,8 @@ mgu.run({async start(ctx){
     function launch(){
         if(!pendingLaunch||!serviceReady||!gate.check().allowed||closing)return;
         pendingLaunch=false;if(browser.child)return;
-        if(store.data.homepage)safe(()=>navigate(store.data.homepage));
+        const resume=currentURL||store.data.homepage;
+        if(resume)safe(()=>navigate(resume));
         else {landing=true;webMode=false;panel=null;safe(async()=>{await browser.setLocale(locale.language);await browser.start('');});}
     }
     const visible=()=>{
@@ -156,7 +178,7 @@ mgu.run({async start(ctx){
         if(v&&!wasVisible){closing=false;pendingLaunch=true;launch();}wasVisible=v;
     };
     ui.onVisible(visible);if(ui.onFocus)ui.onFocus(visible);visible();setInterval(visible,100);
-    browser.on('ready',()=>{serviceReady=true;resized='';if(!browser.child&&!frame)landing=true;launch();});
+    browser.on('ready',()=>{serviceReady=true;resized='';if(!browser.child){pendingLaunch=true;if(!frame)landing=true;}launch();});
     browser.on('frame',f=>{frame=f;setImage(IMAGE,f.width,f.height,f.rgba);nativeBridge.markDirty(IMAGE,f.dirty);});
     browser.on('started',()=>{landing=!currentURL;resized='';activity();if(store.data.blockAds===false)safe(()=>browser.request('contentBlocking',{enabled:false}));});
     browser.on('remote',v=>{
@@ -172,8 +194,8 @@ mgu.run({async start(ctx){
         keyboard=null;draft='';panel=null;reading=false;webMode=false;activity();
         if(ctx.display)ctx.display.focusKey='tgt:'+(t.url?'tab-'+t.id:'urlbar');
     });
-    browser.on('blocked',reason=>{frame=null;editable=false;webMode=false;loading=false;resized='';if(ctx.display&&ctx.display.browserSetFullscreen)ctx.display.browserSetFullscreen(false);if(!closing&&!landing&&gate.check().allowed&&reason!=='Start')note(reason);});
-    browser.on('blocked',()=>{audioWanted=false;vehicleAudio.release().catch(()=>{});});
+    browser.on('blocked',reason=>{frame=null;media={fullscreen:false,playing:false,audible:false};editable=false;webMode=false;loading=false;resized='';if(ctx.display&&ctx.display.browserSetFullscreen)ctx.display.browserSetFullscreen(false);if(!closing&&!landing&&gate.check().allowed&&reason!=='Start')note(reason);});
+    browser.on('blocked',()=>{syncVehicleAudio(false).catch(()=>{});});
     browser.on('media',state=>{
         const changed=!!state.fullscreen!==!!media.fullscreen;media=state;
         syncAudio();
@@ -545,7 +567,7 @@ mgu.run({async start(ctx){
             c.text('H.264: '+(mediaCaps.h264?'Ja':'Nein')+'   VP9: '+(mediaCaps.vp9?'Ja':'Nein'),65,265,18,C.muted);
             c.text(audioLabel(mediaCaps.audio),65,295,18,C.muted);
         }
-        [['YouTube','https://www.youtube.com/'],['Netflix','https://www.netflix.com/'],['Disney+','https://www.disneyplus.com/'],['Prime Video','https://www.primevideo.com/'],['Paramount+','https://www.paramountplus.com/']].forEach((item,i)=>button(c,64+i*296,320,278,44,item[0],()=>browser.newTab(item[1]),'stream-'+i));
+        [['YouTube','https://www.youtube.com/'],['Netflix','https://www.netflix.com/login'],['Disney+','https://www.disneyplus.com/'],['Prime Video','https://www.primevideo.com/'],['Paramount+','https://www.paramountplus.com/']].forEach((item,i)=>button(c,64+i*296,320,278,44,item[0],()=>browser.newTab(item[1]),'stream-'+i));
         button(c,64,380,352,44,audioBusy?'Testton läuft ...':'Testton (1 s)',testAudio,'audio-test',{enabled:!audioBusy&&!!mediaCaps&&mediaCaps.mediaEnabled});
         button(c,450,380,352,44,'Wiedergabe / Pause',async()=>{await browser.mediaAction('toggle');panel=null;enterPage();},'media-toggle',{enabled:!!mediaCaps&&mediaCaps.mediaEnabled});
         button(c,836,380,352,44,'Video-Vollbild',()=>browser.mediaAction('fullscreen'),'media-fullscreen',{enabled:!!mediaCaps&&mediaCaps.mediaEnabled});

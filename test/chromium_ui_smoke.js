@@ -44,15 +44,16 @@ class FakeBrowser extends EventEmitter{
     async stop(){this.child=null;this.calls.push('stop');this.emit('blocked','Browser geschlossen');}destroy(){}
 }
 const display={_place(){},_drawChrome(){},_claimTabs(){},_touch(){},_repaint(){},pageTargets:[],focusKey:null};
-const ui={onClick(){},onVisible(){},onFocus(){},isVisible(){return !closed;},hasFocus(){return true;},image(name,cv){frame=cv;display.pageTargets=cv.targets;},async close(){closed=true;}};
-const vehicleCalls=[],vehicleConnections=[],vehicleSource={sourceID:287,name:'CarLifeMedia',availability:{availability:'A_UNAVAILABLE',availabilityReason:0}};
+let hmiFocused=true,focusRequest=null;
+const ui={onClick(){},onVisible(){},onFocus(){},isVisible(){return !closed;},hasFocus(){return hmiFocused;},async open(name){assert.equal(name,'MAIN');vehicleCalls.push('focus-main');if(focusRequest)await focusRequest();},image(name,cv){frame=cv;display.pageTargets=cv.targets;},async close(){closed=true;}};
+const vehicleCalls=[],vehicleConnections=[],vehicleDisconnected=[],vehicleSource={sourceID:287,name:'CarLifeMedia',availability:{availability:'A_UNAVAILABLE',availabilityReason:0}};
 const signals={proxy:async iface=>iface,onAvailable:async(proxy,fn)=>fn(true),call:async(proxy,method,args)=>{
     vehicleCalls.push(method);
     if(method==='getListMainSources')return {listSources:[vehicleSource]};
     if(method==='getListMainConnections')return {listConnections:vehicleConnections.slice()};
     if(method==='hookSourceAvailablityStatusChange'){vehicleSource.availability=args.availability;return {};}
     if(method==='connect'){vehicleConnections.push({sourceID:287,sinkID:1024,mainConnectionID:31,connectionState:'CS_CONNECTED'});return {amError:'E_OK',mainConnectionID:31};}
-    if(method==='disconnect'){vehicleConnections.splice(0);return {amError:'E_OK'};}
+    if(method==='disconnect'){vehicleDisconnected.push(args.mainConnectionID);const index=vehicleConnections.findIndex(c=>c.mainConnectionID===args.mainConnectionID);if(index>=0)vehicleConnections.splice(index,1);return {amError:'E_OK'};}
     throw Error('Unexpected AudioManager method');
 }};
 const ctx={ui,signals,display,dataDir:data,log:{info(){},warn(){}},controller:{onInput(fn){controllerInput=fn;}},hideButton(){},onTap(){},onScroll(){},loop(name,hz,fn){assert.equal(hz,12);tick=fn;},canvas(w,h){
@@ -118,7 +119,57 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     assert(vehicleCalls.includes('connect')&&vehicleCalls.includes('disconnect'),'Vehicle test tone acquires and releases the owned AudioManager route');
     assert(browser.calls.indexOf('audio-route-start')<browser.calls.lastIndexOf('audio-test'),'Vehicle output is ready before generating its tone');
     assert(browser.calls.includes('audio-route-stop'));assert.equal(vehicleConnections.length,0);
+    // A busy CarLife source is taken over after a genuine HMI-open request.
+    // Other sources remain connected, and closing releases only our new ID.
+    vehicleSource.availability={availability:'A_AVAILABLE',availabilityReason:0};
+    vehicleConnections.push({sourceID:287,sinkID:1024,mainConnectionID:81,connectionState:'CS_CONNECTED'},
+        {sourceID:287,sinkID:1030,mainConnectionID:82,connectionState:'CS_CONNECTED'},
+        {sourceID:200,sinkID:1024,mainConnectionID:83,connectionState:'CS_CONNECTED'});
+    const takeoverAt=vehicleCalls.length;let finishFocus;
+    focusRequest=()=>new Promise(resolve=>finishFocus=resolve);
+    const takeover=frame.targets.find(t=>t.key==='audio-test').run();await new Promise(r=>setImmediate(r));
+    assert(vehicleCalls.slice(takeoverAt).includes('focus-main'),'Busy-source takeover requests actual MAIN foreground');
+    assert(!vehicleCalls.slice(takeoverAt).some(m=>['disconnect','connect','hookSourceAvailablityStatusChange'].includes(m)),'AudioManager mutations wait for the focus request');
+    finishFocus();await takeover;await new Promise(r=>setImmediate(r));tick();focusRequest=null;
+    assert.deepEqual(vehicleConnections.map(c=>c.mainConnectionID),[83],'Takeover and release preserve unrelated audio sources');
+    assert(vehicleDisconnected.includes(81)&&vehicleDisconnected.includes(82),'All occupied routes of the requested source are replaced');
+    assert(!vehicleDisconnected.includes(83),'A different source is never disconnected');
+    assert(vehicleCalls.slice(takeoverAt).indexOf('focus-main')<vehicleCalls.slice(takeoverAt).indexOf('disconnect'),'HMI focus precedes the audio takeover');
+    // A fresh playback request must survive cancellation of an older handoff,
+    // even when there is no later media event to retry steady WebAudio.
+    vehicleConnections.push({sourceID:287,sinkID:1024,mainConnectionID:84,connectionState:'CS_CONNECTED'});
+    let resumedFocus,focusAttempts=0;
+    focusRequest=()=>++focusAttempts===1?new Promise(resolve=>resumedFocus=resolve):Promise.resolve();
+    const resumedAt=vehicleCalls.length;
+    browser.emit('media',{fullscreen:false,audible:true,playing:true});await new Promise(r=>setImmediate(r));
+    assert.equal(typeof resumedFocus,'function');
+    browser.emit('media',{fullscreen:false,audible:false,playing:false});
+    browser.emit('media',{fullscreen:false,audible:true,playing:true});
+    resumedFocus();
+    for(let i=0;i<20&&!vehicleConnections.some(c=>c.mainConnectionID===31);i++)await new Promise(r=>setImmediate(r));
+    assert.equal(focusAttempts,2,'Resuming playback starts a new handoff instead of reusing the cancelled promise');
+    assert.equal(vehicleCalls.slice(resumedAt).filter(m=>m==='connect').length,1,'Only the fresh playback intent connects');
+    assert.deepEqual(vehicleConnections.map(c=>c.mainConnectionID).sort((a,b)=>a-b),[31,83]);
+    const beforeUnknown=vehicleCalls.filter(m=>m==='disconnect').length;
+    browser.emit('media',{fullscreen:false,audible:false,playing:false,activityUnknown:true});await new Promise(r=>setImmediate(r));
+    assert(vehicleConnections.some(c=>c.mainConnectionID===31),'An unknown query briefly holds only the already-owned route');
+    assert.equal(vehicleCalls.filter(m=>m==='disconnect').length,beforeUnknown);
+    await new Promise(resolve=>setTimeout(resolve,4100));await new Promise(r=>setImmediate(r));
+    assert.deepEqual(vehicleConnections.map(c=>c.mainConnectionID),[83],'An unchanged unknown state releases the route after the finite grace without requiring another media event');
+    browser.emit('media',{fullscreen:false,audible:false,playing:false});await new Promise(r=>setImmediate(r));focusRequest=null;
+    assert.deepEqual(vehicleConnections.map(c=>c.mainConnectionID),[83]);
+    browser.emit('media',{fullscreen:false,audible:false,playing:false,activityUnknown:true});await new Promise(r=>setImmediate(r));
+    assert.deepEqual(vehicleConnections.map(c=>c.mainConnectionID),[83],'Unknown activity alone never starts a new audio takeover');
+    // The SDK wrapper may resolve even when HMI focus was not granted.
+    vehicleConnections.splice(0);vehicleConnections.push({sourceID:287,sinkID:1024,mainConnectionID:91,connectionState:'CS_CONNECTED'});
+    const refusedAt=vehicleCalls.length,tonesBefore=browser.calls.filter(c=>c==='audio-test').length;
+    focusRequest=async()=>{hmiFocused=false;};await press('audio-test');hmiFocused=true;focusRequest=null;
+    assert(!vehicleCalls.slice(refusedAt).some(m=>['disconnect','connect','hookSourceAvailablityStatusChange'].includes(m)),'Unconfirmed HMI focus must not take over audio');
+    assert.equal(browser.calls.filter(c=>c==='audio-test').length,tonesBefore,'Focus refusal cannot start output or a test tone');
+    vehicleConnections.splice(0);vehicleSource.availability={availability:'A_UNAVAILABLE',availabilityReason:0};
     const streaming=new Canvas(1600,533);play(frame.words(),streaming);fs.writeFileSync(path.resolve(__dirname,'../.local/streaming-preview.png'),streaming.png());
+    await press('stream-1');assert.equal(browser.url,'https://www.netflix.com/login','Netflix opens the existing-account login form directly');
+    await press('tab-close-test-2');await press('settings');await press('streaming-settings');
     await press('stream-2');assert.equal(browser.url,'https://www.disneyplus.com/');
     await press('tab-close-test-2');
     browser.emit('frame',{width:1280,height:380,rgba:Buffer.alloc(1280*380*4)});tick();
@@ -161,16 +212,35 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     assert(frame.targets.some(t=>t.key==='page-controller'),'A blank site popup displays web content instead of the browser start page');
     browser.emit('media',{fullscreen:false,audible:true,playing:true});await new Promise(r=>setImmediate(r));
     assert.equal(vehicleConnections.length,1,'Audible media automatically acquires the available vehicle route');
+    browser.emit('navigation','https://example.org/watch');browser.child=null;
+    browser.emit('blocked','Browser-Dienst getrennt');await new Promise(r=>setImmediate(r));tick();
+    assert.equal(vehicleConnections.length,0,'A disconnected backend releases the frontend-owned audio route');
+    browser.emit('ready');await new Promise(r=>setImmediate(r));tick();
+    assert(browser.child&&browser.url==='https://example.org/watch','A recovered backend reopens the current page rather than leaving a frozen surface');
+    browser.emit('frame',{width:1280,height:380,rgba:Buffer.alloc(1280*380*4)});
+    browser.emit('media',{fullscreen:false,audible:true,playing:true});await new Promise(r=>setImmediate(r));
+    assert.equal(vehicleConnections.length,1,'Recovered audible playback obtains a new owned route');
     const disconnects=vehicleCalls.filter(m=>m==='disconnect').length;
     browser.helperReady=false;browser.emit('media',{fullscreen:false,audible:true,playing:true});await new Promise(r=>setImmediate(r));
     assert.equal(vehicleConnections.length,0,'A failed output helper must release its AudioManager route');
     assert.equal(vehicleCalls.filter(m=>m==='disconnect').length,disconnects+1);
     assert.equal(vehicleSource.availability.availability,'A_UNAVAILABLE','Helper failure restores source availability instead of holding radio audio');
     browser.emit('media',{fullscreen:false,audible:false,playing:false});await new Promise(r=>setImmediate(r));
-    await press('close');
+    // Closing during an outstanding real focus request cancels takeover,
+    // including a late HMI acknowledgement. The old source is left intact.
+    browser.helperReady=true;await press('settings');await press('streaming-settings');
+    vehicleSource.availability={availability:'A_AVAILABLE',availabilityReason:0};
+    vehicleConnections.push({sourceID:287,sinkID:1024,mainConnectionID:92,connectionState:'CS_CONNECTED'});
+    let finishClosingFocus;focusRequest=()=>new Promise(resolve=>finishClosingFocus=resolve);
+    const cancelledAt=vehicleCalls.length,cancelledTakeover=frame.targets.find(t=>t.key==='audio-test').run();
+    await new Promise(r=>setImmediate(r));assert.equal(typeof finishClosingFocus,'function');
+    const closingApp=frame.targets.find(t=>t.key==='close').run();await new Promise(r=>setImmediate(r));
+    finishClosingFocus();await Promise.all([cancelledTakeover,closingApp]);tick();focusRequest=null;
+    assert(!vehicleCalls.slice(cancelledAt).some(m=>['disconnect','connect','hookSourceAvailablityStatusChange'].includes(m)),'Closing cancels takeover before any AudioManager mutation, even after late focus confirmation');
+    assert.deepEqual(vehicleConnections.map(c=>c.mainConnectionID),[92]);
     assert(closed,'Close must leave the app MAIN state');assert.equal(browser.child,null,'Close must stop Chromium');
     const stops=browser.calls.filter(c=>c==='stop').length;let exited=false;
     await require(root+'/browser_shutdown').run(()=>{exited=true;assert(browser.calls.filter(c=>c==='stop').length>stops,'MainApp shutdown must stop Browser before exiting');});
     assert(exited,'Bounded cleanup must complete the requested MainApp exit');
-    console.log('SDK UI: tabs, URL keyboard, masked hotspot settings, fullscreen controls, target bounds and app close passed');
+    console.log('SDK UI: tabs, URL keyboard, masked hotspot settings, audio takeover with observed HMI focus, fullscreen controls, target bounds and app close passed');
 }finally{timers.forEach(clearInterval);}})().catch(e=>{console.error(e.stack);process.exitCode=1;});

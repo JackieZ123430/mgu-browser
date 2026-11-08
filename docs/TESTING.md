@@ -1,5 +1,93 @@
 # Teststand
 
+## 0.15.0 — Ressourcen, Audioübernahme und SDK-Vordergrund
+
+Die Backend-Unit hebt ihre eigenen RAM- und Taskobergrenzen mit
+`MemoryLimit=infinity` und `TasksMax=infinity` auf. `CPUShares=8192`, `Nice=-10`
+und best-effort-I/O-Priorität 0 bevorzugen Browserarbeit bei Konkurrenz.
+Eine CPU-Quote, feste CPU-Zuordnung oder Echtzeitklasse wird nicht gesetzt.
+Das private 384-MiB-tmpfs für Profile/Cache/TMPDIR bleibt unverändert und ist
+keine Prozess-RAM-Obergrenze. Die Paketprüfung vergleicht die eingebauten
+Units mit dem Quellstand; daraus folgt kein gemessener Geschwindigkeitsgewinn
+auf einer MGU.
+
+Die neue Policy darf ausschließlich Verbindungen der erneut als CarLifeMedia
+bestätigten Quelle 287 verdrängen, unabhängig von deren bisheriger Senke.
+Anschließend wird eine neue eigene Verbindung zu 1024 erzeugt. Regressionen
+prüfen andere Quellen, ID-Wiederverwendung, Provider-/Fokuswechsel, begrenzte
+Wiederholungen und das Freigeben ausschließlich der neuen eigenen ID.
+Fremde SmartX-Lockdateien werden weiterhin weder verändert noch entfernt.
+
+Die App fordert `ui.open('MAIN')` über die echte SDK-Schnittstelle an. Der
+Vordergrund gilt erst nach beobachteter Sichtbarkeit und Fokus als bestätigt;
+ein erfolgreicher Methodenaufruf allein genügt nicht. Der Release-Workflow
+extrahiert das tatsächlich gebaute SDK-freie Frontend und führt dessen
+SDK-UI-Smoke verpflichtend unter `en-GB` und `de-DE` aus. Nachgebildete
+HMI-/AudioManager-Antworten prüfen Aufruf, Reihenfolge und Bestätigung,
+belegen jedoch keinen tatsächlichen Fokuswechsel auf einer MGU.
+
+Native Audio-Bridge, Videotakt, Decoder, Controller und Engine bleiben auf dem
+0.14.0-Stand. Alle bestehenden PCM-/Vollbild-/Controller- und vollständigen
+Root-/Node-8-/Chromium-Paketprüfungen bleiben verpflichtend. Endgültige
+Testanzahlen und die Bindung an den Quellcommit folgen im Release-Bericht
+nach dem abschließenden Quellfreeze; hier werden keine vorläufigen Erfolge
+oder Fahrzeugnachweise behauptet.
+
+Der frühere feste Vier-Renderer-Schalter entfällt. `browser_identity_smoke.js`
+prüft auf einer eigenen Loopback-Seite tatsächliche HTTP-Header und Navigator-/
+Client-Hints-Werte in mehreren Tabs: konsistente echte Chromium-Version, Linux,
+Sprache und unveränderte Sandbox-/TLS-Prüfungen. Es wird keine Windows-Plattform
+erfunden und kein positiver Anbieter- oder CAPTCHA-Erfolg daraus abgeleitet.
+
+`chromium_persistence_smoke.js` prüft Cookie-Checkpoints vor einem harten
+Engine-Prozessgruppenabbruch: Einwilligung, geänderte HttpOnly-/SameSite-Flags
+bei unverändertem Wert und ein gültiges Secure-/HttpOnly-`__Host-`-Prüfcookie
+werden wiederhergestellt. Änderungen an Flags und Partition-Scope fließen in
+den Snapshot-Digest ein. Der lokale Loopback-Animationslauf zeigte 30,5 fps
+und 17,2 % Bandübertragung gegenüber Vollbildern. Der Test verwendet eine eigene
+Loopback-Seite, weil eine verwaltete Host-Policy `data:`-Navigation blockierte;
+die Policy wurde nicht gelockert. Diese lokalen Werte sind keine YouTube- oder
+MGU-Bildratenzusage und der Engine-Kill ist kein physischer Stromverlusttest.
+
+Beide Tests sind im Treiber `fullscreen_audio_package_smoke.py` zusätzlich zu
+den bisherigen drei Pakettests verpflichtend: fünf echte Node-8-/Engine-/
+Native-JPEG-Prüfungen vor Veröffentlichung. Die neue SDK-Suite prüft außerdem
+belegte Quelle, Fokusbestätigung/-verweigerung, Pause/Wiederaufnahme und
+Schließen; veraltete asynchrone Audioantworten dürfen keinen neuen Besitzer
+überschreiben. Endgültige Paketläufe und Testanzahlen folgen nach Quellfreeze.
+
+Öffentliche Netflix-/Disney-Seiten luden. Eine reservierte synthetische E-Mail
+kam mit alter und neuer UA weiter; der gemeldete allgemeine Netflix-Kontofehler
+wurde nicht reproduziert und wird nicht als behoben behauptet. `/login` ist der
+E-Mail-Einstieg; anfänglich versteckte Passwort-DOM-Felder beweisen keinen
+sichtbaren Passwortdialog. Geschützte Anbieterwiedergabe wurde nicht bestätigt.
+Das eigene Disney-ähnliche geschlossene Shadow-Player-Modell reproduzierte
+`audible=false` trotz laufender unmuted Wiedergabe. Die passive AX-Korrektur
+bestand echte Host-Chromium-/Native-JPEG-/PCM-Prüfungen mit Wiedergabe,
+Mute/Unmute, Lautstärke null/Wiederherstellung, Pause/Fortsetzen und Ende.
+Navigation und Tab-Schließen geben die Ausgabe frei; die Shadow Root bleibt
+geschlossen. Der Pakettreiber verlangt elf Audio-/Videostufen: sechs bisherige,
+vier geschlossene Wiedergabestufen und einen Flags-/Ende-/Cleanup-Nachweis.
+Die fünf Skriptprüfungen einschließlich Identität und Cookie-Hard-Kill bleiben
+pflichtig; endgültige gebaute Paketergebnisse folgen nach dem Quellfreeze.
+
+Die Oberfläche darf einen unbekannten Zwischenzustand höchstens vier Sekunden
+seit zuletzt bestätigter hörbarer Aktivität überbrücken und dabei nur eine
+bereits bestehende Route halten. Ein Ablauf-Timer verhindert unbegrenztes
+Halten; aus unbekanntem Zustand wird keine Route neu erworben. Zusätzliche
+Regressionen prüfen unerwartete IPC-Trennung: `blocked` löst Route und altes
+Bild, erneutes `ready` aktiviert das Nachladen der aktuellen URL/Startseite
+nur bei sichtbarer/fokussierter App. Das ist kein Anbieter-/CDM-Nachweis.
+
+Der bekannte Proxy-403 verhinderte zuvor Live-YouTube-Tests. Eine tatsächliche
+Google-Suche lieferte hier auch mit konsistenter UA HTTP429 und eine
+Netzwerkverkehr-/CAPTCHA-Seite. Es gab keine CAPTCHA-Interaktion. Google
+entscheidet darüber serverseitig; eine garantierte Abschaltung oder automatische
+Lösung wird nicht angeboten. Browser-Identität und gespeicherte Cookies belegen
+keine Serverfreigabe. Endgültige Ergebnisse und offene Fehler stehen im
+Release-Bericht.
+
+
 ## 0.14.0 — Videotakt und Vollbild
 
 Ein Vergleich mit derselben veröffentlichten Engine 0.1.0, Node 8.16.2,

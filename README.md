@@ -4,7 +4,7 @@ Ein experimenteller Browser für BMW MGU / iDrive 7: eine native, mit dem
 iDrive-Controller bedienbare Oberfläche und eine getrennte Chromium-Engine
 für echtes HTML, CSS und JavaScript.
 
-**Version 0.14.0 – experimentelle Store-Pakete für MGU / iDrive 7, x86_64.**
+**Version 0.15.0 – experimentelle Store-Pakete für MGU / iDrive 7, x86_64.**
 Oberfläche, native Runtime und eine private Chromium-Engine werden gemeinsam
 über einen Store-Katalog verteilt. Der eigene Code steht unter MIT.
 **Die BMW-Audioanbindung ist implementiert, aber mit diesem Browserstand noch
@@ -28,8 +28,8 @@ verknüpft die Pakete und ihre Abhängigkeiten:
 
 | Paket | Version | Inhalt |
 | --- | --- | --- |
-| Browser | 0.14.0 | Native Oberfläche, iDrive-Bedienung, Tabs, Einstellungen |
-| Browser Runtime | 0.14.0 | Backend, native IPC-/Bildmodule, begrenztes Profil-Dateisystem |
+| Browser | 0.15.0 | Native Oberfläche, iDrive-Bedienung, Tabs, Einstellungen |
+| Browser Runtime | 0.15.0 | Backend, native IPC-/Bildmodule, begrenztes Profil-Dateisystem |
 | Chromium Engine | 0.1.0 | Debian Chromium 156.0.8078.79 mit privaten Bibliotheken und Sandbox |
 
 MGU Deploy, Renderer und Internet uplink kommen aus der offiziellen Store-Quelle.
@@ -77,6 +77,57 @@ belegt keine Fehlerfreiheit. Die neue Prüfung verwendet eine echte sandboxed Ch
 Pop-ups, Video und Audio-Ausgabe in einen lokalen Testsink. Der genaue Umfang
 und die Grenzen stehen im [aktuellen Testbericht](docs/TESTING.md).
 
+## 0.15.0: CarLifeMedia, Vordergrund und verfügbare Ressourcen
+
+Der Backend-Dienst setzt keine eigenen RAM- und Taskobergrenzen mehr. CPU und
+best-effort-I/O erhalten höhere Priorität; CPU-Quote und feste CPU-Zuordnung
+werden nicht vorgegeben. Das private 384-MiB-Dateisystem begrenzt weiterhin
+Profile, Cache und temporäre Dateien und ist keine Prozess-RAM-Grenze.
+Physischer Speicher und die Grenzen des Betriebssystems bleiben maßgeblich;
+eine gemessene Beschleunigung auf jeder Headunit wird daraus nicht abgeleitet.
+
+Bei belegter Audioquelle darf der Browser jetzt gezielt **Quelle 287 /
+CarLifeMedia** übernehmen. Verbindungen dieser Quelle werden nach erneuter
+Identitätsprüfung getrennt; anschließend entsteht die eigene Verbindung zu
+Senke 1024. Andere Audioquellen und fremde SmartX-Lockdateien bleiben unberührt.
+Beim Freigeben wird ausschließlich die neue eigene Verbindung getrennt.
+
+Die App fordert ihren nativen Vordergrund über das SDK an und wartet auf die
+beobachtete Sichtbarkeit und den tatsächlichen Fokus. Eine bloße lokale
+Fokus-Markierung reicht nicht. Wiederholungen sind begrenzt; Fehler oder
+Fokusverlust stoppen die Anforderung. Details: [Fahrzeug-Audio](docs/AUDIO.md).
+
+**Browser und Browser Runtime gemeinsam auf 0.15.0 aktualisieren.** Engine bleibt
+**0.1.0**; Videotakt, Vollbild- und Controller-Verbesserungen aus 0.14.0 bleiben
+unverändert enthalten. Reale Lautsprecher und Firmware-Fokus sind weiterhin
+auf der Headunit zu prüfen.
+
+Chromium entscheidet jetzt auch ohne die frühere feste Vier-Renderer-Grenze
+über seine Prozesse. User-Agent und Client Hints melden konsistent die
+wirkliche Chromium-Version und Linux. Cookie-Checkpoints erkennen geänderte
+Flags und Partitionierung auch bei unverändertem Cookie-Wert; Einwilligung
+und ein eigenes Secure-/HttpOnly-/Host-Cookie überstanden den harten
+Engine-Abbruch im lokalen Test.
+
+Geschlossene Shadow-Player werden nun passiv über ihren tatsächlichen
+Medienzustand erkannt. Das eigene Disney-ähnliche Modell lieferte sichtbares
+Video und nichtstilles PCM; Mute, Lautstärke null, Pause, Ende, Navigation und
+Tab-Schließen geben die Route wieder frei. Ein unbekannter Zwischenzustand
+kann nur eine bereits bestehende Route höchstens vier Sekunden halten und
+keine neue Route erwerben. Bei Backend-Trennung werden Tonroute und altes
+Bild verworfen; nach erneuter Bereitschaft lädt die aktive App ihre URL oder
+Startseite neu.
+
+Öffentliche Netflix-/Disney-Seiten waren erreichbar. Eine reservierte
+Beispiel-E-Mail kam mit alter und neuer Kennung weiter; der gemeldete allgemeine
+Netflix-Kontofehler wurde dadurch weder reproduziert noch als behoben bestätigt.
+`/login` ist der Anmeldeeinstieg, zunächst mit E-Mail; ein verstecktes
+Passwortfeld im DOM ist kein direkter Passwortdialog. Google entscheidet
+serverseitig über CAPTCHA-Anforderungen. Eine echte Suche lieferte hier auch
+mit konsistenter UA HTTP 429 und eine Netzwerkverkehr-/CAPTCHA-Seite; es fand
+keine CAPTCHA-Interaktion statt. Der Browser kann diese Anforderung nicht
+garantiert abschalten und löst sie nicht automatisch. Details: [Tests](docs/TESTING.md).
+
 ## 0.14.0: Videotakt, Vollbild und weniger Renderarbeit
 
 Die Audio-Bridge verarbeitet vollständige PCM-Blöcke im richtigen Echtzeittakt.
@@ -99,7 +150,7 @@ Verbraucherdruck lieferte weiterhin 89 Bilder bei 389 → 252 ms Node-CPU-Zeit.
 Das sind lokale Vergleichswerte, keine Bildratenzusage für jede Website oder MGU.
 Details und Grenzen stehen unter [Tests](docs/TESTING.md).
 
-**Browser und Browser Runtime gemeinsam auf 0.14.0 aktualisieren.** Engine bleibt
+**Browser und Browser Runtime gemeinsam auf 0.15.0 aktualisieren.** Engine bleibt
 **0.1.0**. Die Start-, Migrations-, iDrive- und Handy-Funktionen aus 0.13 bleiben
 enthalten. Live-YouTube konnte hier wegen eines Proxy-403 nicht geprüft werden;
 Fahrzeugton und geschützte Anbieterwiedergabe bleiben gesondert zu testen.
@@ -112,7 +163,7 @@ Backend-Start mit Code 125, bevor die Oberfläche eine Verbindung aufbauen konnt
 Ab 0.13.3 verwenden Mount und Prüfung denselben Grenzwert. Die Isolation und
 Speichergrenze bleiben erhalten.
 
-Die Korrektur bleibt in **0.14.0** enthalten; Chromium Engine bleibt
+Die Korrektur bleibt in **0.15.0** enthalten; Chromium Engine bleibt
 **0.1.0**. Ein bereits ausgefallener Dienst wird beim Update erneut gestartet,
 wenn seine Registrierung für diesen Boot nachgewiesen ist. Andernfalls fordert
 der Store den nötigen Headunit-Neustart an. Die Diagnose meldet „läuft“ erst
@@ -122,7 +173,8 @@ nach einer echten Bereitschaftsnachricht des Backends.
 
 - Konkrete BMW-Audioanbindung über AudioManager und SmartX: Ausgabe erst nach
   bestätigter Verbindung, Freigabe bei Pause/Fokusverlust/Schließen. Bereits
-  benutzte CarLife-Kanäle werden nicht übernommen.
+  benutzte CarLife-Kanäle wurden damals nicht übernommen; ab 0.15.0 gilt die
+  oben beschriebene gezielte Übernahme von Quelle 287.
 - Eigener unprivilegierter Audio-Prozess verbindet Chromiums private ALSA mit
   der vorhandenen Fahrzeug-ALSA. Echte PCM-Daten, Puffergrenzen, Wiederaufnahme
   ohne alten Ton und ein stummer Fehlerfall sind lokal geprüft.
@@ -263,8 +315,8 @@ Das ist kein Nachweis der Unterstützung jedes Abonnementdienstes.
 | Eigenes HTML-Video | Wiedergabe, Vollbild und Controller-Aktionen im Emulator geprüft |
 | Öffentlicher Widevine-Teststream | Verschlüsselte Wiedergabe in isolierter lokaler Chrome-Sitzung bestätigt |
 | YouTube | Direktzugriff vorhanden; umfassender Wiedergabe- und Audiotest offen |
-| Netflix | Anmeldeseite erreichbar; allgemeiner Fehler nach E-Mail-Eingabe, noch vor dem Passwortschritt |
-| Disney+ | Anmeldung bleibt nach vollständigem App-/Engine-Neustart erhalten. Bild/Vollbild funktionieren. Zuverlässige Auswahl der eigenen Player-Buttons per iDrive ist noch nicht bestätigt; der letzte sichtbare Test blieb auf „Zurück“. |
+| Netflix | Öffentliche E-Mail-Anmeldung erreichbar; synthetischer Test kommt mit alter und neuer UA weiter. Gemeldeter allgemeiner Kontofehler nicht reproduziert oder als behoben bestätigt; kein direkter Passwortdialog. |
+| Disney+ | Öffentliche Seite erreichbar. Frühere Laptop-Proben mit Anmeldung/Bild/Vollbild sind historisch; aktuelle Anbieterwiedergabe auf der MGU ist nicht qualifiziert. Die Audioerkennung des eigenen geschlossenen Shadow-Player-Modells ist lokal korrigiert und mit PCM/Mute/Pause/Ende geprüft; kein Anbieter-Wiedergabenachweis. |
 | Prime Video | Direktzugriff vorhanden; angemeldete Wiedergabe noch nicht geprüft |
 | Paramount+ | Direktzugriff vorhanden; angemeldete Wiedergabe noch nicht geprüft |
 | Fahrzeuglautsprecher | AudioManager-/SmartX-Anbindung implementiert; hörbarer Test dieses Stands auf der MGU offen |
@@ -289,12 +341,14 @@ Pipes, keinen öffentlich erreichbaren Debugging-Port. TLS-Prüfungen bleiben ak
 Ein nativer JPEG-Decoder überträgt gerenderte Frames an den SDK-Renderer.
 
 Fokusverlust beziehungsweise ein ausgefallener App-Heartbeat beendet die Sitzung.
-Aktive Chromium-Profile sind temporär; seit 0.9.0 können sie beim sauberen
-Beenden **verschlüsselt gesichert und beim nächsten Start wiederhergestellt**
-werden. „Angemeldet bleiben“ und „HTTP-Cache behalten“ sind getrennte,
-anfangs deaktivierte Einstellungen. Wiederhergestellt werden unter anderem
-Cookies einschließlich Session-Cookies, Local Storage und sonstiger Website-Speicher.
-Anbieter können eine Sitzung weiterhin ablaufen lassen oder erneut prüfen.
+Aktive Chromium-Profile sind temporär. „Angemeldet bleiben“ ist standardmäßig
+aktiv; der optionale HTTP-Cache bleibt getrennt und standardmäßig aus.
+Website-Daten werden mit einem lokalen geschützten Geräteschlüssel verschlüsselt
+und beim nächsten Start wiederhergestellt. Cookie-Checkpoints laufen bereits
+während der Sitzung und erhalten auch Session-Cookies samt Flags und Scope.
+Das übrige Profil einschließlich Local Storage wird beim sauberen Beenden
+gesichert. Anbieter können eine Sitzung weiterhin ablaufen lassen oder erneut
+prüfen; gespeicherte Cookies garantieren keine Freigabe einer Serverprüfung.
 
 Unter **Datenschutz & Logins** lassen sich Website-Daten mit Abmeldung,
 HTTP-Cache und App-Verlauf getrennt löschen; die Verlaufsaufzeichnung ist
@@ -309,16 +363,17 @@ Formulare und Frames benötigen weitere Arbeit.
 
 **Laptop:** Windows DPAPI schützt den lokalen Speicherschlüssel; Sitzungsarchiv
 und Passworttresor werden mit AES-256-GCM verschlüsselt.
-**MGU-Backend:** derselbe Speicher hat einen plattformunabhängigen
+**MGU-Backend:** Website-/Cookie-Speicher nutzt einen lokalen, durch Dateirechte
+geschützten Geräteschlüssel. Der getrennte Passworttresor hat zusätzlich einen
 Masterpasswort-Modus mit PBKDF2-SHA256, zufälligem Salt und 600.000 Iterationen.
-Das Masterpasswort wird maskiert eingerichtet und nach Backend-Neustart erneut
-zum Entsperren benötigt. Dieser Code ist für die Headunit vorgesehen, aber
-noch nicht auf deren realer Laufzeit qualifiziert.
+Das Masterpasswort wird maskiert eingerichtet und nach Backend-Neustart zum
+Entsperren des Tresors benötigt. Die reale MGU-Laufzeit bleibt gesondert zu prüfen.
 
 Die Sicherung ist auf 64 MiB Profildaten und 16 MiB je Datei begrenzt. Eigene
 Chromium-Passwort- und Verlaufsdatenbanken werden nicht archiviert. Ein harter
-Stromverlust oder Absturz kann Änderungen seit dem letzten sauberen Beenden
-verlieren; eine konsistente periodische Sicherung ist noch offen.
+Stromverlust oder Absturz kann Änderungen seit dem letzten Cookie-Checkpoint
+beziehungsweise der letzten Profilsicherung verlieren. Der Engine-Hard-Kill-Test
+ist keine Garantie für jeden tatsächlichen Stromverlust.
 Details: [Architektur](docs/ARCHITECTURE.md) und [Sicherheit](SECURITY.md).
 
 ## Entwicklung und Mitarbeit

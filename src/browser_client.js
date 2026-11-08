@@ -8,9 +8,17 @@ class BrowserClient extends EventEmitter {
         this.gate.onBlock=reason=>{this.cancelController();this.generation++;this.child=null;this.emit('blocked',reason);this.state();};
     }
     connect(){
-        const socket=net.createConnection(this.socketPath);
-        socket.on('error',e=>{this.emit('diagnostic','Browser-Verbindung: '+e.code);});socket.on('connect',()=>{this.cancelController();this.surface=null;this.channel=new Channel(socket);this.channel.on('json',m=>this.receive(m));this.channel.on('frame',b=>this.frame(b));this.state();});
-        socket.on('close',()=>{this.cancelController();this.channel=null;this.child=null;this.pending.forEach(p=>{clearTimeout(p.timer);p.reject(new Error('Browser-Dienst getrennt'));});this.pending.clear();if(!this.closed)this.retry=setTimeout(()=>this.connect(),2000);});
+        const socket=net.createConnection(this.socketPath);let connected=false;
+        socket.on('error',e=>{this.emit('diagnostic','Browser-Verbindung: '+e.code);});socket.on('connect',()=>{connected=true;this.cancelController();this.surface=null;this.channel=new Channel(socket);this.channel.on('json',m=>this.receive(m));this.channel.on('frame',b=>this.frame(b));this.state();});
+        socket.once('close',()=>{
+            this.cancelController();this.channel=null;this.child=null;this.surface=null;this.controllerFullscreen=undefined;this.scrollRest=0;
+            this.pending.forEach(p=>{clearTimeout(p.timer);p.reject(new Error('Browser-Dienst getrennt'));});this.pending.clear();
+            // An established backend disappearing must clear its picture and
+            // release the frontend's owned vehicle audio route immediately.
+            // Initial connection retries and intentional shutdown stay quiet.
+            if(connected&&!this.closed)this.emit('blocked','Browser-Dienst getrennt');
+            if(!this.closed)this.retry=setTimeout(()=>this.connect(),2000);
+        });
     }
     state(){
         const allowed=this.gate.check().allowed;

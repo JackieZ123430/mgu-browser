@@ -1,37 +1,65 @@
-# Fahrzeug-Audio ab 0.12.0
+# Fahrzeug-Audio in 0.15.0
 
 Der Browser besitzt eine konkrete Anbindung an **SmartX/ALSA und den BMW AudioManager**
 für ID7. Die öffentlich dokumentierte Kombination ist Quelle `CarLifeMedia` (287),
 Lautsprechersenke 1024 und PCM `plug:smartx:CarLifeMedia_CF_48_STEREO`.
 Das ist eine auf anderen ID7-Fahrzeugen erprobte Schnittstelle, keine Bestätigung
-für jede Firmware oder die eigene Headunit. Der Browserstand 0.12.0 wurde hier
+für jede Firmware oder die eigene Headunit. Die Audio-Pipeline wurde hier
 mit echten Chromium-/ALSA-Prozessen und simuliertem AudioManager geprüft;
 ein hörbarer Fahrzeugtest steht aus.
 
 ## Wiedergabe und Audiofokus
 
 Bei hörbarer HTML-Audio-/Videowiedergabe oder laufendem WebAudio fordert die
-sichtbare Browser-App den Kanal an. Hintergrundtabs werden berücksichtigt.
-Die Firmware muss die erwartete Quelle als derzeit nicht verfügbar und ohne
-bestehende Verbindung melden. Eine von CarLife, Moonride oder einer anderen
-App benutzte Quelle wird nicht übernommen. Fehlende oder unbekannte
-AudioManager-Antworten lassen die Anforderung scheitern.
+sichtbare und fokussierte Browser-App den Kanal an. Hintergrundtabs werden
+berücksichtigt. Ab 0.15.0 darf der Browser die ausdrücklich angeforderte
+**Quelle 287 / CarLifeMedia übernehmen**: vorhandene Verbindungen genau dieser
+Quelle können unabhängig von ihrer Senke getrennt werden, anschließend wird
+die eigene Verbindung von 287 zur Lautsprechersenke 1024 aufgebaut.
+Verbindungen anderer Quellen werden nicht getrennt.
+
+Vor der Übernahme fordert die App über den echten SDK-Aufruf `ui.open('MAIN')`
+ihren nativen Vordergrund an. Der Aufruf allein gilt nicht als Fokusnachweis:
+Sichtbarkeit und Fokus müssen anschließend tatsächlich vom SDK gemeldet werden.
+Vor jedem Trennen werden Verbindungs-ID, Quelle und Senke erneut geprüft.
+Provider-Wechsel, wiederverwendete IDs, Fokusverlust und unbekannte Antworten
+brechen den Vorgang ab. Wiederholungen und Wartezeiten sind begrenzt; es gibt
+keine unendliche Schleife gegen einen anderen Audioclient.
 
 Die App merkt sich den ursprünglichen Verfügbarkeitswert und ausschließlich
 die selbst erzeugte Verbindungs-ID. Erst nach `CS_CONNECTED` öffnet der
 Ausgabeprozess das PCM-Gerät. Bei Pause/Ende, Fokusverlust und normalem
 Schließen endet die Ausgabe; nur die eigene Verbindung wird getrennt. Die
-ursprüngliche Verfügbarkeit wird wiederhergestellt, soweit kein anderer
-Teilnehmer die Quelle inzwischen benutzt. Provider-Neustarts und wiederverwendete
-IDs dürfen keine fremde Verbindung trennen. Nach einer Unterbrechung wird kein
-wiederholtes Verbinden gegen Telefon-/Systemfokus erzwungen; pausieren und
-neu starten erlaubt eine neue Anforderung.
+ursprüngliche Verfügbarkeit wird wiederhergestellt, soweit der Browser sie
+geändert hat und kein anderer Teilnehmer die Quelle inzwischen benutzt.
+Verdrängte frühere CarLifeMedia-Verbindungen werden nicht automatisch neu
+aufgebaut. Nach der Übernahme besitzt der Browser ausschließlich seine neue
+Verbindungs-ID. Provider-Neustarts und wiederverwendete IDs dürfen weder beim
+Aufbau noch beim Freigeben eine Verbindung einer anderen Quelle treffen.
+Nach einer Unterbrechung wird kein unbegrenztes Wiederverbinden gegen
+Systemfokus erzwungen; pausieren und neu starten erlaubt eine neue Anforderung.
 
 Die App besitzt einen begrenzten asynchronen Shutdown-Hook mit höchstens
 1,5 Sekunden Cleanup-Zeit. Ein Prozessabsturz, harte Abschaltung oder eine
 nicht antwortende Fahrzeug-API kann nicht mit einem normalen Schließen
-gleichgesetzt werden. Es gibt kein pauschales Aufräumen aller Verbindungen
-von Quelle 287 und keine Wiederherstellungsgarantie nach Stromverlust.
+gleichgesetzt werden. Das Schließen räumt ausschließlich die neue eigene
+Verbindung auf, nicht pauschal alle Verbindungen von Quelle 287. Eine
+Wiederherstellungsgarantie nach Stromverlust gibt es nicht.
+
+Die passive AX-Zustandserkennung erreicht auch Videos in geschlossenen
+Shadow-Playern, ohne deren Shadow Root zu öffnen. Das eigene Disney-ähnliche
+Modell ist mit echten nichtschwarzen Bildern und PCM geprüft: Wiedergabe,
+Mute/Unmute, Lautstärke null/Wiederherstellung, Pause/Fortsetzen und Ende
+werden getrennt erkannt. Navigation und Tab-Schließen geben die Route frei.
+Diese Zustandsprüfung bestätigt weder DRM-Freigabe noch Anbieterwiedergabe.
+
+Ist die Erkennung kurzzeitig unbekannt, darf die App ausschließlich eine schon
+bestehende Route für höchstens vier Sekunden seit der letzten bestätigten
+hörbaren Aktivität halten. Ein Ablauf-Timer beendet diese Schonfrist; unbekannter
+Zustand erwirbt keine neue Route. Bestätigte Pause/Mute/Ende, Fokusverlust und
+Backend-Trennung geben sofort frei. Bei unerwarteter Backend-Trennung löscht
+die Oberfläche außerdem das alte Bild; neue Backend-Bereitschaft lädt die
+aktuelle URL beziehungsweise Startseite nur bei weiterhin aktiver App neu.
 
 ## Getrennte Audio-Laufzeiten
 
@@ -64,12 +92,14 @@ bleibt. Server-seitiger Shared Memory und Benachrichtigungs-FIFOs bleiben unver�
 
 ## Live-Test über den Store
 
-Browser und Browser Runtime gemeinsam auf 0.12.0 aktualisieren; Engine bleibt
+Browser und Browser Runtime gemeinsam auf 0.15.0 aktualisieren; Engine bleibt
 0.1.0. Browser neu öffnen, eine Seite öffnen und unter
 **Einstellungen → Medien & Streaming → Testton (1 s)** testen. Der Test startet
 nur bewusst, leise und mit kurzer Ein-/Ausblendung. Anschließend ein normales
 ungeschütztes Video mit Ton abspielen, pausieren, zwischen Tabs wechseln und
-den Browser schließen. Bei belegter Quelle erscheint eine entsprechende Meldung.
+den Browser schließen. Eine belegte CarLifeMedia-Quelle soll jetzt gezielt
+übernommen werden. Scheitern der verifizierte Vordergrund, die AudioManager-
+Antworten oder der begrenzte Verbindungsaufbau, zeigt die App den Fehler.
 
 „Fahrzeug-Audiokanal verbunden“ bestätigt die AudioManager-Verbindung, nicht
 hörbare Lautsprecher. Eine erfolgreiche Tonerzeugung allein reicht ebenfalls
@@ -84,8 +114,12 @@ konfigurierte `MGU_BROWSER_ALSA_DEVICE`-Ausgabe für Entwicklung erhalten.
   private ALSA → FIFO → nativer Prozess → System-ALSA-Dateisink; nichtleere
   Audiosamples, begrenzte Ausgabe, verworfene Samples ohne alten Ton bei
   Wiederverbindung und Prozessbereinigung.
-- AudioManager-Fixtures prüfen Kanalbesitz, belegte Quellen, verspätete
-  Antworten, Provider-Neustart, Unterbrechungen und geordnetes Freigeben.
+- AudioManager-Fixtures prüfen die Übernahme ausschließlich von Quelle 287,
+  Verbindungen zu verschiedenen Senken, unveränderte andere Quellen,
+  wiederverwendete IDs, begrenzte Wiederholungen und Freigabe nur der neuen
+  eigenen Verbindung. Die paketierte SDK-Oberfläche wird in Deutsch und
+  Englisch auf tatsächliche Vordergrundanforderung und beobachteten Fokus
+  geprüft. Nachgebildete HMI-/AudioManager-Antworten ersetzen keinen Fahrzeugtest.
 - [Moonride, a834a14](https://github.com/JustAnotherPU/moonride/blob/a834a14/apps/jap_moonride/main.js)
   dokumentiert die ID7-Quelle und die AudioManager-Operationen.
 - [Intel AVB-AudioModules](https://github.com/intel/AVB-AudioModules)
