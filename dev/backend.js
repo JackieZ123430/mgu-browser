@@ -19,11 +19,12 @@ const remote=new RemoteControl({browser,port:Number(process.env.MGU_REMOTE_PORT)
 remote.on('remote',value=>{if(owner)owner.json({event:'remote',value});});
 const frameSender=require('./frame_delta').sender({owner:()=>owner,allowed:()=>gate.check().allowed,generation:()=>generation});
 browser.on('frame',frame=>{if(frameSender.send(frame)){frames++;if(frames===1||frames%20===0)status();}});
-for(const event of ['started','blocked','fault','version','navigation','navigationState','loading','input','tabs','tabSelected','media'])browser.on(event,value=>{
+for(const event of ['started','blocked','fault','version','navigation','navigationState','loading','input','tabs','tabSelected','media','dialog','files','fileChooser','permission','privacy','find','findOpen','auth','viewport'])browser.on(event,value=>{
+    if(['navigation','tabSelected','blocked'].includes(event))frameSender.reset();
     if(event==='started')phase='running';if(event==='blocked')phase='idle';
     if(event==='navigation')lastURL=value;
     if(event==='fault')phase='fault';
-    if(owner)owner.json({event,value:value&&value.message||value});status();
+    if(owner)owner.json({event,value:event==='fault'?String(value&&value.message||value):value});status();
 });
 browser.on('diagnostic',text=>{if(/FATAL|sandbox|symbol lookup/i.test(text))console.error(text.slice(0,1000));});
 browser.on('performance',value=>fs.writeFileSync(path.join(base,'render-performance.json'),JSON.stringify(value)));
@@ -44,13 +45,13 @@ const server=net.createServer(socket=>{
         try{
             let result;
             switch(m.op){
-                case 'start':result=await browser.start(m.url);break;
+                case 'start':result=await browser.start(m.url,m.options);break;
                 case 'navigate':result=await browser.navigate(m.url);break;
                 case 'back':result=await browser.back();break;
                 case 'forward':result=await browser.forward();break;
                 case 'reload':result=await browser.reload();break;
                 case 'stopLoading':result=await browser.stopLoading();break;
-                case 'resize':result=await browser.resize(m.width,m.height);break;
+                case 'resize':result=await browser.resize(m.width,m.height,m.zoom);break;
                 case 'newTab':result=await browser.newTab(m.url);break;
                 case 'selectTab':result=await browser.selectTab(m.tabId);break;
                 case 'closeTab':result=await browser.closeTab(m.tabId);break;
@@ -76,10 +77,26 @@ const server=net.createServer(socket=>{
                 case 'wifiStatus':result={supported:false,mode:'laptop',connected:null,message:'Im Emulator wird die Internetverbindung des Laptops genutzt.'};break;
                 case 'wifiScan':result={supported:false,networks:[],message:'Die WLAN-Antenne der Headunit ist im Emulator nicht verfügbar.'};break;
                 case 'wifiConnect':case 'wifiReconnect':throw new Error('Hotspot-Verbindung nur auf der Headunit verfuegbar.');
-                case 'tap':result=await browser.tap(m.x,m.y);break;
-                case 'key':result=await browser.key(String(m.key).slice(0,30),m.shift===true);break;
-                case 'text':result=await browser.text(m.text);break;
-                case 'scroll':result=await browser.scroll(m.delta);break;
+                case 'tap':result=await browser.tap(m.x,m.y,m.options);break;
+                case 'hover':result=await browser.hover(m.x,m.y,m.modifiers);break;
+                case 'drag':result=await browser.drag(m.points,m.options);break;
+                case 'key':result=await browser.key(String(m.key).slice(0,30),m.modifiers||m.shift===true);break;
+                case 'text':result=await browser.text(m.text,m.options);break;
+                case 'fillStructured':result=await browser.fillStructured(m.value);break;
+                case 'scroll':result=await browser.scroll(m.delta,m.options);break;
+                case 'dialogState':result=browser.dialogState();break;
+                case 'authStatus':result=browser.authStatus();break;
+                case 'authReply':try{result=await browser.authReply(m.authId,{username:m.username,password:m.password,cancel:m.cancel});}finally{m.password=null;}break;
+                case 'dialogReply':result=await browser.dialogReply(m.dialogId,m.accept,m.promptText);break;
+                case 'files':result=browser.fileStatus();break;
+                case 'cancelDownload':result=await browser.cancelDownload(m.downloadId);break;
+                case 'deleteDownload':result=await browser.deleteDownload(m.downloadId);break;
+                case 'cancelFileChooser':result=await browser.cancelFileChooser(m.chooserId);break;
+                case 'permissionStatus':result=await browser.permissionStatus();break;
+                case 'permissionSet':result=await browser.permissionSet(m.name,m.setting,m.expectedOrigin);break;
+                case 'permissionAnswer':result=await browser.permissionAnswer(m.permissionId,m.setting);break;
+                case 'findText':result=await browser.findText(m.query,m.options);break;
+                case 'clearFind':result=browser.clearFind();break;
                 case 'network':result={https:true,laptop:true};break;
                 case 'remoteStart':result=await remote.start();break;
                 case 'remoteStop':result=remote.stop('user');break;

@@ -7,6 +7,7 @@ const {BrowserLocale}=require('./browser_locale');
 const VehicleAudio=require('./browser_vehicle_audio');
 const shutdown=require('./browser_shutdown');
 const QR=require('./qr_code');
+const BrowserChrome=require('./browser_chrome');
 const W=1600,H=520,IMAGE=700,QR_IMAGE=701,BAR=58,TABS=42,SIDE=600;
 const C={bg:'#11151b',bar:'#181d25',field:'#252d38',panel:'#1b222c',line:'#343e4c',text:'#f4f6f9',muted:'#a2afc0',accent:'#78bfff'};
 const displayURL=value=>String(value||'').replace(/^https:\/\//,'').split(/[?#]/)[0];
@@ -15,15 +16,16 @@ mgu.run({async start(ctx){
     installLayout(ctx.display);
     let frame=null,page=null,currentURL='',title='',webMode=false,landing=true,panel=null,keyboard=null,draft='',replaceDraft=false;
     let keyMode='abc',upper=false,starting=false,loading=false,canBack=false,canForward=false,serviceReady=false,pendingLaunch=true;
-    let closing=false,wasVisible=false,reading=false,lastAction=Date.now(),toast='',toastUntil=0,resized='',listTab='frequent',listOffset=0;
-    let editable=false,password=false,tipLabels={};
+    let closing=false,wasVisible=false,reading=false,lastAction=Date.now(),toast='',toastUntil=0,resized='',resizeRetry=0,listTab='frequent',listOffset=0;
+    let editable=false,password=false,inputType='',multiline=false,tipLabels={};
+    let findBar=false,findState={active:false,query:'',found:false};
     let tabs=[],activeTab='',wifiState={},wifiSSID='',wifiPassword='',wifiBusy=false,wifiInternet=null,wifiPoll=0;
     let media={fullscreen:false},mediaIndex=1,mediaUntil=0;
     let mediaCaps=null,mediaBusy=false,audioBusy=false;
     let vehicleAudioStatus={reason:'idle'},audioWanted=false,audioSync=null,audioNote='',audioRetry=0,audioKnownUntil=0,audioUnknownTimer=null;
     let wifiNetworks=[],wifiScanning=false,wifiScanError='',wifiOffset=0;
     let remoteState=null,remoteBusy=false,remoteQR='',remotePoll=0;
-    let privacyState=null,privacyBusy=false,logins=[],loginOffset=0,privacyConfirmation=null,vaultSetup='';
+    let privacyState=null,privacyBusy=false,logins=[],loginOffset=0,privacyConfirmation=null,vaultSetup='',storageIssue='';
     const videoActions=['back','toggle','forward','mute','exit'];
     const browser=new Browser({gate});
     const locale=new BrowserLocale(ctx.app,language=>{if(serviceReady&&gate.check().allowed)safe(()=>browser.setLocale(language));});
@@ -42,6 +44,16 @@ mgu.run({async start(ctx){
     const note=message=>{toast=message;toastUntil=Date.now()+3300;};
     store.onError=note;
     const safe=task=>Promise.resolve().then(typeof task==='function'?task:()=>task).catch(e=>{note(e.message);log.warn(e.message);});
+    let promptId='',keyboardAuthId='';
+    const chrome=new BrowserChrome({browser,button,text:ascii,close:()=>{panel='settings';},openRemote:()=>openRemote(false),
+        editPrompt:value=>{keyboard='browser-prompt';draft=value;replaceDraft=true;keyMode='abc';upper=false;webMode=false;activity();if(ctx.display)ctx.display.focusKey='tgt:key-0-0';},
+        editAuth:(id,field,value)=>{keyboardAuthId=id;keyboard='browser-auth-'+field;draft=value;replaceDraft=true;keyMode='abc';upper=false;webMode=false;activity();if(ctx.display)ctx.display.focusKey='tgt:key-0-0';},
+        changed:()=>{
+            const next=chrome.dialog&&chrome.dialog.id||chrome.auth&&chrome.auth.id||chrome.permission()&&chrome.permission().id||chrome.filesState.chooser&&chrome.filesState.chooser.id||'';
+            if(next!==promptId){promptId=next;browser.cancelController();webMode=false;reading=false;activity();if(String(keyboard).indexOf('browser-')===0){keyboard=null;draft='';keyboardAuthId='';}if(ctx.display&&next)ctx.display.focusKey='tgt:'+(chrome.dialog?'browser-dialog-accept':chrome.auth?'browser-auth-username':chrome.permission()?'browser-permission-deny':'browser-chooser-phone');}
+        }
+    });
+    const nativePrompt=()=>chrome.modal()&&panel!=='remote';
     const vehicleAudio=new VehicleAudio({signals:ctx.signals,visible:()=>gate.check().allowed,
         requestFocus:async()=>{
             const wanted=()=>audioWanted&&!closing&&ui.isVisible('MAIN');
@@ -113,10 +125,10 @@ mgu.run({async start(ctx){
         const stop=()=>browser.stop('Browser beendet');
         return syncVehicleAudio(false).then(stop,stop);
     });
-    async function navigate(value){
-        const url=inputURL(value);if(!url){note('Bitte eine gueltige HTTPS-Adresse eingeben');return;}
+    async function navigate(value,launchOptions){
+        const url=inputURL(value);if(!url){note('Bitte eine gueltige Webadresse eingeben');return;}
         if(starting)return;starting=true;loading=true;landing=false;keyboard=null;panel=null;reading=false;webMode=false;currentURL=url;activity();
-        try{await browser.setLocale(locale.language);await(browser.child?browser.navigate(url):browser.start(url));}
+        try{await browser.setLocale(locale.language);await browser.request('contentBlocking',{enabled:store.data.blockAds===true});await(browser.child?browser.navigate(url):browser.start(url,launchOptions));}
         catch(e){loading=false;note(e.message);if(!frame)landing=true;log.warn(e.message);}
         finally{starting=false;}
     }
@@ -129,23 +141,28 @@ mgu.run({async start(ctx){
     function openText(){
         if(!browser.child||!editable){note('Zuerst ein Textfeld auf der Webseite auswaehlen');return;}
         browser.cancelController();
-        keyboard='text';panel=null;keyMode='abc';webMode=false;reading=false;activity();
+        const structured=['date','month','week','time','datetime-local'].includes(inputType);
+        keyboard=structured?'structured':'text';if(structured){draft='';replaceDraft=false;}panel=null;keyMode=structured?'123':'abc';webMode=false;reading=false;activity();
         if(ctx.display)ctx.display.focusKey='tgt:key-0-0';
     }
-    function dismissKeyboard(){browser.cancelController();if(keyboard==='wifi-password'||String(keyboard).indexOf('vault-')===0){draft='';vaultSetup='';}keyboard=null;replaceDraft=false;webMode=false;if(ctx.display)ctx.display.focusKey='tgt:urlbar';activity();}
+    function dismissKeyboard(){browser.cancelController();if(keyboard==='wifi-password'||String(keyboard).indexOf('vault-')===0||String(keyboard).indexOf('browser-auth-')===0){draft='';vaultSetup='';keyboardAuthId='';}keyboard=null;replaceDraft=false;webMode=false;if(ctx.display)ctx.display.focusKey='tgt:urlbar';activity();}
     async function type(value){
         activity();if(keyboard==='text')return browser.text(value);
         if(replaceDraft){draft='';replaceDraft=false;}draft=(draft+value).slice(0,2048);
     }
     async function finishKeyboard(){
+        if(keyboard==='browser-auth-username'||keyboard==='browser-auth-password'){chrome.authValue(keyboardAuthId,keyboard.slice('browser-auth-'.length),draft);draft='';keyboard=null;keyboardAuthId='';return;}
+        if(keyboard==='browser-find'){const value=draft;await browser.request('findText',{query:value,options:{caseSensitive:!!findState.caseSensitive}});keyboard=null;draft='';findBar=true;if(ctx.display)ctx.display.focusKey='tgt:find-next';return;}
+        if(keyboard==='browser-prompt'){chrome.promptValue(draft);draft='';keyboard=null;return;}
+        if(keyboard==='structured'){await browser.fillStructured(draft);draft='';dismissKeyboard();return;}
         if(String(keyboard).indexOf('vault-')===0){
             if(draft.length<12){note('Masterpasswort benötigt mindestens 12 Zeichen');return;}
             if(keyboard==='vault-create'){vaultSetup=draft;draft='';keyboard='vault-confirm';return;}
             if(keyboard==='vault-confirm'&&draft!==vaultSetup){draft='';note('Masterpasswörter stimmen nicht überein');return;}
             const secret=draft;draft='';vaultSetup='';keyboard=null;privacyBusy=true;
-            try{privacyState=await browser.request('vaultUnlock',{password:secret});note('Geschützter Speicher entsperrt');}finally{privacyBusy=false;}return;
+            try{setPrivacyState(await browser.request('vaultUnlock',{password:secret}));note('Geschützter Speicher entsperrt');}finally{privacyBusy=false;}return;
         }
-        if(keyboard==='text'){dismissKeyboard();return browser.key('Enter');}
+        if(keyboard==='text'){dismissKeyboard();return;}
         if(keyboard==='wifi-ssid'||keyboard==='wifi-password'){
             if(keyboard==='wifi-ssid')wifiSSID=draft;else wifiPassword=draft;
             draft='';keyboard=null;activity();return;
@@ -169,8 +186,8 @@ mgu.run({async start(ctx){
         if(!pendingLaunch||!serviceReady||!gate.check().allowed||closing)return;
         pendingLaunch=false;if(browser.child)return;
         const resume=currentURL||store.data.homepage;
-        if(resume)safe(()=>navigate(resume));
-        else {landing=true;webMode=false;panel=null;safe(async()=>{await browser.setLocale(locale.language);await browser.start('');});}
+        if(resume)safe(()=>navigate(resume,{restore:true}));
+        else {landing=true;webMode=false;panel=null;safe(async()=>{await browser.setLocale(locale.language);await browser.request('contentBlocking',{enabled:store.data.blockAds===true});await browser.start('',{restore:true});});}
     }
     const visible=()=>{
         const v=ui.isVisible('MAIN')&&(!ui.hasFocus||ui.hasFocus('MAIN'));gate.setVisible(v);
@@ -180,7 +197,7 @@ mgu.run({async start(ctx){
     ui.onVisible(visible);if(ui.onFocus)ui.onFocus(visible);visible();setInterval(visible,100);
     browser.on('ready',()=>{serviceReady=true;resized='';if(!browser.child){pendingLaunch=true;if(!frame)landing=true;}launch();});
     browser.on('frame',f=>{frame=f;setImage(IMAGE,f.width,f.height,f.rgba);nativeBridge.markDirty(IMAGE,f.dirty);});
-    browser.on('started',()=>{landing=!currentURL;resized='';activity();if(store.data.blockAds===false)safe(()=>browser.request('contentBlocking',{enabled:false}));});
+    browser.on('started',()=>{landing=!currentURL;resized='';activity();safe(()=>browser.request('contentBlocking',{enabled:store.data.blockAds===true}));safe(async()=>setPrivacyState(await browser.request('privacyStatus')));});
     browser.on('remote',v=>{
         if(!v)return;
         if(v.event==='connected'){if(remoteState)remoteState.phoneConnected=true;note('Handy verbunden');if(panel==='remote'){panel=null;landing=landing&&!currentURL;}}
@@ -194,7 +211,7 @@ mgu.run({async start(ctx){
         keyboard=null;draft='';panel=null;reading=false;webMode=false;activity();
         if(ctx.display)ctx.display.focusKey='tgt:'+(t.url?'tab-'+t.id:'urlbar');
     });
-    browser.on('blocked',reason=>{frame=null;media={fullscreen:false,playing:false,audible:false};editable=false;webMode=false;loading=false;resized='';if(ctx.display&&ctx.display.browserSetFullscreen)ctx.display.browserSetFullscreen(false);if(!closing&&!landing&&gate.check().allowed&&reason!=='Start')note(reason);});
+    browser.on('blocked',reason=>{frame=null;media={fullscreen:false,playing:false,audible:false};editable=false;password=false;inputType='';keyboard=null;draft='';findBar=false;webMode=false;loading=false;resized='';if(ctx.display&&ctx.display.browserSetFullscreen)ctx.display.browserSetFullscreen(false);if(!closing&&!landing&&gate.check().allowed&&reason!=='Start')note(reason);});
     browser.on('blocked',()=>{syncVehicleAudio(false).catch(()=>{});});
     browser.on('media',state=>{
         const changed=!!state.fullscreen!==!!media.fullscreen;media=state;
@@ -208,7 +225,11 @@ mgu.run({async start(ctx){
         }
     });
     browser.on('fault',e=>{loading=false;note(e.message);log.warn(e.message);});
-    browser.on('navigation',url=>{currentURL=url;landing=false;store.visit(url,'');});
+    function setPrivacyState(state){privacyState=state;storageIssue=state&&state.storage&&state.storage.state==='failed'?'Website-Daten sind nicht vollstaendig gespeichert. Datenschutz & Logins oeffnen.':'';if(storageIssue)note(storageIssue);return state;}
+    browser.on('privacy',setPrivacyState);
+    browser.on('find',value=>{findState=value||{active:false,query:'',found:false};findBar=!!findState.active;});
+    browser.on('findOpen',()=>openFind());
+    browser.on('navigation',url=>{currentURL=url;landing=false;resized='';resizeRetry=0;store.visit(url,'');});
     browser.on('loading',value=>{loading=value;});
     browser.on('navigationState',s=>{
         canBack=s.canBack;canForward=s.canForward;currentURL=s.url;title=s.title||'';
@@ -216,7 +237,7 @@ mgu.run({async start(ctx){
         store.visit(s.url,title,false);
     });
     browser.on('input',info=>{
-        editable=!!info.editable;password=!!info.password;
+        editable=!!info.editable;password=!!info.password;inputType=info.type||'';multiline=!!info.multiline;
         if(info.adjusting)note('Drehen: Wert ändern. Drücken: fertig. Links: Browserleiste.');
         if(editable&&webMode&&!keyboard&&!panel&&!landing)openText();
     });
@@ -261,28 +282,32 @@ mgu.run({async start(ctx){
         focus:focusUI,toolbar:()=>tiltUI('W'),keyboard:()=>tiltUI('E'),scroll:d=>tiltUI(d<0?'N':'S'),
         press:()=>{const display=ctx.display,target=display&&(display.pageTargets||[]).find(t=>'tgt:'+t.key===display.focusKey);if(target)safe(()=>target.run());}
     };
-    const actions=()=>media.fullscreen?(media.hasSiteControls?siteMediaActions:mediaActions):webMode&&!keyboard&&!panel&&!landing&&browser.child?(media.playerMode&&media.hasSiteControls?siteMediaActions:webActions):uiActions;
+    const fullscreenWebActions=Object.assign({},webActions,{toolbar:()=>safe(()=>browser.mediaAction('exit'))});
+    const actions=()=>nativePrompt()||keyboard||panel||findBar&&!webMode?uiActions:media.fullscreen?(media.playerMode?(media.hasSiteControls?siteMediaActions:mediaActions):fullscreenWebActions):webMode&&!landing&&browser.child?(media.playerMode&&media.hasSiteControls?siteMediaActions:webActions):uiActions;
     const controller=new Controller({focus:d=>actions().focus(d),toolbar:()=>actions().toolbar(),keyboard:()=>actions().keyboard(),scroll:d=>actions().scroll(d),press:()=>actions().press()});
     const input=v=>{if(!gate.check().allowed){controller.reset();return false;}controller.feed(v);return true;};
     nativeBridge.setControllerHandler(input);ctx.controller.onInput(input);
     let finger=null;
+    const cssViewport=()=>browser.viewport||frame;
+    const pagePoint=(x,y)=>{const view=cssViewport();return {x:(x-page.x)*view.width/page.w,y:(y-page.y)*view.height/page.h};};
     if(ctx.display){
         const touch=ctx.display._touch.bind(ctx.display);
         ctx.display._touch=function(phase,x,y){
             const target=(this.pageTargets||[]).some(t=>!t.controllerOnly&&x>=t.x&&x<t.x+t.w&&y>=t.y&&y<t.y+t.h);
-            if(phase===1&&!target&&page&&!panel&&!landing&&frame&&x>=page.x&&x<page.x+page.w&&y>=page.y&&y<page.y+page.h){
-                finger={x,y,last:y,drag:false};enterPage();return;
+            if(phase===1&&!target&&page&&!nativePrompt()&&!panel&&!landing&&frame&&x>=page.x&&x<page.x+page.w&&y>=page.y&&y<page.y+page.h){
+                const view=cssViewport();finger={x,y,lastX:x,lastY:y,drag:false,tab:activeTab,url:currentURL,width:view.width,height:view.height};enterPage();return;
             }
             if(finger){
-                if(phase===2){if(Math.abs(y-finger.y)>12)finger.drag=true;if(finger.drag){const delta=(finger.last-y)*frame.height/page.h;safe(()=>browser.scroll(delta));}finger.last=y;}
-                if(phase===3){const f=finger;finger=null;if(!f.drag){const px=(x-page.x)*frame.width/page.w,py=(y-page.y)*frame.height/page.h;safe(()=>browser.tap(px,py));}}
+                const view=cssViewport();if(!page||!view||!frame||nativePrompt()||finger.tab!==activeTab||finger.url!==currentURL||finger.width!==view.width||finger.height!==view.height){finger=null;return;}
+                if(phase===2){if(Math.abs(y-finger.y)>12||Math.abs(x-finger.x)>12)finger.drag=true;if(finger.drag){const options=Object.assign(pagePoint(finger.x,finger.y),{deltaX:(finger.lastX-x)*view.width/page.w}),delta=(finger.lastY-y)*view.height/page.h;safe(()=>browser.scroll(delta,options));}finger.lastY=y;finger.lastX=x;}
+                if(phase===3){const f=finger;finger=null;if(!f.drag){const point=pagePoint(x,y);safe(()=>browser.tap(point.x,point.y));}}
                 return;
             }
             return touch(phase,x,y);
         };
     }
-    ctx.onTap((x,y)=>{if(!keyboard&&!panel&&!landing&&page&&frame&&x>=page.x&&x<page.x+page.w&&y>=page.y&&y<page.y+page.h){enterPage();safe(()=>browser.tap((x-page.x)*frame.width/page.w,(y-page.y)*frame.height/page.h));}});
-    ctx.onScroll(d=>{activity();if(panel==='library'){listOffset=Math.max(0,listOffset+(d>0?1:-1));return true;}if(browser.child&&!panel){safe(()=>browser.scroll(d));return true;}return false;});
+    ctx.onTap((x,y)=>{if(!nativePrompt()&&!keyboard&&!panel&&!landing&&page&&frame&&x>=page.x&&x<page.x+page.w&&y>=page.y&&y<page.y+page.h){enterPage();const point=pagePoint(x,y);safe(()=>browser.tap(point.x,point.y));}});
+    ctx.onScroll(d=>{activity();if(nativePrompt())return true;if(panel==='library'){listOffset=Math.max(0,listOffset+(d>0?1:-1));return true;}if(browser.child&&!panel){safe(()=>browser.scroll(d));return true;}return false;});
     async function refreshWifi(){
         try{wifiState=await browser.wifiStatus();if(!wifiSSID&&wifiState.ssid)wifiSSID=wifiState.ssid;}
         catch(e){wifiState={supported:false,error:e.message};}
@@ -354,9 +379,22 @@ mgu.run({async start(ctx){
         }
         button(c,1288,bottom-60,246,42,'Zurueck',()=>{panel='settings';},'remote-back');
     }
-    async function openPrivacy(){panel='privacy';keyboard=null;webMode=false;reading=false;privacyBusy=true;activity();try{privacyState=await browser.request('privacyStatus');}finally{privacyBusy=false;}}
-    async function changePrivacy(name){privacyBusy=true;try{const prefs={};prefs[name]=!privacyState[name];privacyState=await browser.request('privacyConfigure',{prefs});}finally{privacyBusy=false;}}
+    async function openPrivacy(){panel='privacy';keyboard=null;webMode=false;reading=false;privacyBusy=true;activity();try{setPrivacyState(await browser.request('privacyStatus'));}finally{privacyBusy=false;}}
+    async function changePrivacy(name){privacyBusy=true;try{const prefs={};prefs[name]=!privacyState[name];setPrivacyState(await browser.request('privacyConfigure',{prefs}));}finally{privacyBusy=false;}}
     async function openPasswords(){panel='passwords';loginOffset=0;logins=await browser.request('vaultList');}
+    function openFind(){
+        if(!browser.child||nativePrompt())return;
+        browser.cancelController();panel=null;keyboard='browser-find';draft=findState.query||'';replaceDraft=true;keyMode='abc';upper=false;webMode=false;reading=false;findBar=true;activity();if(ctx.display)ctx.display.focusKey='tgt:key-0-0';
+    }
+    function drawFind(c,top){
+        c.roundRect(800,top+8,784,58,8,C.panel);
+        c.text((findState.query||'').slice(0,30),816,top+43,21,C.text,{literal:true});
+        c.text(findState.found?'Treffer':'Kein Treffer',1130,top+43,17,C.muted);
+        button(c,1250,top+16,64,40,'<',()=>browser.request('findText',{query:findState.query,options:{backwards:true,caseSensitive:!!findState.caseSensitive}}),'find-prev');
+        button(c,1322,top+16,64,40,'>',()=>browser.request('findText',{query:findState.query,options:{caseSensitive:!!findState.caseSensitive}}),'find-next');
+        button(c,1394,top+16,100,40,'Text',openFind,'find-edit');
+        button(c,1502,top+16,66,40,'X',()=>browser.request('clearFind'),'find-close');
+    }
     function confirmPrivacy(label,run,back){privacyConfirmation={label,run,back:back||'privacy'};panel='privacy-confirm';}
     function button(c,x,y,w,h,label,fn,key,options){
         const o=options||{},enabled=o.enabled!==false;
@@ -461,6 +499,8 @@ mgu.run({async start(ctx){
         button(c,1170,199,364,42,'Datenschutz & Logins',openPrivacy,'privacy-settings');
         button(c,1170,259,364,42,'Mit Handy steuern (QR)',()=>openRemote(false),'remote-settings',{primary:true});
         button(c,1170,319,364,42,store.data.blockAds?'Werbe- und Trackerblocker: Ein':'Werbe- und Trackerblocker: Aus',()=>{const next=!store.data.blockAds;store.set('blockAds',next);return browser.child?browser.request('contentBlocking',{enabled:next}):null;},'block-ads');
+        button(c,1170,379,364,42,'Downloads',async()=>{await chrome.refreshFiles();chrome.offset=0;panel='browser-files';keyboard=null;webMode=false;},'downloads-settings');
+        button(c,800,384,344,42,'Website-Berechtigungen',async()=>{await chrome.refreshPermissions();panel='browser-permissions';keyboard=null;webMode=false;},'permissions-settings',{enabled:!!browser.child});
         c.text('STARTSEITE',65,157,15,C.muted);
         const homeText=keyboard==='homepage'?draft:store.data.homepage;
         c.text((homeText||ascii('Keine feste Seite - haeufig besuchte Seiten anzeigen')).slice(0,keyboard?67:115),65,190,21,C.text,{literal:true});
@@ -471,6 +511,7 @@ mgu.run({async start(ctx){
         c.text('DARSTELLUNG',65,320,15,C.muted);
         c.text('Seitenzoom',65,355,22,C.text);
         button(c,420,324,210,42,store.data.zoom+' %',()=>{const values=[100,125,150];store.set('zoom',values[(values.indexOf(store.data.zoom)+1)%values.length]);resized='';},'zoom');
+        button(c,800,324,344,42,'Auf der Seite suchen',openFind,'find-settings',{enabled:!!browser.child});
         c.text('Leiste beim Lesen ausblenden',65,415,22,C.text);
         button(c,620,384,156,42,store.data.autoHide?'Ein':'Aus',()=>store.set('autoHide',!store.data.autoHide),'auto-hide');
         c.text('Controller nach links oder die kleine Leiste oben holt die Bedienung zurueck.',65,462,17,C.muted);
@@ -490,12 +531,12 @@ mgu.run({async start(ctx){
         button(c,850,235,294,42,privacyState&&privacyState.rememberCache?'Ein':'Aus',()=>changePrivacy('rememberCache'),'remember-cache',{enabled});
         c.text('Verlauf aufzeichnen',65,325,23,C.text);
         button(c,850,292,294,42,store.data.historyEnabled?'Ein':'Aus',()=>store.set('historyEnabled',!store.data.historyEnabled),'remember-history');
-        button(c,64,354,390,42,'Website-Daten löschen / abmelden',()=>confirmPrivacy('Website-Daten löschen und alle Websites abmelden?',async()=>{privacyState=await browser.request('clearBrowserData',{kind:'sites'});landing=true;currentURL='';title='';}), 'clear-sites',{enabled});
-        button(c,470,354,290,42,'HTTP-Cache löschen',()=>confirmPrivacy('Gespeicherten HTTP-Cache löschen?',async()=>{privacyState=await browser.request('clearBrowserData',{kind:'cache'});}), 'clear-cache',{enabled});
+        button(c,64,354,390,42,'Website-Daten löschen / abmelden',()=>confirmPrivacy('Website-Daten löschen und alle Websites abmelden?',async()=>{setPrivacyState(await browser.request('clearBrowserData',{kind:'sites'}));landing=true;currentURL='';title='';}), 'clear-sites',{enabled});
+        button(c,470,354,290,42,'HTTP-Cache löschen',()=>confirmPrivacy('Gespeicherten HTTP-Cache löschen?',async()=>{setPrivacyState(await browser.request('clearBrowserData',{kind:'cache'}));}), 'clear-cache',{enabled});
         button(c,776,354,290,42,'Verlauf löschen',()=>confirmPrivacy('Den lokalen Browser-Verlauf löschen?',async()=>store.clearHistory()),'clear-history');
         button(c,1082,354,452,42,'Passwortverwaltung',openPasswords,'passwords',{enabled:vaultEnabled});
         c.text('Cookies und Logins werden laufend gesichert, auch bei Zündung aus. Ohne Sitzungen bleiben sie nur bis zum Schließen.',65,439,17,C.muted);
-        button(c,64,bottom-52,680,42,'Sitzungsspeicher zurücksetzen',()=>confirmPrivacy('Gespeicherte Website-Anmeldungen und Cache zurücksetzen? Passwörter bleiben erhalten.',async()=>{privacyState=await browser.request('clearBrowserData',{kind:'sessions-reset'});landing=true;currentURL='';title='';}),'reset-sessions',{enabled});
+        button(c,64,bottom-52,680,42,'Sitzungsspeicher zurücksetzen',()=>confirmPrivacy('Gespeicherte Website-Anmeldungen und Cache zurücksetzen? Passwörter bleiben erhalten.',async()=>{setPrivacyState(await browser.request('clearBrowserData',{kind:'sessions-reset'}));landing=true;currentURL='';title='';}),'reset-sessions',{enabled});
         button(c,1288,bottom-52,246,42,'Zurueck',()=>{panel='settings';},'privacy-back');
     }
     function drawPasswords(c,bottom){
@@ -577,7 +618,7 @@ mgu.run({async start(ctx){
     }
     function drawKeyboard(c,bottom){
         const x=W-SIDE;c.fillRect(x,BAR,SIDE,bottom-BAR,C.panel);c.fillRect(x,BAR,1,bottom-BAR,C.line);
-        c.text(String(keyboard).indexOf('vault-')===0?keyboard==='vault-confirm'?'Masterpasswort bestätigen':'Masterpasswort':keyboard==='homepage'?'Startseite':keyboard==='url'?'Adresse oder Suche':keyboard==='wifi-ssid'?'WLAN-Name':keyboard==='wifi-password'||password?'Passwort eingeben':'Text eingeben',x+22,96,24,C.text);
+        c.text(String(keyboard).indexOf('vault-')===0?keyboard==='vault-confirm'?'Masterpasswort bestätigen':'Masterpasswort':keyboard==='browser-auth-username'?'Benutzername eingeben':keyboard==='browser-auth-password'?'Passwort eingeben':keyboard==='browser-find'?'Auf der Seite suchen':keyboard==='homepage'?'Startseite':keyboard==='url'?'Adresse oder Suche':keyboard==='wifi-ssid'?'WLAN-Name':keyboard==='structured'?'Datum / Uhrzeit':keyboard==='wifi-password'||password?'Passwort eingeben':'Text eingeben',x+22,96,24,C.text);
         button(c,x+SIDE-66,70,44,34,'X',dismissKeyboard,'keyboard-close',{flat:true});
         [['abc','ABC'],['123','123'],['symbols','#+=']].forEach((m,i)=>button(c,x+20+i*146,116,132,36,m[1],()=>{keyMode=m[0];},'mode-'+m[0],{primary:keyMode===m[0]}));
         button(c,x+458,116,122,36,upper?'AA':'Aa',()=>{upper=!upper;},'shift');
@@ -586,7 +627,8 @@ mgu.run({async start(ctx){
             const value=upper?(ch==='ß'?'ẞ':ch.toUpperCase()):ch;
             button(c,x+20+i*56+(10-row.length)*2,168+r*48,50,40,value,()=>type(value),'key-'+r+'-'+i);
         }));
-        if(keyboard!=='text')c.text(keyboard.indexOf('vault-')===0?'*'.repeat(Math.min(draft.length,36)):keyboard.indexOf('wifi-')===0?'WLAN-Daten werden nicht protokolliert.':replaceDraft?'Erstes Zeichen ersetzt die Adresse.':'HTTPS wird automatisch ergaenzt.',x+22,376,16,C.muted);
+        if(keyboard==='text')[['Links','ArrowLeft'],['Rechts','ArrowRight'],['Alles','a'],['Tab','Tab'],['Enter','Enter']].forEach((item,i)=>button(c,x+20+i*112,328,104,38,item[0],()=>browser.key(item[1],item[1]==='a'?{ctrl:true}:false),'edit-key-'+i));
+        if(keyboard!=='text')c.text(keyboard==='browser-auth-password'?'*'.repeat(Math.min(draft.length,36)):keyboard==='browser-auth-username'||keyboard==='browser-find'?draft.slice(0,58):keyboard==='structured'?(draft||({date:'JJJJ-MM-TT',month:'JJJJ-MM',week:'JJJJ-Www',time:'HH:MM', 'datetime-local':'JJJJ-MM-TTTHH:MM'})[inputType]):keyboard.indexOf('vault-')===0?'*'.repeat(Math.min(draft.length,36)):keyboard.indexOf('wifi-')===0?'WLAN-Daten werden nicht protokolliert.':replaceDraft?'Erstes Zeichen ersetzt die Adresse.':'HTTPS wird automatisch ergaenzt.',x+22,376,16,C.muted,{literal:keyboard==='browser-find'||String(keyboard).indexOf('browser-auth-')===0});
         button(c,x+20,392,172,40,'Leerzeichen',()=>type(' '),'space');
         button(c,x+204,392,172,40,keyboard==='text'||keyboard.indexOf('wifi-')===0?'@':'.com',()=>type(keyboard==='text'||keyboard.indexOf('wifi-')===0?'@':'.com'),'suffix');
         button(c,x+388,392,192,40,'Loeschen',()=>{if(keyboard==='text')return browser.key('Backspace');if(replaceDraft){draft='';replaceDraft=false;}else draft=draft.slice(0,-1);},'delete');
@@ -595,10 +637,13 @@ mgu.run({async start(ctx){
     }
     ctx.loop('MAIN',12,()=>{
         const cv=ctx.canvas(W,H).clear(C.bg),bottom=H+cv.extra;
-        const hidden=media.fullscreen||(!landing&&!panel&&!keyboard&&webMode&&frame&&(reading||(store.data.autoHide&&Date.now()-lastAction>6500)));
+        const hidden=!nativePrompt()&&!findBar&&!panel&&!keyboard&&(media.fullscreen||(!landing&&webMode&&frame&&(reading||(store.data.autoHide&&Date.now()-lastAction>6500))));
         const top=hidden?0:BAR+TABS;tipLabels={};page=null;
+        const webSurface=!nativePrompt()&&!panel&&!landing&&gate.check().allowed;
+        if(webSurface)page={x:0,y:top,w:W-(keyboard?SIDE:0),h:bottom-top};
         if(!hidden){toolbar(cv);tabstrip(cv);}
-        if(panel==='privacy-confirm')belowTabs(cv,()=>drawPrivacyConfirmation(cv,bottom-TABS));
+        if(nativePrompt()||panel==='browser-files'||panel==='browser-permissions')belowTabs(cv,()=>chrome.draw(cv,bottom-TABS,panel));
+        else if(panel==='privacy-confirm')belowTabs(cv,()=>drawPrivacyConfirmation(cv,bottom-TABS));
         else if(panel==='passwords')belowTabs(cv,()=>drawPasswords(cv,bottom-TABS));
         else if(panel==='privacy')belowTabs(cv,()=>drawPrivacy(cv,bottom-TABS));
         else if(panel==='wifi-list')belowTabs(cv,()=>drawWifiList(cv,bottom-TABS));
@@ -611,21 +656,25 @@ mgu.run({async start(ctx){
             page={x:0,y:top,w:W-(keyboard?SIDE:0),h:bottom-top};
             cv.image(IMAGE,page.x,page.y,page.w,page.h);
             if(!keyboard&&!media.fullscreen){cv.target(page.x,page.y,page.w,page.h,enterPage,'page-controller');cv.targets[cv.targets.length-1].controllerOnly=true;tipLabels['page-controller']='Webseite steuern';}
-            if(browser.child){
-                const width=Math.round(1280*100/store.data.zoom),height=Math.max(200,Math.min(720,Math.round(width*page.h/page.w))),key=width+'x'+height;
-                if(key!==resized){resized=key;safe(()=>browser.resize(width,height));}
-            }
-        }else{cv.text(loading?'Seite wird geladen ...':'Browser bereit',W/2,280,27,C.muted,{align:'center'});}
+        }else{cv.text(loading||browser.child&&!landing?'Seite wird geladen ...':'Browser bereit',W/2,280,27,C.muted,{align:'center'});}
+        // Bootstrap a newly committed native view even before its first frame.
+        // Waiting for an image before resizing can leave Ozone with no paint
+        // and no hit-test surface after navigation.
+        if(webSurface&&browser.child&&page){
+            const width=1280,height=Math.max(200,Math.min(720,Math.round(width*page.h/page.w))),zoom=store.data.zoom,key=width+'x'+height+'@'+zoom;
+            if(key!==resized&&Date.now()>=resizeRetry){resized=key;safe(async()=>{try{await browser.resize(width,height,zoom);resizeRetry=0;}catch(error){if(resized===key)resized='';resizeRetry=Date.now()+250;throw error;}});}
+        }
         if(hidden&&!media.fullscreen){
             cv.roundRect(12,8,60,28,9,'#202833');icon(cv,'more',42,22,C.text);
             cv.target(12,8,60,28,()=>{browser.cancelController();webMode=false;reading=false;activity();},'show-toolbar');tipLabels['show-toolbar']='Browserleiste anzeigen';
         }
-        if(media.fullscreen&&!media.hasSiteControls)drawVideoControls(cv,bottom);
+        if(media.fullscreen&&media.playerMode&&!nativePrompt()&&!panel&&!keyboard&&!media.hasSiteControls)drawVideoControls(cv,bottom);
         if(keyboard){cv.targets=cv.targets.filter(t=>t.y<BAR+TABS||t.x+t.w<=W-SIDE);belowTabs(cv,()=>drawKeyboard(cv,bottom-TABS));}
+        if(findBar&&!nativePrompt()&&!panel&&!keyboard)drawFind(cv,top);
         if(panel==='network'&&!wifiBusy&&Date.now()-wifiPoll>2500){wifiPoll=Date.now();safe(refreshWifi);}
         if(panel==='remote'&&remoteState&&remoteState.active&&!remoteBusy&&Date.now()-remotePoll>2000){remotePoll=Date.now();safe(async()=>{const s=await browser.request('remoteStatus');if(panel==='remote'){remoteState=s;showQR(s.url);}});}
         const focused=ctx.display&&ctx.display.focusKey,focusedKey=focused&&focused.slice(0,4)==='tgt:'?focused.slice(4):'';
-        const hint=Date.now()<toastUntil?toast:!webMode&&!keyboard&&!panel&&!landing&&tipLabels[focusedKey];
+        const hint=Date.now()<toastUntil?toast:storageIssue||!webMode&&!keyboard&&!panel&&!landing&&tipLabels[focusedKey];
         if(hint&&!media.fullscreen){const w=Math.min(W-32,ascii(hint).length*10+42);cv.roundRect((W-w)/2,bottom-42,w,31,8,'#253243');cv.text(ascii(hint),(W-w)/2+20,bottom-20,17,C.text);}
         cv.scroll=false;return ui.image('MAIN_GFX',cv);
     });

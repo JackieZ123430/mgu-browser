@@ -20,3 +20,12 @@ test('Input work keeps turns and presses ordered and rejects work queued for an 
 test('Page focus rejects unbounded or malformed controller rotations',async()=>{
     for(const delta of [0,NaN,Infinity,17,-17,'1',1.5])await assert.rejects(()=>Input.focusPage.call({},delta),/Controller/);
 });
+
+test('Native input aborts queued work when its focused embedded document changes',async()=>{
+    let finish;const wait=new Promise(resolve=>finish=resolve),calls=[];
+    const browser=Object.assign({session:'main',epoch:1,pageGeneration:2,inputFrameGeneration:4,requireAllowed(){},pipe:{send:async method=>{calls.push(method);return wait;}}},Input);
+    const first=browser.inputTask(context=>context.send('old-focus'));
+    const queued=browser.inputTask(context=>context.send('must-not-type'));
+    await new Promise(resolve=>setImmediate(resolve));browser.inputFrameGeneration++;finish({});
+    await assert.rejects(first,/gewechselt/);await assert.rejects(queued,/gewechselt/);assert.deepEqual(calls,['old-focus']);
+});

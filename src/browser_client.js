@@ -28,10 +28,11 @@ class BrowserClient extends EventEmitter {
     receive(m){
         if(m.id){const p=this.pending.get(m.id);if(p){clearTimeout(p.timer);this.pending.delete(m.id);m.error?p.reject(new Error(m.error)):p.resolve(m.result||{});}return;}
         if(['ready','tabSelected','navigation','blocked'].includes(m.event))this.cancelController();
+        if(m.event==='viewport'&&m.value){const v=m.value;if(Number.isInteger(v.width)&&Number.isInteger(v.height)&&v.width>0&&v.width<=1280&&v.height>0&&v.height<=720){if(!this.viewport||this.viewport.width!==v.width||this.viewport.height!==v.height||this.viewport.zoom!==v.zoom)this.cancelController();this.viewport=v;}}
         if(m.event==='media'){
             const fullscreen=!!(m.value&&m.value.fullscreen);if(this.controllerFullscreen!==undefined&&this.controllerFullscreen!==fullscreen)this.cancelController();this.controllerFullscreen=fullscreen;
         }
-        if(m.event==='started')this.child=true;if(m.event==='blocked')this.child=null;
+        if(m.event==='started')this.child=true;if(m.event==='blocked'){this.child=null;this.viewport=null;this.surface=null;}
         if(m.event==='fault')this.emit('fault',new Error(m.value));else if(m.event)this.emit(m.event,m.value);
     }
     // Type-2 messages carry a changed row band (see src/frame_delta.js). The
@@ -63,12 +64,14 @@ class BrowserClient extends EventEmitter {
     // and turns received after it cannot move its selected control first.
     cancelController(){
         this.controllerEpoch=(this.controllerEpoch||0)+1;
+        this.scrollPending=null;
         if(this.controllerActive){this.controllerActive.cancelled=true;this.controllerActive.resolve({cancelled:true});}
         (this.controllerQueue||[]).forEach(job=>{job.cancelled=true;job.resolve({cancelled:true});});
         this.controllerQueue=[];this.controllerMode=null;
     }
     controller(op,delta,mode){
         const focus=delta!==null;
+        if(!focus)this.scrollPending=null;
         if(focus&&(!Number.isInteger(delta)||!delta||Math.abs(delta)>16))return Promise.reject(new Error('Ungueltige Controller-Drehung'));
         if(!this.channel||!this.gate.check().allowed)return Promise.reject(new Error('Browser nicht freigegeben'));
         if(this.lastAllowed!==true)this.state();
@@ -102,13 +105,28 @@ class BrowserClient extends EventEmitter {
     }
     // Touch drags produce many small moves; send one wheel event at a time and
     // merge the rest, instead of queueing dozens of CDP round trips.
-    scroll(delta){
+    scroll(delta,options){
         if(!Number.isFinite(delta))return Promise.resolve();
-        if(this.scrolling){this.scrollRest=(this.scrollRest||0)+delta;return this.scrolling;}
-        const run=d=>this.request('scroll',{delta:Math.max(-1000,Math.min(1000,d))}).catch(e=>{this.scrollRest=0;throw e;}).then(()=>{
-            const rest=this.scrollRest||0;this.scrollRest=0;if(Math.abs(rest)>=1)return run(rest);
-        });
-        const work=this.scrolling=run(delta).then(r=>{if(this.scrolling===work)this.scrolling=null;return r;},e=>{if(this.scrolling===work)this.scrolling=null;throw e;});
+        const opts=Object.assign({},options||{}),pending=this.scrollPending,epoch=this.controllerEpoch||0;
+        const key=JSON.stringify([opts.x,opts.y,opts.modifiers]);
+        if(pending&&pending.epoch===epoch&&pending.key===key){pending.delta=Math.max(-1000,Math.min(1000,pending.delta+delta));pending.options.deltaX=Math.max(-1000,Math.min(1000,(pending.options.deltaX||0)+(opts.deltaX||0)));}
+        else this.scrollPending={delta:Math.max(-1000,Math.min(1000,delta)),options:opts,key,epoch,channel:this.channel,generation:this.generation};
+        if(this.scrolling)return this.scrolling;
+        const valid=job=>job.channel===this.channel&&job.generation===this.generation&&job.epoch===(this.controllerEpoch||0)&&this.gate.check().allowed;
+        const run=async()=>{
+            while(this.scrollPending){
+                const job=this.scrollPending;this.scrollPending=null;
+                if(!valid(job))continue;
+                try{await this.request('scroll',{delta:job.delta,options:job.options});}
+                catch(error){
+                    // Navigation can reject an old in-flight wheel event after
+                    // fresh movement has already queued for the next page.
+                    // Its expected cancellation must not erase the new job.
+                    if(valid(job))throw error;
+                }
+            }
+        };
+        const work=this.scrolling=run().then(r=>{if(this.scrolling===work)this.scrolling=null;return r;},e=>{this.scrollPending=null;if(this.scrolling===work)this.scrolling=null;throw e;});
         return work;
     }
     request(op,args){
@@ -117,9 +135,10 @@ class BrowserClient extends EventEmitter {
         this.state();const id=++this.next;
         return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error('Browser-Dienst: Zeitlimit'));},['start','navigate','mediaDemo','wifiScan','vaultUnlock'].includes(op)?30000:15000);this.pending.set(id,{resolve,reject,timer});this.channel.json(Object.assign({},args||{},{id,op}));});
     }
-    start(url){this.cancelController();return this.request('start',{url});}navigate(url){this.cancelController();return this.request('navigate',{url});}tap(x,y){this.cancelController();return this.request('tap',{x,y});}
-    text(text){return this.request('text',{text});}key(key,shift){return this.request('key',{key,shift});}back(){this.cancelController();return this.request('back');}
-    forward(){this.cancelController();return this.request('forward');}reload(){this.cancelController();return this.request('reload');}stopLoading(){return this.request('stopLoading');}resize(width,height){return this.request('resize',{width,height});}
+    start(url,options){this.cancelController();return this.request('start',{url,options});}navigate(url){this.cancelController();return this.request('navigate',{url});}tap(x,y,options){this.cancelController();return this.request('tap',{x,y,options});}
+    hover(x,y,modifiers){return this.request('hover',{x,y,modifiers});}drag(points,options){this.cancelController();return this.request('drag',{points,options});}
+    text(text,options){return this.request('text',{text,options});}fillStructured(value){return this.request('fillStructured',{value});}key(key,modifiers){return this.request('key',{key,modifiers});}back(){this.cancelController();return this.request('back');}
+    forward(){this.cancelController();return this.request('forward');}reload(){this.cancelController();return this.request('reload');}stopLoading(){return this.request('stopLoading');}resize(width,height,zoom){this.cancelController();return this.request('resize',{width,height,zoom});}
     newTab(url){this.cancelController();return this.request('newTab',{url:url||''});}selectTab(tabId){this.cancelController();return this.request('selectTab',{tabId});}closeTab(tabId){this.cancelController();return this.request('closeTab',{tabId});}
     clearTab(){this.cancelController();return this.request('clearTab');}
     focusPage(delta){return this.controller('pageFocus',delta,'page');}pressPage(){return this.controller('pagePress',null,'page');}leavePage(){this.cancelController();return this.request('pageLeave');}

@@ -4,7 +4,7 @@ Ein experimenteller Browser für BMW MGU / iDrive 7: eine native, mit dem
 iDrive-Controller bedienbare Oberfläche und eine getrennte Chromium-Engine
 für echtes HTML, CSS und JavaScript.
 
-**Version 0.15.0 – experimentelle Store-Pakete für MGU / iDrive 7, x86_64.**
+**Version 0.16.0 – experimentelle Store-Pakete für MGU / iDrive 7, x86_64.**
 Oberfläche, native Runtime und eine private Chromium-Engine werden gemeinsam
 über einen Store-Katalog verteilt. Der eigene Code steht unter MIT.
 **Die BMW-Audioanbindung ist implementiert, aber mit diesem Browserstand noch
@@ -28,8 +28,8 @@ verknüpft die Pakete und ihre Abhängigkeiten:
 
 | Paket | Version | Inhalt |
 | --- | --- | --- |
-| Browser | 0.15.0 | Native Oberfläche, iDrive-Bedienung, Tabs, Einstellungen |
-| Browser Runtime | 0.15.0 | Backend, native IPC-/Bildmodule, begrenztes Profil-Dateisystem |
+| Browser | 0.16.0 | Native Oberfläche, iDrive-Bedienung, Tabs, Einstellungen |
+| Browser Runtime | 0.16.0 | Backend, native IPC-/Bildmodule, begrenztes Profil-Dateisystem |
 | Chromium Engine | 0.1.0 | Debian Chromium 156.0.8078.79 mit privaten Bibliotheken und Sandbox |
 
 MGU Deploy, Renderer und Internet uplink kommen aus der offiziellen Store-Quelle.
@@ -76,6 +76,48 @@ Die automatisierten Ergebnisse und ihre Grenzen stehen unter
 belegt keine Fehlerfreiheit. Die neue Prüfung verwendet eine echte sandboxed Chromium-Sitzung für Eingabe,
 Pop-ups, Video und Audio-Ausgabe in einen lokalen Testsink. Der genaue Umfang
 und die Grenzen stehen im [aktuellen Testbericht](docs/TESTING.md).
+
+## 0.16.0: Browser-Funktionen und Desktop-Kompatibilität
+
+**Browser und Browser Runtime gemeinsam auf 0.16.0 aktualisieren; Engine bleibt
+0.1.0.** Chromium läuft nun im normalen Browsermodus mit seinem eigenen
+Ozone-Offscreen-Display. User-Agent und Client Hints stammen unverändert aus
+der echten Engine; WebGL zeichnet über den vorhandenen Software-Renderer.
+`navigator.webdriver` bleibt wahr. Das ist keine Tarnung und garantiert weder
+CAPTCHA-Freiheit noch Netflix-, Disney+- oder Widevine-Wiedergabe.
+
+| Bereich | Stand und Grenze |
+| --- | --- |
+| Webseiten | HTTP/HTTPS und eigene Ports; normale native Netzwerkabläufe und Hintergrundtabs. Zertifikatsprüfungen bleiben aktiv. |
+| Eingabe | Native Browser-Ereignisse für Formulare, Auswahllisten, Datum/Zeit, mehrzeiligen Text, Modifikatoren, Auswahl, Kopieren/Einfügen, Drag und Scrollen; große Texte werden begrenzt in Blöcken übertragen. |
+| Seitendialoge | Alert, Bestätigung, Texteingabe und Verlassen-/Schließen-Rückfrage; Ablehnen erhält den ursprünglichen Tab. |
+| Anmeldung | Native HTTP-Basic-/Digest-Challenges mit ausdrücklicher Antwort; Origin, Realm und aktueller Tab/Rahmen werden gebunden. Chromiums Grenzen für Cross-Site-Anmeldeaufforderungen bleiben bestehen. |
+| Seitensuche | Treffer in Dokument, Shadow Roots und eigenen Frames; Weiter/Zurück und Groß-/Kleinschreibung ohne Zerstören der vorhandenen Textauswahl. |
+| Zoom | Nativer Chromium-Zoom 100/125/150 %, mit unveränderter physischer Bildauflösung und angepassten Treffern/Scrollpunkten, auch in eigenen Cross-Site-Frames. |
+| Dateien | Downloads im Browser und Abruf über die gekoppelte Telefonseite; Website-Dateiauswahl nimmt ausdrücklich bestätigte Telefon-Uploads an, auch in getrennten Cross-Site-Frames. Kein beliebiger Zugriff auf Headunit-Dateipfade. |
+| Berechtigungen | Native Chromium-Zustände und explizite Entscheidungen je Website/Frame; vorhandene Kamera, Mikrofon, Standort oder Benachrichtigungs-Hardware werden dadurch nicht erzeugt. |
+| Speicherung | Verschlüsselte Cookies und Website-Daten; lokale Tests decken localStorage, IndexedDB, CacheStorage und Service-Worker-Registrierung ab. Profil-Tabs werden als höchstens acht GET-Adressen samt aktivem Tab wiederhergestellt. |
+| Medien | Die bisherigen nativen JPEG-, Vollbild-, Video- und PCM-Funktionen bleiben enthalten. BMW-Lautsprecher und geschützte Anbieterstreams benötigen weiterhin getrennte Nachweise. |
+| Desktop-Grenzen | Kein Erweiterungsmanager, Druckdialog oder vollständiges Desktop-Dateisystem. Formulare, POST-Anfragen und JavaScript-Zustand werden durch URL-Tab-Restore nicht wiederhergestellt. |
+
+Dateien liegen privat unter dem Browser-Datenverzeichnis: höchstens 32 MiB je
+Download und 64 MiB behaltene Downloads; Uploads höchstens 16 MiB je Datei und
+32 MiB gleichzeitig bereitgestellte Daten, mit begrenzter Anzahl. Transfers
+benutzen die authentifizierte lokale Telefonverbindung. Downloads werden bei
+bekannter Übergröße beziehungsweise bei Fortschritts-/Dateiprüfungen abgebrochen;
+zwischen diesen Prüfungen sind kurzfristige Überschreitungen möglich.
+
+Das Profil-Dateisystem bleibt auf 384 MiB begrenzt. Normale verschlüsselte
+Snapshots haben 64 MiB Budget; vollständige Datenbank-/WAL-Sätze werden nach
+beendeten Schreibern bei Engine-Absturz oder größerem Profil in eine gestreamte,
+verschlüsselte Wiederherstellung mit 192 MiB Budget gesichert. Der letzte gute
+normale Snapshot bleibt erhalten. Bei größerem Umfang oder Schreibfehlern
+erscheint ein Speicherfehler; die noch vorhandene private Arbeitssitzung wird
+nicht still gelöscht. Sie ist ohne erfolgreiche Sicherung nicht über einen
+Backend-Neustart oder Stromverlust hinweg geschützt. Noch nicht von Chromium
+auf Dateiebene geschriebene Änderungen können nicht nachträglich gerettet werden.
+Metadaten brauchen einen Teil der Budgets; atomare Ersetzung benötigt vorübergehend
+zusätzlichen persistenten Speicher. Aktuelle Prüfungen: [TESTING.md](docs/TESTING.md).
 
 ## 0.15.0: CarLifeMedia, Vordergrund und verfügbare Ressourcen
 

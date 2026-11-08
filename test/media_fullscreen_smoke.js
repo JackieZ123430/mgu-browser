@@ -59,5 +59,16 @@ async function moving(stage,video){
         await browser.focusMediaControl(entry[0]);assert.equal(browser.focusedMediaControl.name,'Play '+entry[1]);
         await browser.pressMediaControl();assert.equal(await value('window.closedPressed'),entry[1],'Closed player AX selection preserves merged rotary steps');
     }
-    console.log('Real Chromium fullscreen: large DOM selection, native site button + browser action, nested zero-height wrapper geometry, physical resize/exit, moving nonblack projected colour frames, iframe/shadow media state, retained site controls and merged rotary DOM/closed-shadow AX selection + press passed. Live YouTube and vehicle speakers are not qualified.');
+    // Fullscreen is also a normal page API for charts, images and games.
+    // Its state must not depend on finding an HTML media player.
+    const beforeChart=frameCount;
+    await value('document.body.innerHTML="<div id=chart style=width:100vw;height:100vh;background:royalblue><label>Chart value<input id=chartValue></label><button id=chartApply>Apply</button></div>";window.chartApplied=0;chartApply.onclick=()=>window.chartApplied++;chart.requestFullscreen()');
+    await browser.resize(1280,480);await browser.inspectMedia();
+    await until(async()=>{await browser.inspectMedia();return lastMedia&&lastMedia.fullscreen&&!lastMedia.playerMode&&!lastMedia.hasMedia;},'Non-video fullscreen is reported as generic page state');
+    await until(async()=>{if(frameCount<=beforeChart||!lastFrame||lastFrame.width!==1280||lastFrame.height!==480)return false;const offset=(240*1280+640)*4;return lastFrame.rgba[offset+2]>160&&lastFrame.rgba[offset+2]>lastFrame.rgba[offset]+50;},'Chart fullscreen has a fresh blue projected image');
+    const input=JSON.parse(await value('JSON.stringify((()=>{const r=chartValue.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})())'));
+    await browser.tap(input.x,input.y);await browser.text('chart input');assert.equal(await value('chartValue.value'),'chart input');
+    await browser.focusPage(1);await browser.pressPage();assert.equal(await value('window.chartApplied'),1,'Generic fullscreen keeps ordinary page focus and activation');
+    await browser.mediaAction('exit');await until(async()=>{await browser.inspectMedia();return lastMedia&&!lastMedia.fullscreen;},'Generic fullscreen exits normally');
+    console.log('Real Chromium fullscreen: large DOM selection, native site button + browser action, nested zero-height wrapper geometry, physical resize/exit, moving nonblack projected colour frames, iframe/shadow media state, retained site controls, merged rotary DOM/closed-shadow AX selection + press, and interactive generic chart fullscreen passed. Live YouTube and vehicle speakers are not qualified.');
 }finally{browser.destroy();await browser.closing;const remove=p=>{const stat=fs.lstatSync(p);if(stat.isDirectory()&&!stat.isSymbolicLink()){for(const name of fs.readdirSync(p))remove(path.join(p,name));fs.rmdirSync(p);}else fs.unlinkSync(p);};remove(root);}})().catch(error=>{console.error(error.stack);process.exitCode=1;});

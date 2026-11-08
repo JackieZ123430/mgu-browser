@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),EE=require('events');
 const Pages=require('../src/browser_pages');
 function fixture(){
-    const calls=[],b=Object.assign(new EE(),Pages,require('../src/browser_performance'),{options:{},pipe:{send:async(method,params)=>{calls.push({method,params});return {}; }},epoch:1,tabQueue:Promise.resolve(),tabs:[{id:'tab-1',target:'opener',session:'session-1'}],activeTab:'tab-1',requireAllowed(){}});
+    const calls=[],b=Object.assign(new EE(),Pages,require('../src/browser_performance'),{options:{},pipe:{send:async(method,params,session)=>{calls.push({method,params,session});return {}; }},epoch:1,tabQueue:Promise.resolve(),tabs:[{id:'tab-1',target:'opener',session:'session-1'}],activeTab:'tab-1',requireAllowed(){}});
     b.on('fault',e=>calls.push({fault:e.message}));
     b._attachTab=async(target,info)=>{calls.push({attached:target,info});b.tabs.push({id:target,target,session:target});b.activeTab=target;};
     b._selectTab=async id=>{b.activeTab=id;};b._newTab=async()=>{b.tabs.push({id:'replacement',target:'replacement'});b.activeTab='replacement';};
@@ -26,6 +26,18 @@ test('Closing a page from JavaScript selects a surviving tab and replaces the la
     const {b}=fixture();b.targetEvent(created('popup'));await b.tabQueue;b.targetEvent(destroyed('popup'));await b.tabQueue;
     assert.equal(b.activeTab,'tab-1');assert.equal(b.tabs.length,1);
     b.targetEvent(destroyed('opener'));await b.tabQueue;assert.equal(b.activeTab,'replacement');assert.equal(b.tabs.length,1);
+});
+test('normal tab close asks native Page.close and preserves focus/files/media until actual destruction',async()=>{
+    const {b,calls}=fixture(),tab=b.tabs[0],cleanup=[];
+    for(const name of ['clearFileChooser','releaseFileUploads','clearAccessibleMedia','clearDialogs'])b[name]=session=>cleanup.push({name,session});
+    assert.deepEqual(await b.closeTab(tab.id),{closing:true});assert.deepEqual(b.tabs,[tab]);assert.equal(b.activeTab,tab.id);assert.equal(cleanup.length,0);assert.equal(tab.closeRequested,true);
+    assert.deepEqual(calls.find(call=>call.method==='Page.close'),{method:'Page.close',params:{},session:tab.session});assert(!calls.some(call=>call.method==='Target.closeTarget'));
+    assert.deepEqual(await b.closeTab(tab.id),{pending:true});assert.equal(calls.filter(call=>call.method==='Page.close').length,1,'Duplicate close cannot bypass native beforeunload');
+    b.targetEvent(destroyed(tab.target));await b.tabQueue;assert.equal(b.activeTab,'replacement');assert.equal(b.tabs.length,1);assert.equal(cleanup.length,4);assert(cleanup.every(call=>call.session===tab.session));
+});
+test('native target destruction during close can drain the tab queue without waiting on itself',{timeout:1000},async()=>{
+    const {b}=fixture();b.pipe.send=async method=>{if(method==='Page.close')b.targetEvent(destroyed('opener'));return {};};
+    await b.closeTab('tab-1');await b.tabQueue;assert.equal(b.tabs.length,1);assert.equal(b.activeTab,'replacement');
 });
 test('Popup queued before browser shutdown cannot attach to a new engine',async()=>{
     const {b,calls}=fixture();let unblock;b.tabQueue=new Promise(r=>unblock=r);b.targetEvent(created('old-popup'));b.epoch++;unblock();await b.tabQueue;

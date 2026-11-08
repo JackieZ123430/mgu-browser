@@ -1,20 +1,17 @@
 'use strict';
-// The visible Browser uses the actual Chromium/Linux identity. Keep Client
-// Hints consistent with the legacy UA override; omitting metadata disables
-// Chromium's native hints entirely. Do not claim another OS or browser brand.
-function create(version,architecture){
-    const original=version&&version.userAgent;
-    if(typeof original!=='string'||!original||original.length>2048||/[\r\n\0]/.test(original))throw new Error('Browser identity unavailable');
-    const userAgent=original.replace(/\bHeadlessChrome\//g,'Chrome/');
-    const match=/^(?:HeadlessChrome|Chrome|Chromium)\/(\d+(?:\.\d+){1,3})$/.exec(version.product||'');
-    architecture=architecture||process.arch;
-    if(!match||original.indexOf('Linux')<0||!['x64','ia32'].includes(architecture))return {userAgent,metadata:null};
-    const fullVersion=match[1],major=fullVersion.split('.')[0];
-    return {userAgent,metadata:{
-        brands:[{brand:'Chromium',version:major}],
-        fullVersionList:[{brand:'Chromium',version:fullVersion}],fullVersion,
-        platform:'Linux',platformVersion:'',architecture:'x86',model:'',
-        mobile:false,bitness:architecture==='x64'?'64':'32',wow64:false
-    }};
+// Preserve the running engine's own identity. Normal Chromium supplies its UA,
+// platform, brands and Client Hints; the Browser only selects its language.
+function create(version){
+    const userAgent=version&&version.userAgent;
+    if(typeof userAgent!=='string'||!userAgent||userAgent.length>2048||/[\r\n\0]/.test(userAgent))throw new Error('Browser identity unavailable');
+    return {userAgent};
 }
-module.exports={create};
+function languages(locale){
+    if(typeof locale!=='string'||!(/^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$/.test(locale)))throw new Error('Invalid browser locale');
+    const language=locale.split('-')[0];
+    return language===locale?[locale]:[locale,language];
+}
+function localeOverride(locale){
+    return {userAgent:'',acceptLanguage:languages(locale).map((language,index)=>language+(index?';q=0.9':'')).join(',')};
+}
+module.exports={create,languages,localeOverride};

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check fullscreen pixels and real-time PCM using exact Store packages.
+"""Check media and desktop browser behavior using exact Store packages.
 
 Uses a digest-pinned Ubuntu 18 container, pinned Node 8/public ALSA inputs,
 immutable engine 0.1.0 and the actual runtime's backend, native JPEG addon and
@@ -19,6 +19,51 @@ import runtime_service_smoke as startup
 
 ROOT = Path(__file__).resolve().parents[1]
 MARKER = 'PACKAGED_FULLSCREEN_RESULT '
+
+# All are source-commit-locked test inputs; runtime code comes exclusively from
+# the extracted package. Each fixture must report its own strict result marker.
+DESKTOP_FIXTURES = {
+    'browser_dialogs_smoke.js': 'dialogs-smoke.js',
+    'native_input_parity_smoke.js': 'native-input-smoke.js',
+    'focused_input_metadata_smoke.js': 'focused-input-smoke.js',
+    'native_pdf_input_smoke.js': 'native-pdf-smoke.js',
+    'remote_input_page_smoke.js': 'remote-input-page-smoke.js',
+    'desktop_navigation_smoke.js': 'desktop-navigation-smoke.js',
+    'browser_permissions_smoke.js': 'permissions-smoke.js',
+    'chromium_files_smoke.js': 'files-smoke.js',
+    'chromium_site_recovery_smoke.js': 'site-recovery-smoke.js',
+    'chromium_tab_restore_smoke.js': 'tab-restore-smoke.js',
+    'browser_recovery_node8_smoke.js': 'streamed-recovery-smoke.js',
+    'browser_find_smoke.js': 'find-smoke.js',
+    'chromium_frame_media_smoke.js': 'frame-media-smoke.js',
+    'browser_auth_smoke.js': 'auth-smoke.js',
+    'browser_viewport_smoke.js': 'viewport-smoke.js',
+    'browser_detached_tabs_smoke.js': 'detached-tabs-smoke.js',
+    'cdp_large_upload_smoke.js': 'large-upload-smoke.js',
+    'browser_auth_upload_smoke.js': 'auth-upload-smoke.js',
+    'browser_viewport_bootstrap_smoke.js': 'viewport-bootstrap-smoke.js',
+}
+
+
+def tls_fixture(cache):
+    """Only the host needs openssl; these are authored disposable test keys."""
+    executable = shutil.which('openssl')
+    if not executable:
+        raise RuntimeError('Host openssl is required for the self-signed TLS refusal fixture')
+    key, cert = cache / 'authored-tls-key.pem', cache / 'authored-tls-cert.pem'
+    for file in (key, cert):
+        if file.exists() or file.is_symlink():
+            startup.regular(file)
+    subprocess.run([executable, 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+                    '-keyout', str(key), '-out', str(cert), '-days', '1',
+                    '-subj', '/CN=localhost', '-addext',
+                    'subjectAltName=DNS:localhost,IP:127.0.0.1'],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                   check=True, timeout=20)
+    if not all(0 < file.stat().st_size < 16384 for file in (key, cert)):
+        raise RuntimeError('Invalid authored TLS fixture inputs')
+    key.chmod(0o600)
+    return startup.regular(key), startup.regular(cert)
 
 
 def clip_file(cache, supplied):
@@ -64,6 +109,7 @@ def main():
     alsa_cache = cache / 'alsa';alsa_cache.mkdir(exist_ok=True)
     archive = alsa.archive(alsa.PACKAGES[1], alsa_cache)
     clip = clip_file(cache, args.clip)
+    tls_key, tls_cert = tls_fixture(cache)
     unconfined = 'name=apparmor' in environment['securityOptions']
     environment['fixtureAppArmor'] = 'unconfined' if unconfined else 'unchanged'
     name = 'mgu-browser-fullscreen-' + uuid.uuid4().hex[:16]
@@ -78,7 +124,10 @@ def main():
               (ROOT / 'test/browser_identity_smoke.js', '/browser-identity-smoke.js'),
               (ROOT / 'test/chromium_persistence_smoke.js', '/cookie-persistence-smoke.js'),
               (node, '/usr/bin/node'), (runtime, '/runtime.tgz'),
-              (engine, '/engine.tgz'), (archive, '/old-alsa.deb'), (clip, '/clip.webm')]
+              (engine, '/engine.tgz'), (archive, '/old-alsa.deb'), (clip, '/clip.webm'),
+              (tls_key, '/fixture-tls-key.pem'), (tls_cert, '/fixture-tls-cert.pem')]
+    inputs.extend((ROOT / 'test' / source, '/' + target)
+                  for source, target in DESKTOP_FIXTURES.items())
     for source, target in inputs:
         source = startup.regular(source)
         if ',' in str(source):
@@ -87,16 +136,17 @@ def main():
     command += [startup.IMAGE, '/usr/bin/node', '/fixture.js']
     try:
         result = subprocess.run(command, text=True, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, timeout=150)
+                                stderr=subprocess.STDOUT, timeout=480)
     except subprocess.TimeoutExpired:
         subprocess.run(['docker', 'rm', '-f', name], stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL, check=False, timeout=10)
         raise
     print(result.stdout, end='', flush=True)
     records = [json.loads(line[len(MARKER):]) for line in result.stdout.splitlines() if line.startswith(MARKER)]
-    if result.returncode or len(records) != 1 or not records[0].get('success'):
-        raise RuntimeError('Exact packaged fullscreen/video/audio test failed')
-    print(json.dumps({'purpose': 'Actual packaged video/PCM continuity; no physical vehicle qualification',
+    if (result.returncode or len(records) != 1 or not records[0].get('success')
+            or records[0].get('scriptCount') != 5 + len(DESKTOP_FIXTURES)):
+        raise RuntimeError('Exact packaged media/desktop browser test failed')
+    print(json.dumps({'purpose': 'Actual packaged media/desktop browser behavior; no physical vehicle qualification',
                       'runtimeSha256': startup.digest(runtime), 'engineSha256': startup.ENGINE_SHA256,
                       'nodeArchiveSha256': startup.NODE_SHA256, 'image': startup.IMAGE,
                       'alsa': alsa.PACKAGES[1], 'clipSha256': startup.digest(clip),

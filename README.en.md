@@ -2,7 +2,7 @@
 
 An experimental native browser UI for BMW MGU / iDrive 7, backed by a separate
 Chromium process, with a local SDK app emulator for development.
-Version 0.15.0 publishes an **experimental ID7/x86_64 Store catalog** with
+Version 0.16.0 publishes an **experimental ID7/x86_64 Store catalog** with
 the frontend, native runtime and private Chromium engine. Add
 `pllanaio/mgu-browser` as a GitHub source and select **Releases** for complete
 installation and updates. Existing `main` sources must switch to Releases
@@ -14,6 +14,44 @@ Widevine binary or BMW SDK is distributed, and provider playback is unconfirmed.
 See [installation, dependencies and rollback](docs/MGU_STORE.md).
 
 The [full German README](README.md) describes features and verified limits.
+
+## Desktop browser functions in 0.16.0
+
+Update **both Browser and Browser Runtime to 0.16.0**; Engine remains **0.1.0**.
+Chromium now runs its ordinary browser on the built-in Ozone offscreen display.
+Native User-Agent and Client Hints remain intact, including their actual engine
+identity. WebGL uses the available software renderer. `navigator.webdriver`
+remains true; this does not promise CAPTCHA removal or protected-provider playback.
+
+| Area | Implemented behavior and boundary |
+| --- | --- |
+| Navigation | HTTP/HTTPS, custom ports, ordinary native networking and background tabs; certificate verification stays enabled. |
+| Input | Native form controls, date/time, multiline text, modifiers, selection, copy/paste, drag and scrolling; bounded chunked large text. |
+| Dialogs | Alert/confirm/prompt and native beforeunload stay/leave, including tab close without destroying a cancelled page. |
+| Authentication | Explicit native HTTP Basic/Digest challenge replies bound to origin, realm and current tab/frame; Chromium's cross-site prompt policy stays in place. |
+| Page find | Document, shadow-root and owned-frame matches, next/previous and case sensitivity while preserving the existing text selection. |
+| Zoom | Native Chromium zoom at 100/125/150%, preserving physical raster resolution and pointer/scroll targeting, including owned cross-site frames. |
+| Files | Download list and delivery through the authenticated phone connection; explicitly confirmed streamed phone uploads into the exact website file chooser, including cross-site frame targets. No arbitrary headunit file paths. |
+| Permissions | Explicit website/frame-scoped decisions backed by Chromium's native permission state; missing vehicle devices remain missing. |
+| Persistence | Encrypted cookies and site storage; localStorage/IndexedDB/CacheStorage/service-worker registration tested. Up to eight GET tab URLs and the active tab can be restored. |
+| Media | Existing native JPEG, fullscreen, PCM pacing and controller features retained. Actual BMW output and protected services remain separately unqualified. |
+| Desktop limits | No extension manager, print dialog or general desktop filesystem UI. Tab restore does not recreate form values, POST bodies or JavaScript state. |
+
+Downloads retain up to 32 MiB each and 64 MiB total; uploads allow up to 16 MiB
+each and 32 MiB staged, with bounded counts. Known oversized downloads are
+cancelled and disk/progress checks enforce retained quotas; transient overshoot
+between checks is possible. Files stay in the private persistent data directory
+and transfer through the paired local phone service.
+
+The work filesystem remains 384 MiB. Normal encrypted snapshots have a 64 MiB
+budget. After writers stop, crashed-engine or larger profiles use a streamed
+encrypted recovery with a 192 MiB budget and keep the last good normal archive.
+Above the recovery budget or on a write failure, storage status reports failure
+and preserves the still-present private working profile rather than silently
+discarding it. That unsaved copy is not durable across backend restart or power
+loss. Data Chromium had not flushed to files cannot be recovered; metadata uses
+part of each budget, and atomic replacement temporarily needs additional disk.
+See [tests and limits](docs/TESTING.md).
 
 ## CarLifeMedia, foreground and available resources in 0.15.0
 

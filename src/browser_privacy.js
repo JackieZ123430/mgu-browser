@@ -9,8 +9,8 @@ module.exports={
         this.requireAllowed();const store=this.options.profileStore;if(!store)throw new Error('Geschützter Speicher nicht verfügbar');
         if(!['cache','sites','sessions-reset'].includes(kind))return Promise.reject(new Error('Unbekannte Datenkategorie'));
         const work=(this.storageChange||Promise.resolve()).catch(()=>{}).then(async()=>{
-            if(kind==='cache'){if(this.session)await this.send('Network.clearBrowserCache');await store.clear('cache');}
-            else {store.skipCapture=!!this.child;this.stop('Website-Daten werden gelöscht');await this.closing;if(this.shutdownFault)throw this.shutdownFault;if(kind==='sessions-reset')await store.resetSessions();else await store.clear('sites');}
+            if(kind==='cache'){if(this.session)await this.send('Network.clearBrowserCache');if(this.recoveryProfile){if(this.shutdownFault)throw this.shutdownFault;await store.clearProfileCache(this.recoveryProfile);}await store.clear('cache');}
+            else {store.skipCapture=!!this.child;this.stop('Website-Daten werden gelöscht');await this.closing;if(this.shutdownFault)throw this.shutdownFault;this.discardRetainedProfile();if(kind==='sessions-reset')await store.resetSessions();else await store.clear('sites');}
             return store.status();
         });
         this.storageChange=work;return work;

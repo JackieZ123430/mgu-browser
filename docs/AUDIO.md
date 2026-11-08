@@ -1,4 +1,12 @@
-# Fahrzeug-Audio in 0.15.0
+# Fahrzeug-Audio in 0.16.0
+
+0.16.0 behält die in 0.14/0.15 eingeführte PCM-Taktung, CarLifeMedia-Übernahme
+und Freigabe bei. Der normale Chromium/Ozone-Browser und die neuen Desktop-
+Funktionen ersetzen weder SmartX/ALSA noch den AudioManager. Native Identität,
+WebGL, Berechtigungen oder eine sichtbare Anbieter-Anmeldeseite sind kein
+Nachweis für DRM-Freigabe oder Netflix-/Disney+-Kontowiedergabe. Die Engine
+bleibt 0.1.0 mit unverändert deaktiviertem Widevine-Komponentenupdater und
+ohne mitgeliefertes autorisiertes CDM.
 
 Der Browser besitzt eine konkrete Anbindung an **SmartX/ALSA und den BMW AudioManager**
 für ID7. Die öffentlich dokumentierte Kombination ist Quelle `CarLifeMedia` (287),

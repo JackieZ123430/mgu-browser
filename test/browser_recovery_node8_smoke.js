@@ -1,0 +1,8 @@
+'use strict';
+// Standalone because the vehicle's Node8 has no node:test runner. Exercise the
+// actual streamed writer, authenticated reader and normal/archive selection.
+const assert=require('assert'),fs=require('fs'),os=require('os'),path=require('path');
+const modules=process.env.MGU_BROWSER_BACKEND||path.resolve(__dirname,'../src'),Store=require(path.join(modules,'secure_browser_data')).SecureBrowserData;
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'mgu-recovery-node8-'));
+function remove(p){const s=fs.lstatSync(p);if(s.isDirectory()&&!s.isSymbolicLink()){fs.readdirSync(p).forEach(n=>remove(path.join(p,n)));fs.rmdirSync(p);}else fs.unlinkSync(p);}
+(async()=>{try{const store=new Store(root+'/protected');fs.mkdirSync(root+'/profile');fs.mkdirSync(root+'/profile/Default');const file=root+'/profile/Default/site-db';fs.writeFileSync(file,'streamed recovery original fixture');fs.truncateSync(file,70*1024*1024);const saved=await store.captureRecovery(root+'/profile');assert.equal(saved.recovery,true);const reopened=new Store(root+'/protected');await reopened.restore(root+'/restored');assert.equal(fs.statSync(root+'/restored/Default/site-db').size,70*1024*1024);const fd=fs.openSync(root+'/restored/Default/site-db','r'),data=Buffer.alloc(34);try{fs.readSync(fd,data,0,data.length,0);}finally{fs.closeSync(fd);}assert.equal(data.toString(),'streamed recovery original fixture');console.log('STREAMED_RECOVERY_RESULT '+JSON.stringify({success:true,node:process.versions.node,bytes:70*1024*1024,authenticated:true,streamed:true}));}finally{remove(root);}})().catch(e=>{console.error(e.stack);process.exitCode=1;});

@@ -1,5 +1,6 @@
 'use strict';
 const DRM=require('./browser_drm');
+const Viewport=require('./browser_viewport');
 // Fixed expressions only: no page-provided scripts, selectors or input values.
 // Search open shadow roots and same-origin frames with a fixed work budget.
 const playerLocate=`
@@ -72,7 +73,7 @@ const activityScript=`JSON.stringify((()=>{
     }
     return {playing,audible};
 })())`;
-const snapshot='JSON.stringify((()=>{'+playerLocate+'const media=v||customRoot,rect=media&&media.getBoundingClientRect(),playerMode=!!media&&(!!f||rect.width*rect.height>innerWidth*innerHeight*0.3),buttons=controls,mediaButtons=buttons.filter(b=>/play|pause|wiederg|abspiel|mute|stumm|fullscreen|vollbild|seek|rewind|forward/i.test([b.getAttribute("aria-label"),b.title,b.getAttribute("data-testid")].join(" "))),dedicatedPlayer=!!root&&root!==v&&!/^(BODY|HTML)$/.test(root.tagName),customSiteControls=!!media&&((dedicatedPlayer&&buttons.length>=2)||mediaButtons.length>=2||(mediaButtons.length>0&&!!root.querySelector("input[type=range],[role=slider]"))),hasSiteControls=!!media&&((v&&v.controls)||customSiteControls),elements=deep(document,"video,audio"),playing=elements.some(e=>!e.paused&&!e.ended),audible=elements.some(e=>!e.paused&&!e.ended&&!e.muted&&e.volume>0);return {hasMedia:elements.length>0||!!customRoot,domPlayerAccessible:domPlayerAccessible,playing,audible,fullscreen:!!f&&!!media,customPlayer:!!customRoot,rootTag:root&&root.tagName||"",playerMode,hasSiteControls,customSiteControls,controlCount:buttons.length,paused:v?!!v.paused:true,muted:v?!!v.muted:false,currentTime:v&&Number.isFinite(v.currentTime)?v.currentTime:0,duration:v&&Number.isFinite(v.duration)?v.duration:0};})())';
+const snapshot='JSON.stringify((()=>{'+playerLocate+'const media=v||customRoot,rect=media&&media.getBoundingClientRect(),playerMode=!!media&&(!!f||rect.width*rect.height>innerWidth*innerHeight*0.3),buttons=controls,mediaButtons=buttons.filter(b=>/play|pause|wiederg|abspiel|mute|stumm|fullscreen|vollbild|seek|rewind|forward/i.test([b.getAttribute("aria-label"),b.title,b.getAttribute("data-testid")].join(" "))),dedicatedPlayer=!!root&&root!==v&&!/^(BODY|HTML)$/.test(root.tagName),customSiteControls=!!media&&((dedicatedPlayer&&buttons.length>=2)||mediaButtons.length>=2||(mediaButtons.length>0&&!!root.querySelector("input[type=range],[role=slider]"))),hasSiteControls=!!media&&((v&&v.controls)||customSiteControls),elements=deep(document,"video,audio"),playing=elements.some(e=>!e.paused&&!e.ended),audible=elements.some(e=>!e.paused&&!e.ended&&!e.muted&&e.volume>0);return {hasMedia:elements.length>0||!!customRoot,domPlayerAccessible:domPlayerAccessible,playing,audible,fullscreen:!!f,fullscreenFrame:!!f&&/^(IFRAME|FRAME)$/.test(f.tagName),customPlayer:!!customRoot,rootTag:root&&root.tagName||"",playerMode,hasSiteControls,customSiteControls,controlCount:buttons.length,paused:v?!!v.paused:true,muted:v?!!v.muted:false,currentTime:v&&Number.isFinite(v.currentTime)?v.currentTime:0,duration:v&&Number.isFinite(v.duration)?v.duration:0};})())';
 const ownMediaState='function(){if(!this.isConnected||!/^(VIDEO|AUDIO)$/.test(this.tagName))return null;const playing=!this.paused&&!this.ended;let node=this,customPlayer=false;for(let i=0;node&&i<8;i++){node=node.getRootNode().host;if(node&&/^(DISNEY-WEB-PLAYER|DISNEY-WEB-PLAYER-UI|HIVE-VIDEO)$/.test(node.tagName)){customPlayer=true;break;}}return {playing,audible:playing&&!this.muted&&this.volume>0,paused:!!this.paused,muted:!!this.muted,customPlayer,currentTime:Number.isFinite(this.currentTime)?this.currentTime:0,duration:Number.isFinite(this.duration)?this.duration:0};}';
 // Keep a site's own video/container geometry. Forcing every nested video to
 // absolute 100% dimensions can collapse its zero-height inner layout in native
@@ -97,24 +98,25 @@ const fullscreenScript='(async()=>{'+playerLocate+`
     await target.requestFullscreen();return !!doc.fullscreenElement;
 })()`;
 module.exports={
-    clearAccessibleMedia(session){
+    clearAccessibleMedia(session,objectsOnly){
+        if(!objectsOnly&&this.clearFrameMedia)this.clearFrameMedia(session);
         const cache=this.accessibleMediaCache;if(!cache)return;
         for(const [key,record] of cache){
-            if(session!==undefined&&key!==session)continue;
+            if(session!==undefined&&key!==session&&!(!objectsOnly&&record.frame&&record.frame.mainSession===session))continue;
             cache.delete(key);
             record.pipe.send('Runtime.releaseObjectGroup',{objectGroup:record.group},key,1000).catch(()=>{});
         }
     },
-    async accessibleMediaActivity(context,state,retried){
+    async accessibleMediaActivity(context,state,retried,onlySession){
         const cache=this.accessibleMediaCache||(this.accessibleMediaCache=new Map()),pipe=this.pipe;
         const tabs=this.tabs||[],eligible=state.customPlayer&&state.domPlayerAccessible!==true;
-        const live=record=>context.valid()&&this.pipe===pipe&&cache.get(record.tab.session)===record&&tabs.indexOf(record.tab)>=0;
-        for(const [session,record] of cache)if(record.pipe!==pipe||tabs.indexOf(record.tab)<0)this.clearAccessibleMedia(session);
-        const tab=tabs.find(item=>item.session===context.session);let foreground=cache.get(context.session);
-        if(foreground&&!foreground.objects.length&&!eligible){this.clearAccessibleMedia(context.session);foreground=null;}
+        const live=record=>context.valid()&&this.pipe===pipe&&cache.get(record.session)===record&&tabs.indexOf(record.tab)>=0&&(!record.frame||this.mediaFrameValid(record.frame));
+        for(const [session,record] of cache)if(record.pipe!==pipe||tabs.indexOf(record.tab)<0||record.frame&&!this.mediaFrameValid(record.frame))this.clearAccessibleMedia(session,true);
+        const frame=context.frame,tab=tabs.find(item=>item.session===(frame?frame.mainSession:context.session));let foreground=cache.get(context.session);
+        if(foreground&&!foreground.objects.length&&!eligible){this.clearAccessibleMedia(context.session,true);foreground=null;}
         if(eligible&&tab&&(!foreground||!foreground.objects.length&&Date.now()-foreground.scannedAt>=3000)){
-            if(foreground)this.clearAccessibleMedia(context.session);
-            foreground={tab,pipe,group:'mgu-media-'+(this.accessibleMediaSequence=(this.accessibleMediaSequence||0)+1),objects:[],scannedAt:Date.now(),unknown:false};
+            if(foreground)this.clearAccessibleMedia(context.session,true);
+            foreground={tab,pipe,session:context.session,frame:frame||null,group:'mgu-media-'+(this.accessibleMediaSequence=(this.accessibleMediaSequence||0)+1),objects:[],scannedAt:Date.now(),unknown:false};
             cache.set(context.session,foreground);
             try{
                 // Accessibility exposes media players in closed components.
@@ -133,22 +135,23 @@ module.exports={
             if(!live(foreground))return {playing:false,audible:false,unknown:true};
         }
         const result={playing:false,audible:false,unknown:false};let rescan=false;
-        await Promise.all(Array.from(cache.values()).map(async record=>{
+        await Promise.all(Array.from(cache.values()).filter(record=>onlySession?record.session===context.session:!record.frame).map(async record=>{
             if(!live(record))return;let connected=0;
             if(record.unknown)result.unknown=true;
             await Promise.all(record.objects.map(async objectId=>{
                 try{
-                    const reply=await pipe.send('Runtime.callFunctionOn',{objectId,functionDeclaration:ownMediaState,returnByValue:true},record.tab.session,1500);
+                    const timeout=record.frame?Math.max(1,Math.min(1000,context.deadline?context.deadline-Date.now():1000)):1500;
+                    const reply=await pipe.send('Runtime.callFunctionOn',{objectId,functionDeclaration:ownMediaState,returnByValue:true},record.session,timeout);
                     if(!live(record))return;
                     const own=reply.result&&reply.result.value;
                     if(reply.exceptionDetails||!own){result.unknown=true;return;}
                     connected++;result.playing=result.playing||own.playing===true;result.audible=result.audible||own.audible===true;
-                    if(record.tab.session===context.session&&(!result.primary||own.customPlayer&&!result.primary.customPlayer||own.customPlayer===result.primary.customPlayer&&own.playing&&!result.primary.playing))result.primary=own;
+                    if(record.session===context.session&&(!result.primary||own.customPlayer&&!result.primary.customPlayer||own.customPlayer===result.primary.customPlayer&&own.playing&&!result.primary.playing))result.primary=own;
                 }catch(ignore){if(live(record))result.unknown=true;}
             }));
-            if(live(record)&&record.objects.length&&!connected){this.clearAccessibleMedia(record.tab.session);if(record.tab.session===context.session&&eligible&&!retried)rescan=true;}
+            if(live(record)&&record.objects.length&&!connected){this.clearAccessibleMedia(record.session,true);if(record.session===context.session&&eligible&&!retried)rescan=true;}
         }));
-        if(rescan)return this.accessibleMediaActivity(context,state,true);
+        if(rescan)return this.accessibleMediaActivity(context,state,true,onlySession);
         return result;
     },
     async mediaActivity(context){
@@ -156,25 +159,27 @@ module.exports={
         // other tabs here; avoid a second full DOM scan and CDP roundtrip for
         // the visible player on every activity poll.
         const tabs=(this.tabs||[]).filter(tab=>tab.session!==context.session).slice(0,7),cache=this.tabMediaActivity||(this.tabMediaActivity=new Map()),pipe=this.pipe;
+        let unknown=false;
         await Promise.all(tabs.map(async tab=>{
             try{const r=await pipe.send('Runtime.evaluate',{expression:activityScript,returnByValue:true},tab.session,1500);
-                if(context.valid()&&this.tabs.indexOf(tab)>=0&&!r.exceptionDetails)cache.set(tab.session,JSON.parse(r.result.value));
-            }catch(ignore){}
+                if(context.valid()&&this.tabs.indexOf(tab)>=0){if(r.exceptionDetails)throw Error('Media unavailable');cache.set(tab.session,JSON.parse(r.result.value));}
+            }catch(ignore){if(context.valid()&&this.tabs.indexOf(tab)>=0){cache.delete(tab.session);unknown=true;}}
         }));
         if(!context.valid())throw Error('Webseite hat gewechselt');
         const live=tabs.map(t=>t.session);cache.forEach((value,session)=>{if(live.indexOf(session)<0)cache.delete(session);});
         let playing=false,audible=false;cache.forEach(state=>{playing=playing||!!state.playing;audible=audible||!!state.audible;});
-        return {playing,audible};
+        return {playing,audible,unknown};
     },
     webAudioEvent(event){
-        const contexts=this.webAudioContexts||(this.webAudioContexts=new Map()),p=event.params||{},context=p.context;
+        const contexts=this.webAudioContexts||(this.webAudioContexts=new Map()),p=event.params||{},context=p.context,owner=this.frameOwner&&this.frameOwner(event.sessionId);
         if((event.method==='WebAudio.contextCreated'||event.method==='WebAudio.contextChanged')&&context&&typeof context.contextId==='string'){
-            if(contexts.size<64||contexts.has(context.contextId))contexts.set(context.contextId,{session:event.sessionId,state:context.contextState});
-        }else if(event.method==='WebAudio.contextWillBeDestroyed')contexts.delete(p.contextId);
+            const key=event.sessionId+':'+context.contextId;
+            if(contexts.size<64||contexts.has(key))contexts.set(key,{session:event.sessionId,state:context.contextState,frame:owner&&owner.mainSession!==owner.session?owner:null});
+        }else if(event.method==='WebAudio.contextWillBeDestroyed')contexts.delete(event.sessionId+':'+p.contextId);
     },
     webAudioActivity(){
         let running=0;const sessions=this.tabs?this.tabs.map(t=>t.session):[this.session];
-        if(this.webAudioContexts)this.webAudioContexts.forEach((context,id)=>{if(sessions.indexOf(context.session)<0)this.webAudioContexts.delete(id);else if(context.state==='running')running++;});
+        if(this.webAudioContexts)this.webAudioContexts.forEach((context,id)=>{if(context.frame?!this.mediaFrameValid(context.frame):sessions.indexOf(context.session)<0)this.webAudioContexts.delete(id);else if(context.state==='running')running++;});
         return {running};
     },
     mediaTask(task){
@@ -183,10 +188,11 @@ module.exports={
     },
     focusMediaControl(delta){return this.mediaTask(context=>this._focusMediaControl(delta,context));},
     pressMediaControl(){return this.mediaTask(context=>this._pressMediaControl(context));},
-    mediaContext(){
+    mediaContext(mainOnly){
         const pipe=this.pipe,session=this.session,view=this.pageGeneration;
         const valid=()=>pipe&&this.pipe===pipe&&session&&this.session===session&&view===this.pageGeneration;
-        return {valid,session,view,send:async(method,params,timeout)=>{this.requireAllowed();if(!valid())throw new Error('Webseite hat gewechselt');const result=await pipe.send(method,params,session,timeout);if(!valid())throw new Error('Webseite hat gewechselt');return result;}};
+        const context={valid,session,view,send:async(method,params,timeout)=>{this.requireAllowed();if(!valid())throw new Error('Webseite hat gewechselt');const result=await pipe.send(method,Viewport.inputParams(this.viewport,method,params),session,timeout);if(!valid())throw new Error('Webseite hat gewechselt');return result;}};
+        const frame=!mainOnly&&this.selectedMediaFrame&&this.selectedMediaFrame();return frame?this.childMediaContext(context,frame,true):context;
     },
     async installVideoFit(session){await this.pipe.send('Page.addScriptToEvaluateOnNewDocument',{source:fitScript},session);return this.pipe.send('Runtime.evaluate',{expression:fitScript},session);},
     async mediaCapabilities(){
@@ -198,22 +204,27 @@ module.exports={
     },
     async inspectMedia(){
         if(!this.session||this.mediaQuery)return;
-        const view=this.pageGeneration,session=this.session,pipe=this.pipe,context=this.mediaContext();this.mediaQuery=true;if(this.mediaAXGeneration!==view){this.mediaAXGeneration=view;this.mediaAXStamp=0;this.mediaAXCache=[];}
+        const view=this.pageGeneration,session=this.session,pipe=this.pipe,context=this.mediaContext(true);this.mediaQuery=true;if(this.mediaAXGeneration!==view){this.mediaAXGeneration=view;this.mediaAXStamp=0;this.mediaAXCache=[];}
         try{const r=await context.send('Runtime.evaluate',{expression:snapshot,returnByValue:true},1500);
             if(view!==this.pageGeneration||session!==this.session)return;
             const state=JSON.parse(r.result.value),activity=this.webAudioActivity();
-            const combined=await Promise.all([this.mediaActivity(context),this.accessibleMediaActivity(context,state)]),htmlActivity=combined[0],accessibleActivity=combined[1];
+            const combined=await Promise.all([this.mediaActivity(context),this.accessibleMediaActivity(context,state),this.frameMediaActivity(context,state,snapshot)]),htmlActivity=combined[0],accessibleActivity=combined[1],frameActivity=combined[2];
             if(!context.valid())return;
             if(!state.domPlayerAccessible&&accessibleActivity.primary){for(const name of ['paused','muted','currentTime','duration'])state[name]=accessibleActivity.primary[name];}
-            delete state.domPlayerAccessible;state.activityUnknown=accessibleActivity.unknown;
-            state.webAudioRunning=activity.running;state.playing=state.playing||htmlActivity.playing||accessibleActivity.playing||activity.running>0;state.audible=state.audible||htmlActivity.audible||accessibleActivity.audible||activity.running>0;state.hasMedia=state.hasMedia||state.playing;
+            if(frameActivity.foreground){const child=frameActivity.foreground.state;for(const name of ['playerMode','hasSiteControls','customSiteControls','customPlayer','controlCount','paused','muted','currentTime','duration'])state[name]=child[name];}
+            delete state.domPlayerAccessible;delete state.fullscreenFrame;
+            state.webAudioRunning=activity.running;state.playing=state.playing||htmlActivity.playing||accessibleActivity.playing||frameActivity.playing||activity.running>0;state.audible=state.audible||htmlActivity.audible||accessibleActivity.audible||frameActivity.audible||activity.running>0;state.hasMedia=state.hasMedia||frameActivity.hasMedia||state.playing;
+            state.activityUnknown=!state.audible&&!!(accessibleActivity.unknown||htmlActivity.unknown||frameActivity.unknown);
             if(state.playerMode&&state.customPlayer&&!state.hasSiteControls){
+                const frame=frameActivity.foreground&&frameActivity.foreground.frame,controlsContext=frame?this.childMediaContext(context,frame,false):context;
+                const controlsKey=frame?frame.session+':'+frame.generation:session+':'+view;
+                if(this.mediaAXContext!==controlsKey){this.mediaAXContext=controlsKey;this.mediaAXStamp=0;this.mediaAXCache=[];}
                 const stamp=Date.now();if(!this.mediaAXStamp||stamp-this.mediaAXStamp>3000){
                     this.mediaAXStamp=stamp;
                     // Optional control discovery must not invalidate an actual
                     // media snapshot or the media node's confirmed own flags.
-                    try{const controls=await this.accessibleMediaControls(context);if(!context.valid())return;this.mediaAXCache=controls;}
-                    catch(ignore){if(!context.valid())return;}
+                    try{const controls=await this.accessibleMediaControls(controlsContext);if(!controlsContext.valid())throw Error('Media controls changed');this.mediaAXCache=controls;}
+                    catch(ignore){if(!context.valid())return;if(frame&&!this.mediaFrameValid(frame))throw Error('Embedded media changed');}
                 }
                 const candidates=this.mediaAXCache||[];if(!context.valid())return;
                 state.accessibleControls=candidates.length;
@@ -252,11 +263,14 @@ module.exports={
     async focusAccessibleMediaControl(delta,context){
         context=context||this.mediaContext();const candidates=await this.accessibleMediaControls(context);if(!candidates.length)throw new Error('Video-Steuerung noch nicht auswählbar');
         let index=candidates.findIndex(c=>this.focusedMediaControl&&c.node===this.focusedMediaControl.node);index=index<0?(delta>0?(delta-1)%candidates.length:(delta%candidates.length+candidates.length)%candidates.length):(index+delta%candidates.length+candidates.length)%candidates.length;
-        if(this.focusedMediaObject){try{await context.send('Runtime.callFunctionOn',{objectId:this.focusedMediaObject,functionDeclaration:'function(){this.removeAttribute("data-mgu-media-focus");}'});await context.send('Runtime.releaseObject',{objectId:this.focusedMediaObject});}catch(e){}}
+        const previous=this.focusedMediaObjectInfo;
+        if(this.focusedMediaObject&&previous&&previous.pipe===this.pipe&&this.mediaFrameValid(previous.owner)){
+            try{await previous.pipe.send('Runtime.callFunctionOn',{objectId:this.focusedMediaObject,functionDeclaration:'function(){this.removeAttribute("data-mgu-media-focus");}'},previous.owner.session,1000);if(this.mediaFrameValid(previous.owner))await previous.pipe.send('Runtime.releaseObject',{objectId:this.focusedMediaObject},previous.owner.session,1000);}catch(ignore){}
+        }
         const chosen=candidates[index],resolved=await context.send('DOM.resolveNode',{backendNodeId:chosen.node}),objectId=resolved.object.objectId;
         await context.send('Runtime.callFunctionOn',{objectId,functionDeclaration:'function(){this.focus({preventScroll:true});this.setAttribute("data-mgu-media-focus","");const r=this.getRootNode();if(!r.querySelector("#mgu-control-focus")){const s=document.createElement("style");s.id="mgu-control-focus";s.textContent="[data-mgu-media-focus]{outline:3px solid #78bfff!important;outline-offset:3px!important;}";(r.nodeType===9?r.documentElement:r).appendChild(s);}}'});
         if(!context.valid())throw new Error('Webseite hat gewechselt');
-        this.focusedMediaControl=Object.assign({generation:context.view,session:context.session},chosen);this.focusedMediaObject=objectId;return {focused:true};
+        this.focusedMediaControl=Object.assign({generation:context.view,session:context.session,frame:context.frame||null},chosen);this.focusedMediaObject=objectId;this.focusedMediaObjectInfo={pipe:this.pipe,owner:this.frameOwner&&this.frameOwner(context.session)};return {focused:true};
     },
     async _focusMediaControl(delta,context){
         this.requireAllowed();await this.mediaAction('reveal');
@@ -270,7 +284,7 @@ module.exports={
     },
     async _pressMediaControl(context){
         const selected=this.focusedMediaControl;this.requireAllowed();
-        if(selected&&selected.generation===this.pageGeneration&&selected.session===this.session){
+        if(selected&&selected.generation===this.pageGeneration&&selected.session===context.session&&(!selected.frame||this.mediaFrameValid(selected.frame))){
             const chosen=(await this.accessibleMediaControls(context)).find(c=>c.node===selected.node);if(!chosen)throw new Error('Video-Schaltfläche erneut auswählen');
             const r=await context.send('DOM.resolveNode',{backendNodeId:chosen.node});try{const pressed=await context.send('Runtime.callFunctionOn',{objectId:r.object.objectId,functionDeclaration:'function(){if(!this.isConnected||this.disabled||this.getAttribute("aria-disabled")==="true"||!this.getClientRects().length)return false;if(this.tagName==="INPUT"&&this.type==="range"){this.stepUp();this.dispatchEvent(new Event("input",{bubbles:true}));this.dispatchEvent(new Event("change",{bubbles:true}));}else this.click();return true;}',returnByValue:true,userGesture:true});if(!pressed.result||pressed.result.value!==true)throw new Error('Video-Schaltfläche erneut auswählen');}finally{await context.send('Runtime.releaseObject',{objectId:r.object.objectId}).catch(()=>{});}return {pressed:true};
         }
@@ -281,7 +295,7 @@ module.exports={
         return {pressed:true};
     },
     async mediaAction(action){
-        const context=this.mediaContext();this.requireAllowed();
+        const context=this.mediaContext(action==='exit');this.requireAllowed();
         if(action==='reveal')return context.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:this.viewport.width/2,y:Math.max(1,this.viewport.height-50)});
         const actions={fullscreen:'',play:'await v.play();',pause:'v.pause();',unmute:'v.muted=false;if(v.volume===0)v.volume=1;',toggle:'if(v.paused)await v.play();else v.pause();',back:'v.currentTime=Math.max(0,v.currentTime-10);',forward:'const end=Number.isFinite(v.duration)?v.duration:v.seekable.length?v.seekable.end(v.seekable.length-1):v.currentTime;v.currentTime=Math.max(0,Math.min(Math.max(0,end-0.05),v.currentTime+10));',mute:'v.muted=!v.muted;',exit:'await document.exitFullscreen();'};
         if(!Object.prototype.hasOwnProperty.call(actions,action))throw new Error('Unbekannte Videoaktion');
@@ -292,3 +306,5 @@ module.exports={
         await this.inspectMedia();
     }
 };
+
+Object.assign(module.exports,require('./browser_frame_media'));

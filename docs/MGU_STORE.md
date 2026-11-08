@@ -7,14 +7,51 @@ URLs, byte sizes and SHA-256 values.
 
 | Component | Version | Purpose |
 | --- | --- | --- |
-| `mgu_browser` | 0.15.0 | SDK-free OAP frontend and iDrive UI |
-| `mgu-browser` | 0.15.0 | Native backend, IPC and uplink broker |
+| `mgu_browser` | 0.16.0 | SDK-free OAP frontend and iDrive UI |
+| `mgu-browser` | 0.16.0 | Native backend, IPC and uplink broker |
 | `mgu-browser-engine` | 0.1.0 | Debian Chromium 156.0.8078.79 and private libraries |
 
-The frontend requires runtime 0.15.0, engine 0.1.0, `mgu-uplink` 0.7.3,
+The frontend requires runtime 0.16.0, engine 0.1.0, `mgu-uplink` 0.7.3,
 `mgu-render` 0.6.11 and `mgu-deploy` 0.7.17 or newer. Keep the official Store
 source enabled for the last three. The Store installs dependencies automatically.
 This release targets **ID7 / Linux x86_64**, not ID8 or other architectures.
+
+## Update to 0.16.0: desktop browser functions
+
+Close Browser, refresh Releases and update **both Browser and Browser Runtime
+to 0.16.0**. Engine stays **0.1.0**. Follow any Store reboot request. Existing
+0.13.3 startup recovery and 0.14/0.15 audio, pacing and resource behavior remain.
+
+The normal Chromium/Ozone browser uses its native UA/Client Hints and software
+WebGL. HTTP/custom ports, native input and background networking, website
+dialogs, frame-scoped permissions and phone file delivery extend the projected
+browser. Certificate verification and the Chromium sandbox stay enabled;
+`navigator.webdriver` stays true. These are compatibility changes, not a
+CAPTCHA or protected-streaming guarantee.
+
+Use the Browser file list to retrieve completed downloads through the paired
+phone. Website upload controls open an origin-labelled chooser; select files
+on the phone and explicitly confirm their use. Limits: 32 MiB per download,
+64 MiB retained downloads, 16 MiB per upload, 32 MiB staged uploads, and bounded
+counts. Retained files use the private persistent data directory outside the
+384 MiB work mount. Download cancellation is monitored, so instantaneous disk
+writes may exceed a threshold before cancellation. The phone endpoint uses
+the existing authenticated local connection; no public file service is added.
+That local transport remains HTTP. Downloaded files use private filesystem
+permissions and are separate from the encrypted website-data archives.
+
+Site data has a 64 MiB normal snapshot budget and a 192 MiB streamed encrypted
+recovery budget, including complete database/WAL sets. Atomic replacement can
+temporarily require both old and new archives. A visible storage failure above
+those limits keeps the private unsaved work profile while available; it does
+not make that copy durable through a backend restart or power loss. Website
+data/reset actions also discard retained unsaved profiles. Encrypted URL tab
+restore remembers up to eight GET addresses and the active tab, not forms,
+POST bodies, navigation stacks or running JavaScript. See [TESTING.md](TESTING.md).
+
+The unchanged Debian engine disables its Widevine component updater and ships
+no authorized CDM. Netflix/Disney account playback and physical-headunit
+qualification remain unconfirmed; ordinary browser mode does not change that.
 
 ## Update to 0.15.0: resources, occupied CarLifeMedia and native foreground
 

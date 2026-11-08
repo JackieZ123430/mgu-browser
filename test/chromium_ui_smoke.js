@@ -20,6 +20,15 @@ class FakeBrowser extends EventEmitter{
     async setLocale(locale){this.locale=locale;}
     async navigate(url){this.url=url;if(this.tabs[0])this.tabs.find(t=>t.active).url=url;this.emit('navigation',url);}
     async request(op,args){
+        if(op==='files')return this.filesState||{downloads:[],chooser:null};
+        if(op==='dialogReply'){this.lastDialogReply=args;this.emit('dialog',null);return {handled:true};}
+        if(op==='permissionStatus')return {available:true,origin:'https://q.com',permissions:[{name:'camera',state:'prompt'}]};
+        if(op==='permissionSet'){this.lastPermissionSet=args;return {available:true,origin:args.expectedOrigin,permissions:[{name:args.name,state:args.setting}]};}
+        if(op==='permissionAnswer'){this.lastPermissionAnswer=args;this.emit('permission',{id:args.permissionId,state:'resolved'});return {};}
+        if(op==='cancelFileChooser'){this.emit('fileChooser',null);return {};}
+        if(op==='authReply'){this.lastAuthReply=args;this.emit('auth',null);return {handled:true};}
+        if(op==='findText'){const state={active:true,query:args.query,found:true,caseSensitive:!!(args.options&&args.options.caseSensitive)};this.emit('find',state);return state;}
+        if(op==='clearFind'){this.emit('find',{active:false,query:'',found:false});return {};}
         if(op==='privacyStatus')return this.privacy||{supported:true,locked:false,rememberSessions:false,rememberCache:false,protection:'Fixture protection'};
         if(op==='privacyConfigure'){this.privacy=Object.assign(await this.request('privacyStatus'),args.prefs);return this.privacy;}
         if(op==='vaultList')return [];
@@ -34,7 +43,7 @@ class FakeBrowser extends EventEmitter{
         if(op==='vaultUnlock'){assert.equal(args.password,'w'.repeat(12));this.privacy.locked=false;this.privacy.needsSetup=false;return this.privacy;}
         assert.equal(op,'mediaCapabilities');return {mediaEnabled:true,widevine:true,h264:true,vp9:true,audio:{routeAvailable:!!this.audioRoute,speakerVerified:false}};
     }
-    async text(){}async key(){this.calls.push('web-key');}async tap(){}async scroll(delta){this.scrollDelta=delta;}
+    async text(){}async fillStructured(value){this.structuredValue=value;}async key(){this.calls.push('web-key');}async tap(){}async scroll(delta,options){this.scrollDelta=delta;this.scrollOptions=options;}
     async focusPage(delta){this.calls.push('web-focus');this.focusDelta=delta;}async pressPage(){this.calls.push('web-press');}async leavePage(){this.calls.push('web-leave');}
     async focusMedia(delta){return this.request('mediaFocus',{delta});}async pressMedia(){return this.request('mediaPress');}
     cancelController(){this.calls.push('controller-cancel');return RealBrowserClient.prototype.cancelController.call(this);}
@@ -71,6 +80,7 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     assert(label&&label.y>frequent.y&&label.y<frequent.y+frequent.h,'Translated text and its hit target must share the tab-row offset');
     await press('urlbar');assert(frame.targets.some(t=>t.key==='mode-123'));await press('key-0-0');await press('suffix');await press('done');
     assert.equal(browser.url,'https://q.com/','Address should open with automatic HTTPS');
+    await new Promise(resolve=>setImmediate(resolve));assert(browser.size&&browser.size[0]===1280,'The frontend bootstraps its viewport before the first image arrives');
     browser.emit('frame',{width:1280,height:380,rgba:Buffer.alloc(1280*380*4)});tick();
     browser.emit('navigationState',{url:'https://q.com/',title:'Q',canBack:true,canForward:true});tick();
     await press('back');await press('forward');assert(browser.calls.includes('back')&&browser.calls.includes('forward'));
@@ -198,15 +208,29 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     await press('keyboard-close');browser.emit('input',{editable:false});
     browser.emit('input',{editable:false,adjusting:true});tick();
     assert(frame.textCalls.some(t=>/Turn: change value|Drehen: Wert ändern/.test(t.label)),'Rotary form editing explains how to finish');
+    browser.emit('input',{editable:true,password:false,type:'textarea',multiline:true});tick();await press('text-keyboard');
+    const beforeDone=browser.calls.filter(c=>c==='web-key').length;await press('done');assert.equal(browser.calls.filter(c=>c==='web-key').length,beforeDone,'Dismissing a text keyboard must not submit or insert a newline');
+    browser.emit('input',{editable:true,password:false,type:'date'});tick();await press('text-keyboard');
+    for(const key of ['key-0-1','key-0-9','key-0-1','key-0-5','key-1-7','key-0-0','key-0-0','key-1-7','key-0-9','key-0-7'])await press(key);
+    await press('done');assert.equal(browser.structuredValue,'2026-11-08','Native date keyboard uses the structured input broker');browser.emit('input',{editable:false});
+    browser.emit('dialog',{id:'native-prompt',type:'prompt',origin:'https://q.com',message:'A real site prompt',defaultPrompt:'initial'});tick();assert(frame.targets.some(t=>t.key==='browser-dialog-accept'));assert(!frame.targets.some(t=>t.key==='page-controller'),'A modal cannot send controller input to a blocked page');
+    await press('browser-prompt-edit');await press('key-0-0');await press('done');await press('browser-dialog-accept');assert.deepEqual(browser.lastDialogReply,{dialogId:'native-prompt',accept:true,promptText:'q'});
+    browser.emit('permission',{id:'native-permission',state:'requested',origin:'https://frame.example',embeddingOrigin:'https://q.com',permissions:['camera']});tick();await press('browser-permission-deny');assert.equal(browser.lastPermissionAnswer.permissionId,'native-permission');
+    await press('settings');await press('permissions-settings');await press('browser-permission-0-0');assert.equal(browser.lastPermissionSet.expectedOrigin,'https://q.com');await press('browser-permissions-done');await press('downloads-settings');assert(frame.targets.some(t=>t.key==='browser-files-phone'));await press('browser-files-done');await press('settings-done');
+    browser.emit('fileChooser',{id:'native-chooser',origin:'https://q.com',accept:'.txt',multiple:false,files:[]});tick();assert(frame.targets.some(t=>t.key==='browser-chooser-phone'));await press('browser-chooser-cancel');
+    browser.emit('auth',{id:'native-auth',origin:'http://auth.example',realm:'Synthetic test only',scheme:'basic',isProxy:false});tick();await press('browser-auth-username');await press('key-0-0');await press('done');await press('browser-auth-password');for(let i=0;i<12;i++)await press('key-0-0');assert(!JSON.stringify(frame).includes('q'.repeat(12)),'Authentication password never enters native rendering text');await press('done');await press('browser-auth-submit');assert.deepEqual(browser.lastAuthReply,{authId:'native-auth',username:'q',password:'q'.repeat(12),cancel:false});
+    await press('settings');await press('find-settings');await press('key-0-0');await press('done');assert(frame.targets.some(t=>t.key==='find-next'));assert(frame.targets.some(t=>t.key==='page-controller'),'Search results remain visible in the page');await press('find-next');await press('find-close');assert(!frame.targets.some(t=>t.key==='find-next'));
+    browser.emit('privacy',{supported:true,storage:{state:'failed'}});tick();assert(frame.textCalls.some(t=>/Website-Daten sind nicht|Website data/.test(t.label)),'Unsaved site storage stays visible');browser.emit('privacy',{supported:true,storage:{state:'saved'}});
     const beforeFullscreenCancel=browser.calls.filter(c=>c==='controller-cancel').length;
-    browser.emit('frame',{width:1280,height:380,rgba:Buffer.alloc(1280*380*4)});browser.emit('media',{fullscreen:true,paused:true,currentTime:10,duration:120});tick();
+    browser.emit('frame',{width:1280,height:380,rgba:Buffer.alloc(1280*380*4)});browser.emit('media',{fullscreen:true,playerMode:true,paused:true,currentTime:10,duration:120});tick();
     assert(browser.calls.filter(c=>c==='controller-cancel').length>beforeFullscreenCancel,'Fullscreen transition cancels pending controller work before switching UI');
     await press('video-toggle');await press('video-forward');await press('video-exit');assert(browser.calls.includes('video-toggle')&&browser.calls.includes('video-forward')&&browser.calls.includes('video-exit'));
-    browser.emit('media',{fullscreen:true,hasSiteControls:true,paused:true});tick();
+    browser.emit('media',{fullscreen:true,playerMode:true,hasSiteControls:true,paused:true});tick();
     assert(!frame.targets.some(t=>t.key==='video-toggle'),'Website controls must suppress the native fallback overlay');
     await feed(1,0);await feed(0,1);await feed(0,0);
     assert(browser.calls.includes('mediaFocus')&&browser.calls.includes('mediaPress'),'Fullscreen website controls receive selection and activation');
     browser.emit('media',{fullscreen:false});tick();
+    browser.emit('media',{fullscreen:true,playerMode:false,hasMedia:true});tick();assert(!frame.targets.some(t=>t.key==='video-toggle'),'Generic page fullscreen cannot display video-only controls');const webFocusBefore=browser.calls.filter(c=>c==='web-focus').length;await feed(1,0);assert(browser.calls.filter(c=>c==='web-focus').length>webFocusBefore,'A fullscreen game or form retains normal page controls');browser.emit('media',{fullscreen:false});tick();
     browser.emit('tabSelected',{id:'popup-fixture',url:'',title:'',loading:false,popup:true});
     browser.emit('frame',{width:1280,height:380,rgba:Buffer.alloc(1280*380*4)});tick();
     assert(frame.targets.some(t=>t.key==='page-controller'),'A blank site popup displays web content instead of the browser start page');

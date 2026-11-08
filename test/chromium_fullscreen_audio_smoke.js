@@ -97,7 +97,7 @@ async function syncDetectedRoute(playing,audible,label){
     await browser.clearTab();await until(()=>browser.accessibleMediaCache.size===0,'Navigation releases accessible media objects');
     await value(closedFixture);await until(async()=>await value('video.currentTime>.1'),'Replacement closed player decodes');await value('video.pause();true');await browser.inspectMedia();
     const oldTab=browser.tabs.find(tab=>tab.session===browser.session);await until(async()=>{await browser.inspectMedia();const record=browser.accessibleMediaCache.get(oldTab.session);return record&&record.objects.length>0;},'Replacement target has a cached media handle');
-    await browser.newTab('');await browser.closeTab(oldTab.id);assert.equal(browser.accessibleMediaCache.has(oldTab.session),false,'Closing a target releases accessible media objects');
+    await browser.newTab('');await browser.closeTab(oldTab.id);await until(()=>!browser.tabs.some(tab=>tab.id===oldTab.id),'Old target really closes');assert.equal(browser.accessibleMediaCache.has(oldTab.session),false,'Closing a target releases accessible media objects');
     results.push({stage:'closed-shadow-muted-paused-ended',pcmBytes:0,closedShadowPreserved:true,ownFlags:true,unrelatedDomAudio:true,navigationReleased:true,tabCloseReleased:true});
     console.log('Actual video/PCM continuity: '+JSON.stringify({codec:browser.performance.codec,stages:results}));
 }finally{browser.destroy();await browser.closing;assert.equal(path.dirname(dir),os.tmpdir());if(fs.rmSync)fs.rmSync(dir,{recursive:true,force:true});else cp.execFileSync('/bin/rm',['-rf','--',dir]);}})().catch(error=>{console.error(error.stack);console.error('Fixture diagnostics (last 8 KiB):'+diagnostics);process.exitCode=1;});

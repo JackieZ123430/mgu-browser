@@ -17,7 +17,7 @@ import tempfile
 from native_build import build_additions
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '0.15.0'
+VERSION = '0.16.0'
 ENGINE_VERSION = '0.1.0'
 ENGINE_PREFIX = '/var/opt/mgu-browser-engine/versions/' + ENGINE_VERSION + '/engine'
 NATIVE_INPUTS = ('backend_launch.c', 'browser_launch.c', 'peer_uid.c', 'jpeg_frame.c')

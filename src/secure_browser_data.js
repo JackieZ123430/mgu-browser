@@ -1,5 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),crypto=require('crypto'),zlib=require('zlib'),cp=require('child_process');
+const Recovery=require('./browser_recovery');
+const URLPolicy=require('./url_policy');
 const URL=require('url').URL;
 const LIMIT=64*1024*1024;
 const later=()=>new Promise(resolve=>setImmediate(resolve));
@@ -24,13 +26,12 @@ function readFile(file,max){
 }
 function atomic(file,data){
     const tmp=file+'.'+crypto.randomBytes(8).toString('hex')+'.partial';
-    fs.writeFileSync(tmp,data,{mode:0o600,flag:'wx'});fs.renameSync(tmp,file);
+    let fd;try{fd=fs.openSync(tmp,'wx',0o600);fs.writeFileSync(fd,data);fs.fsyncSync(fd);fs.closeSync(fd);fd=null;fs.renameSync(tmp,file);syncDirectory(path.dirname(file));}finally{if(fd!==undefined&&fd!==null)fs.closeSync(fd);try{fs.unlinkSync(tmp);}catch(e){if(e.code!=='ENOENT')throw e;}}
 }
-function atomicAsync(file,data){
+function syncDirectory(directory){if(process.platform==='win32')return;const fd=fs.openSync(directory,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}}
+async function atomicAsync(file,data){
     const tmp=file+'.'+crypto.randomBytes(8).toString('hex')+'.partial';
-    return new Promise((resolve,reject)=>fs.writeFile(tmp,data,{mode:0o600,flag:'wx'},e=>{
-        if(e)return reject(e);fs.rename(tmp,file,error=>{if(error){fs.unlink(tmp,()=>{});reject(error);}else resolve();});
-    }));
+    let fd;try{await new Promise((resolve,reject)=>fs.writeFile(tmp,data,{mode:0o600,flag:'wx'},e=>e?reject(e):resolve()));fd=await new Promise((resolve,reject)=>fs.open(tmp,'r+', (e,value)=>e?reject(e):resolve(value)));await new Promise((resolve,reject)=>fs.fsync(fd,e=>e?reject(e):resolve()));fs.closeSync(fd);fd=null;await new Promise((resolve,reject)=>fs.rename(tmp,file,e=>e?reject(e):resolve()));syncDirectory(path.dirname(file));}finally{if(fd!==undefined&&fd!==null)fs.closeSync(fd);try{fs.unlinkSync(tmp);}catch(e){if(e.code!=='ENOENT')throw e;}}
 }
 function dpapi(helper){
     return (operation,data)=>new Promise((resolve,reject)=>{
@@ -44,7 +45,7 @@ function dpapi(helper){
     });
 }
 const isCache=name=>/(^|\/)(Cache|Code Cache|GPUCache|DawnCache|ShaderCache|GrShaderCache)(\/|$)/.test(name);
-const excluded=name=>/(^|\/)(Singleton[^/]*|Crashpad|BrowserMetrics[^/]*|History(?:-journal)?|Visited Links|Top Sites(?:-journal)?|Sessions|Login Data(?:-journal)?|Safe Browsing[^/]*|mgu-audio|WidevineCdm)(\/|$)/.test(name);
+const excluded=name=>/(^|\/)(Singleton[^/]*|Crashpad|BrowserMetrics[^/]*|History(?:-(?:journal|wal|shm))?|Visited Links|Top Sites(?:-(?:journal|wal|shm))?|Sessions|Login Data(?:-(?:journal|wal|shm))?|Safe Browsing[^/]*|mgu-audio|WidevineCdm)(\/|$)/.test(name);
 function validName(name){return !!name&&name.length<2048&&!name.includes('\\')&&!name.includes('\0')&&!name.startsWith('/')&&!name.split('/').some(p=>!p||p==='.'||p==='..'||p.includes(':'));}
 function pack(entries){
     const chunks=[];let total=0;
@@ -63,7 +64,7 @@ class SecureBrowserData{
         // and service account so "stay signed in" and cookie consent survive a
         // restart without typing the master password on every start.
         this.directory=directory;this.protector=protector;this.key=null;this.siteKey=null;this.supported=false;this.prefs={rememberSessions:true,rememberCache:false};this.skipCapture=false;
-        this.operation=Promise.resolve();this.error='';
+        this.operation=Promise.resolve();this.error='';this.storage={state:'never',code:'',bytes:0,limit:LIMIT,at:0,recovered:false,archive:'auto'};
         this.ready=this.initialize().catch(()=>{this.supported=false;this.error='Geschützten Speicher und Dateirechte prüfen';});
     }
     task(fn){const work=this.operation.catch(()=>{}).then(fn);this.operation=work.catch(()=>{});return work;}
@@ -73,8 +74,13 @@ class SecureBrowserData{
     saveLogin(origin,username,password){return this.task(()=>this._saveLogin(origin,username,password));}
     removeLogin(id){return this.task(()=>this._removeLogin(id));}
     capture(profile){return this.task(()=>this._capture(profile));}
+    captureRecovery(profile){return this.task(()=>this._capture(profile,true));}
+    saveTabs(tabs,active){const snapshot=Array.isArray(tabs)?tabs.slice(0,8).map(t=>({id:t.id,url:t.url})):[];return this.task(async()=>{await this.ready;if(!this.siteKey||!this.prefs.rememberSessions)return false;const kept=snapshot.filter(t=>t.url===''||URLPolicy.allowed(t.url)),selected=Math.max(0,kept.findIndex(t=>t.id===active));const data=Buffer.from(JSON.stringify({version:1,active:selected,tabs:kept.map(t=>t.url)}));if(data.length>40960)throw new Error('Tab storage limit exceeded');await atomicAsync(path.join(this.directory,'tabs.bin'),await this.cryptAsync('tabs',data,true,this.siteKey));return true;});}
+    async loadTabs(){await this.operation;await this.ready;if(!this.siteKey||!this.prefs.rememberSessions)return null;const file=path.join(this.directory,'tabs.bin');if(!fs.existsSync(file))return null;try{const data=JSON.parse((await this.cryptAsync('tabs',await readAsync(file,41024),false,this.siteKey)).toString('utf8'));if(!data||data.version!==1||!Array.isArray(data.tabs)||data.tabs.length>8||!Number.isInteger(data.active))throw new Error('Invalid saved tabs');const kept=data.tabs.map((url,index)=>({url,index})).filter(t=>t.url===''||URLPolicy.allowed(t.url));return kept.length?{tabs:kept.map(t=>t.url),active:Math.max(0,kept.findIndex(t=>t.index===data.active))}:null;}catch(e){this.error='Gespeicherte Tabs waren beschädigt und wurden verworfen';try{fs.renameSync(file,file+'.damaged');}catch(ignore){}return null;}}
     async initialize(){
         privateDirectory(this.directory);
+        for(const name of fs.readdirSync(this.directory))if(/^(?:[a-z-]+\.bin|preferences\.json|storage-status\.json)\.[a-f0-9]{16}\.partial$/.test(name)){try{const p=path.join(this.directory,name),s=fs.lstatSync(p);if(s.isFile()&&!s.isSymbolicLink()&&s.nlink===1&&(!process.getuid||s.uid===process.getuid()))fs.unlinkSync(p);}catch(e){}}
+        try{const saved=JSON.parse(readFile(path.join(this.directory,'storage-status.json'),4096).toString('utf8'));if(saved&&['saved','failed','recovery','pending'].includes(saved.state))this.storage=Object.assign(this.storage,{state:saved.state,code:String(saved.code||'').slice(0,40),bytes:Math.max(0,Number(saved.bytes)||0),at:Math.max(0,Number(saved.at)||0),recovered:!!saved.recovered,cacheCleared:!!saved.cacheCleared,archive:['normal','recovery'].includes(saved.archive)?saved.archive:saved.state==='saved'?'normal':saved.state==='recovery'?'recovery':'auto'});if(this.storage.state==='pending'){this.storage.state='failed';this.storage.code='interrupted';}}catch(e){}
         if(!this.protector){if(fs.existsSync(path.join(this.directory,'key.dpapi')))throw new Error('Existing Windows protection requires its helper');this.siteKey=this.deviceKey();this.supported=true;this.loadPreferences();return;}
         const keyFile=path.join(this.directory,'key.dpapi');
         if(fs.existsSync(keyFile))this.key=await this.protector('unprotect',readFile(keyFile,16384));
@@ -121,13 +127,14 @@ class SecureBrowserData{
     }
     read(purpose,key){const file=path.join(this.directory,purpose+'.bin');return fs.existsSync(file)?this.open(purpose,readFile(file,LIMIT+64),key):null;}
     write(purpose,data,key){atomic(path.join(this.directory,purpose+'.bin'),this.seal(purpose,data,key));}
-    async status(){await this.ready;return {supported:this.supported,error:this.error,locked:!this.key,siteStorage:!!this.siteKey,needsSetup:!this.protector&&!fs.existsSync(path.join(this.directory,'passphrase-key.bin')),rememberSessions:this.prefs.rememberSessions,rememberCache:this.prefs.rememberCache,protection:this.protector?'Windows DPAPI + AES-256-GCM':'Masterpasswort + AES-256-GCM'};}
+    async status(){await this.ready;return {supported:this.supported,error:this.error||(this.storage.state==='failed'?'Website-Daten konnten nicht gespeichert werden; letzter gesicherter Stand bleibt erhalten':''),storage:Object.assign({recoveryLimit:Recovery.limit},this.storage),locked:!this.key,siteStorage:!!this.siteKey,needsSetup:!this.protector&&!fs.existsSync(path.join(this.directory,'passphrase-key.bin')),rememberSessions:this.prefs.rememberSessions,rememberCache:this.prefs.rememberCache,protection:this.protector?'Windows DPAPI + AES-256-GCM':'Masterpasswort + AES-256-GCM'};}
+    storageStatus(state,code,bytes,recovered){this.storage={state,code:code||'',bytes:bytes||0,limit:LIMIT,at:Date.now(),recovered:!!recovered,cacheCleared:(state==='failed'||state==='pending')&&!!this.storage.cacheCleared,archive:state==='saved'?'normal':state==='recovery'?'recovery':this.storage.archive||'auto'};try{atomic(path.join(this.directory,'storage-status.json'),JSON.stringify(this.storage));}catch(e){if(state!=='failed'){this.storage.state='failed';this.storage.code='status-write-failed';throw e;}}return this.storage;}
     async _configure(prefs){
         await this.requireSiteStorage();const next=Object.assign({},this.prefs);for(const name of ['rememberSessions','rememberCache'])if(typeof prefs[name]==='boolean')next[name]=prefs[name];
         const entries=await this.archiveAsync().catch(()=>[]);this.prefs=next;atomic(path.join(this.directory,'preferences.json'),JSON.stringify(Object.assign({version:2},this.prefs)));
-        await this.saveArchiveAsync(entries.filter(e=>this.keep(e.name)));if(!this.prefs.rememberSessions)this.removeFile('cookies.bin');return this.status();
+        await this.saveArchiveAsync(entries.filter(e=>this.keep(e.name)));if(!this.prefs.rememberSessions){for(const name of ['cookies','recovery','tabs']){this.removeFile(name+'.bin');this.removeFile(name+'.bin.damaged');}this.storageStatus('saved','',0,false);}else if(!this.prefs.rememberCache&&fs.existsSync(path.join(this.directory,'recovery.bin'))){this.storage.cacheCleared=true;atomic(path.join(this.directory,'storage-status.json'),JSON.stringify(this.storage));}return this.status();
     }
-    removeFile(name){const file=path.join(this.directory,name);if(!fs.existsSync(file))return;const s=fs.lstatSync(file);if(!s.isFile()||s.isSymbolicLink()||s.nlink!==1||(process.getuid&&s.uid!==process.getuid()))throw new Error('Unsafe data file');fs.unlinkSync(file);}
+    removeFile(name){const file=path.join(this.directory,name);if(!fs.existsSync(file))return;const s=fs.lstatSync(file);if(!s.isFile()||s.isSymbolicLink()||s.nlink!==1||(process.getuid&&s.uid!==process.getuid()))throw new Error('Unsafe data file');fs.unlinkSync(file);syncDirectory(this.directory);}
     // Cookie snapshots come from Chromium's Storage.getCookies. They are taken
     // while the browser runs, so a power loss or forced stop keeps the last
     // consent and login state even when the profile files cannot be captured.
@@ -173,13 +180,14 @@ class SecureBrowserData{
         await atomicAsync(path.join(this.directory,'sessions.bin'),await this.cryptAsync('sessions',compressed,true,this.siteKey));
     }
     async filterArchive(kind){
-        await this.requireSiteStorage();if(kind==='sites')this.removeFile('cookies.bin');
-        await this.saveArchiveAsync((await this.archiveAsync().catch(()=>[])).filter(e=>this.keep(e.name)&&!(kind==='cache'&&isCache(e.name))&&!(kind==='sites'&&!isCache(e.name))));
+        await this.requireSiteStorage();if(kind==='sites'){for(const name of ['cookies','recovery','tabs']){this.removeFile(name+'.bin');this.removeFile(name+'.bin.damaged');}this.removeFile('sessions.bin.damaged');}else if(fs.existsSync(path.join(this.directory,'recovery.bin'))){this.storage.cacheCleared=true;atomic(path.join(this.directory,'storage-status.json'),JSON.stringify(this.storage));}
+        await this.saveArchiveAsync((await this.archiveAsync().catch(()=>[])).filter(e=>this.keep(e.name)&&!(kind==='cache'&&isCache(e.name))&&!(kind==='sites'&&!isCache(e.name))));if(kind==='sites')this.storageStatus('saved','',0,false);
     }
-    resetSessions(){return this.task(async()=>{await this.requireSiteStorage();this.removeFile('sessions.bin');this.removeFile('cookies.bin');return this.status();});}
+    resetSessions(){return this.task(async()=>{await this.requireSiteStorage();for(const name of ['sessions','cookies','recovery','tabs']){this.removeFile(name+'.bin');this.removeFile(name+'.bin.damaged');}this.storageStatus('saved','',0,false);return this.status();});}
     async restore(profile,isAllowed){
         await this.operation;await this.ready;if(!this.supported||!this.siteKey)return;privateDirectory(profile);
         if(!this.prefs.rememberSessions&&!this.prefs.rememberCache)return;
+        const recovery=path.join(this.directory,'recovery.bin');if(fs.existsSync(recovery)&&this.storage.archive!=='normal'){try{await Recovery.restore(recovery,profile,this.siteKey,name=>this.keep(name)&&!(this.storage.cacheCleared&&isCache(name)),isAllowed);return;}catch(e){if(isAllowed&&!isAllowed())throw e;this.error='Wiederherstellung war beschädigt; letzter gesicherter Stand wurde geladen';try{fs.renameSync(recovery,recovery+'.damaged');}catch(ignore){}}}
         let entries;
         try{entries=(await this.archiveAsync()).filter(e=>this.keep(e.name));}
         catch(e){
@@ -196,20 +204,22 @@ class SecureBrowserData{
             await new Promise((resolve,reject)=>fs.writeFile(path.join(parent,parts[parts.length-1]),item.data,{flag:'wx',mode:0o600},e=>e?reject(e):resolve()));
         }
     }
-    async _capture(profile){
-        await this.ready;if(this.skipCapture){this.skipCapture=false;return;}if(!this.supported||!this.siteKey||(!this.prefs.rememberSessions&&!this.prefs.rememberCache))return;
-        privateDirectory(profile);const entries=[];let total=0;
+    async _capture(profile,recovered){
+        await this.ready;if(this.skipCapture){this.skipCapture=false;return {skipped:true};}if(!this.supported||!this.siteKey||(!this.prefs.rememberSessions&&!this.prefs.rememberCache))return {skipped:true};
+        let total=0,files=[],scanned=false;try{this.storageStatus('pending','saving',0,recovered);privateDirectory(profile);const entries=[];
         let records=0;const walk=async(directory,prefix)=>{for(const name of fs.readdirSync(directory)){
             if(++records>12000)throw new Error('Session file limit exceeded');if(records%32===0)await later();
             const relative=prefix+name;if(!validName(relative)||excluded(relative))continue;
             const file=path.join(directory,name),s=fs.lstatSync(file);if(s.isSymbolicLink()||s.nlink!==1&&!s.isDirectory())continue;
             if(s.isDirectory())await walk(file,relative+'/');else if(s.isFile()&&this.keep(relative)){
-                if(s.size>16*1024*1024||total+s.size>LIMIT-1024*1024){if(isCache(relative))continue;throw new Error('Session storage limit exceeded');}
-                const data=await readAsync(file,16*1024*1024);total+=data.length;entries.push({name:relative,data});
+                files.push({file,name:relative,size:s.size,cache:isCache(relative)});
             }
-        }};await walk(profile,'');await this.saveArchiveAsync(entries);
+        }};await walk(profile,'');scanned=true;files.sort((a,b)=>Number(a.cache)-Number(b.cache));const required=files.filter(item=>!item.cache).reduce((n,item)=>n+item.size+6+Buffer.byteLength(item.name),0);if(recovered||required>LIMIT-1024*1024){total=required;if(required>Recovery.limit-1024*1024)throw new Error('Recovery storage limit exceeded');const selected=files.filter(item=>!item.cache);for(const item of files.filter(x=>x.cache)){const size=item.size+6+Buffer.byteLength(item.name);if(total+size<=Recovery.limit-1024*1024){selected.push(item);total+=size;}}await Recovery.write(path.join(this.directory,'recovery.bin'),selected,this.siteKey);this.storageStatus('recovery',recovered?'engine-exit':'normal-quota',total,recovered);return {saved:true,recovery:true,bytes:total,recovered:!!recovered};}
+        for(const item of files){const size=item.size+6+Buffer.byteLength(item.name);if(total+size>LIMIT-1024*1024){if(item.cache)continue;throw new Error('Session storage limit exceeded');}const data=await readAsync(item.file,LIMIT);total+=size;entries.push({name:item.name,data});}await this.saveArchiveAsync(entries);this.storageStatus('saved','',total,recovered);this.removeFile('recovery.bin');return {saved:true,bytes:total,recovered:!!recovered};}
+        catch(e){if(scanned&&files.length&&total<=Recovery.limit-1024*1024&&!/file limit|Recovery storage limit/.test(e.message)){try{total=await Recovery.write(path.join(this.directory,'recovery.bin'),files.filter(item=>!item.cache),this.siteKey);this.storageStatus('recovery','snapshot-write-failed',total,recovered);return {saved:true,recovery:true,bytes:total,recovered:!!recovered};}catch(ignore){}}this.storageStatus('failed',/limit exceeded/.test(e.message)?'quota':'write-failed',total,recovered);throw e;}
     }
     async _clear(kind){if(!['cache','sites'].includes(kind))throw new Error('Unknown data category');return this.filterArchive(kind);}
+    async clearProfileCache(profile){privateDirectory(profile);const remove=async(file)=>{const s=fs.lstatSync(file);if(s.isDirectory()&&!s.isSymbolicLink()){for(const name of fs.readdirSync(file))await remove(path.join(file,name));fs.rmdirSync(file);}else fs.unlinkSync(file);};const walk=async(folder,prefix)=>{for(const name of fs.readdirSync(folder)){const file=path.join(folder,name),relative=prefix+name,s=fs.lstatSync(file);if(isCache(relative)){await remove(file);}else if(s.isDirectory()&&!s.isSymbolicLink())await walk(file,relative+'/');}await later();};await walk(profile,'');}
     async entries(){await this.requireReady();const data=this.read('vault');const list=data?JSON.parse(data.toString('utf8')):[];if(!Array.isArray(list)||list.length>80)throw new Error('Invalid password store');return list;}
     async listLogins(){const metadata=require('./browser_metadata');return (await this.entries()).map(e=>({id:e.id,origin:metadata.text(e.origin,512),username:metadata.text(e.username,128)}));}
     async _saveLogin(origin,username,password){

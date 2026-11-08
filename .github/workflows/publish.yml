@@ -6,13 +6,13 @@ on:
     # without the final publish step (release rehearsal).
     branches: [main, 'claude/**']
     paths:
-      - release/0.15.0/**
+      - release/0.16.0/**
   workflow_dispatch:
     inputs:
       version:
         description: Audited release metadata version
         required: true
-        default: '0.15.0'
+        default: '0.16.0'
 
 permissions:
   contents: read
@@ -25,11 +25,11 @@ jobs:
   publish:
     if: github.repository == 'pllanaio/mgu-browser'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: write
     env:
-      RELEASE_VERSION: ${{ inputs.version || '0.15.0' }}
+      RELEASE_VERSION: ${{ inputs.version || '0.16.0' }}
     steps:
       - name: Check out publication controls
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -123,13 +123,14 @@ jobs:
           python3 test/runtime_service_smoke.py
           --runtime "$RUNNER_TEMP/packages/mgu-browser@$RELEASE_VERSION.tgz"
           --engine "$RUNNER_TEMP/base/mgu-browser-engine@0.1.0.tgz"
-      - name: Check ffmpeg and verify packaged fullscreen pixels and real-time PCM with Node 8
+      - name: Check tools and verify exact packaged media and desktop browser with Node 8
         working-directory: source
         run: |
           if ! command -v ffmpeg >/dev/null 2>&1; then
             sudo apt-get update
             sudo apt-get install --yes --no-install-recommends ffmpeg
           fi
+          command -v openssl
           python3 test/fullscreen_audio_package_smoke.py --runtime "$RUNNER_TEMP/packages/mgu-browser@$RELEASE_VERSION.tgz" --engine "$RUNNER_TEMP/base/mgu-browser-engine@0.1.0.tgz"
       - name: Keep rehearsal packages
         if: github.ref != 'refs/heads/main'

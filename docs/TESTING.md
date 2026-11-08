@@ -1,5 +1,85 @@
 # Teststand
 
+## 0.16.0 — Desktop-Kompatibilität, Dateien und Wiederherstellung
+
+Der Browser läuft mit der unveränderten Engine 0.1.0 im normalen Chromium-
+Browsermodus auf dem eingebauten Ozone-Offscreen-Display. Der Identitätstest
+vergleicht echte verwaltete Tabs mit einem unabhängig erzeugten nativen Target:
+User-Agent, UA-CH einschließlich GREASE/Vollversion, Sprache und den nativen
+virtuellen Ozone-Bildschirm. Das native Fenster beziehungsweise der Viewport
+wird getrennt vergrößert; `screen.width/height` darf dabei wie bei einem festen
+Desktop-Monitor unverändert bleiben. WebGL zeichnet echte Farbwerte und liest sie zurück.
+`navigator.webdriver` bleibt wahr; weder Windows-/Chrome-Identitäten noch
+CAPTCHA-Erfolg werden erfunden. Der vorhandene Software-Renderer bleibt ein
+Software-Renderer, kein Fahrzeug-GPU-Nachweis.
+
+| Prüfung | Tatsächlicher Umfang |
+| --- | --- |
+| Native Eingabe | Echte Chromium-Ereignisse für Formulare, Auswahllisten, Datum/Zeit, Modifikatoren, Auswahl, Zwischenablage, Drag, Wheel und blockweise große Texte; sichtbare Folgewerte statt bloßer API-Antworten. |
+| Rahmen/PDF-Eingabe | Fokus-/Passwortmetadaten in verschachtelten Shadow Roots und eigenen Cross-Site-Renderern; ein selbst erzeugtes PDF prüft native Tab-Fokusbewegung mit sichtbaren Pixeländerungen, keinen PDF-Editor oder Druckdialog. |
+| Telefon-Oberfläche | Echte Chromium-Darstellung mit 414 Pixeln Breite, Eingabe-/Strukturfeldaktionen, bedingte Vorschaubild-Anfragen und keine Skriptfehler auf eigenen lokalen Testendpunkten; dies ist kein physischer Telefontest. |
+| Dialoge | Alert/Confirm/Prompt, beforeunload bleiben/verlassen, normales Tab-Schließen und abgelehnter letzter Tab; kein vorzeitiges Löschen von Fokus, Dateien oder ursprünglicher Seite. |
+| Verbindung eines Tabs | Ein getrenntes DevTools-Handle wird am selben WebContents ohne Neuladen ersetzt; Entwurf und beforeunload bleiben erhalten. Leere tatsächliche Download-Pop-ups werden entfernt, beliebige per JavaScript beschriebene Blank-Pop-ups bleiben bestehen. |
+| HTTP-Anmeldung | Eigene Basic-/Digest-Challenges, falsche/abgebrochene Antwort, Realm-/Tab-/Navigationswechsel und gestoppte Antworten; ein tatsächlich isolierter Same-Site-Frame erhält eine native Challenge. Cross-Site-Prompts, die Chromium mit 401 ablehnt, werden nicht freigeschaltet. Der Test wartet ausdrücklich elf Sekunden auf eine menschliche Antwort. |
+| Große Uploads | Eigene native 15-MiB-POST-/16-MiB-FormData-Übertragungen und 15-MiB-HTTP-Auth-Wiederholung mit Byte-/SHA-256-Vergleich am Server; doppelte CDP-Bodyfelder werden entfernt, nicht der eigentliche Request. Das 12-MiB-Protokolllimit bleibt bestehen und Bilder/Heartbeat laufen weiter. |
+| Navigation | Eigene HTTP-Seiten/Ports und native Hintergrundabläufe; ungültiges TLS-Zertifikat bleibt abgelehnt. |
+| Berechtigungen | Native Zustände und echte Ablehnung/Freigabe in isolierten Testprozessen; Quelle und einbettende Website einschließlich getrennten Cross-Site-Renderern werden geprüft. Nicht vorhandene Geräte liefern native Fehler. |
+| Dateien | Echter Blob-Download, gelieferte Bytes, persistenter Download, explizite Dateiauswahl nach gestreamtem Upload, echte FileReader-Inhalte, Cross-Site-Frame sowie Ablauf nach Navigation; IDs, Accept/Mehrfachauswahl, Größen, Abbruch und Symlink-Ablehnung in Regressionen. |
+| Website-Daten | localStorage, IndexedDB, CacheStorage und Service-Worker-Registrierung nach sauberem Neustart und getöteter Chromium-Prozessgruppe; Dateischreiber müssen vorher beendet sein. |
+| Große Wiederherstellung | 20-MiB-Datei im normalen Archiv, 70-MiB-Streaming mit Node 8.16.2, vollständiger DB/WAL-Satz, authentifizierte Entschlüsselung, unveränderter letzter guter Snapshot; über 192 MiB sichtbarer Fehler und erhaltene private Arbeitssitzung. |
+| Löschung und Tabs | Cache-Löschung auch bei nachfolgend fehlgeschlagener Sicherung; Löschen der zurückbehaltenen Sitzung; verschlüsselte acht GET-URLs/aktiver Tab, explizite Startadresse und deaktiviertes Sitzungsmerken. |
+| Seitensuche | Treffer, Groß-/Kleinschreibung, Weiter/Zurück in Dokument, offenen/geschlossenen Shadow Roots und eigenen Frames; bestehende Auswahl und Scrollposition werden erhalten. |
+| Nativer Zoom | 100→125→150→125→100 % über Chromiums eigene Zoomfunktion; physische Bilder, Text-/Kantenvergleich, echte Haupt-/OOPIF-Treffer, CSS-Wheel-Deltas, Vollbild und Tab-Wechsel. Keine gestreckte niedrigauflösende Emulationsfläche. |
+
+Die Auth-Prüfung protokolliert außerdem auf einer eigenen Seite mit 5000 DOM-
+Knoten und 60 Ressourcen die Ladezeiten mit/ohne Request-Broker. Im lokalen
+Hostlauf lagen die Mediane bei 50,1/71,3 ms; die zusätzliche Interception ist
+nicht kostenlos und diese Werte sind keine Fahrzeug- oder Anbieter-Ladezeiten.
+Der lokale Zoomlauf zeigte 30,48/30,82 fps bei 100/150 % und einen nativen
+Farb-/Kantenvergleich ohne Differenz. Auch dies sind begrenzte lokale Messungen,
+keine allgemeine Bildraten- oder Schärfequalifikation für jede Headunit.
+
+Die lokalen Website-Recovery-Tests warten sechs Sekunden auf Chromiums eigene
+localStorage-Schreibphase. Sie sichern keine Änderungen, die nur im Speicher
+eines Renderers existierten. Ein Engine-SIGKILL ist kein Nachweis für einen
+hart getöteten Backend-Prozess, physischen Stromverlust oder jede mögliche
+beschädigte Website-Datenbank. Bei 64 MiB Normalbudget wird nicht mehr jede
+Datei über 16 MiB pauschal verworfen. Stattdessen bleibt ein vollständiger Satz
+innerhalb des Budgets oder wird bis zum 192-MiB-Recovery-Budget gestreamt.
+Oberhalb der Grenze beziehungsweise bei Schreibfehlern wird kein Erfolg
+behauptet. Die private noch vorhandene Arbeitssitzung bleibt nutzbar, ist aber
+ohne erfolgreiche Sicherung nicht über Backend-Neustart hinweg geschützt.
+
+Die bestehenden fünf exakten Paketprüfungen für PCM/Video, Site-Vollbild,
+Controller, native Identität und Cookie-Checkpoints bleiben erhalten.
+Der Release-Treiber ergänzt 19 portable Node-8-Prüfungen (24 Skripte insgesamt) und
+verwendet das tatsächlich extrahierte Backend, JPEG-Modul und die immutable
+Engine im isolierten Container. SDK-UI-Prüfungen unter `en-GB` und `de-DE`,
+Store-Validierung und die vier vollständigen Root-/IPC-/Chromium-Starts bleiben
+verpflichtend. Endgültige Anzahlen, Quellcommit und Resultate gehören nach
+abschließendem Freeze in den Release-Bericht; dieses Kapitel ersetzt keinen
+noch ausstehenden finalen Paket-/CI-Lauf.
+
+Gezielte Wiederholung mit dem Quell-Backend oder `MGU_BROWSER_BACKEND` auf das
+extrahierte Paket und `MGU_BROWSER_BINARY` auf dessen Engine-Launcher:
+
+```sh
+node --test test/browser_files.test.js test/browser_recovery.test.js test/browser_tab_state.test.js
+node test/chromium_files_smoke.js
+node test/chromium_site_recovery_smoke.js
+node test/chromium_tab_restore_smoke.js
+node test/browser_recovery_node8_smoke.js
+```
+
+Downloads/Uploads bleiben mengenbegrenzt; CDP-Abbruch und die 200-ms-Dateiprüfung
+sind keine harte Dateisystem-Quote. Dateien liegen privat, aber außerhalb des
+verschlüsselten Website-Archivs. Der gekoppelte lokale Telefontransport bleibt
+HTTP. Physische Headunit, BMW-Lautsprecher, Anbieter-Kontoanmeldung/-Wiedergabe
+und ein autorisiert geladenes Widevine-CDM sind weiterhin nicht qualifiziert.
+Die Debian-Engine deaktiviert ihren Widevine-Updater unverändert. Ein echtes
+Google-Ergebnis aus dem vorherigen Lauf war HTTP429/Netzwerk-CAPTCHA; diese
+Desktop-Kompatibilitätsänderung verspricht keine serverseitige Freigabe.
+
 ## 0.15.0 — Ressourcen, Audioübernahme und SDK-Vordergrund
 
 Die Backend-Unit hebt ihre eigenen RAM- und Taskobergrenzen mit

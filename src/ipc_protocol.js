@@ -1,6 +1,6 @@
 'use strict';
 const EventEmitter=require('events');
-const MAX_JSON=64*1024;
+const MAX_JSON=512*1024;
 class Channel extends EventEmitter {
     constructor(socket){super();this.socket=socket;this.header=Buffer.alloc(8);this.headerAt=0;this.body=null;this.bodyAt=0;socket.on('data',b=>this.receive(b));socket.on('close',()=>this.emit('closed'));socket.on('error',()=>{});}
     receive(data){

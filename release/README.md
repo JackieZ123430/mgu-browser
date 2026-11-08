@@ -8,7 +8,7 @@ Install compiler dependencies separately:
 sudo apt-get install python3 nodejs libnode-dev gcc musl-tools patchelf \
   chromium chromium-common chromium-sandbox fonts-dejavu-core libjpeg62-turbo-dev
 MGU_OUT=/path/to/empty-frontend-output python3 tools/build_store.py \
-  --app mgu_browser --version 0.15.0 --source apps/mgu_browser --release-package
+  --app mgu_browser --version 0.16.0 --source apps/mgu_browser --release-package
 ```
 
 Published engine: Chromium `156.0.8078.79-1~deb12u1`. Signed Debian repositories
@@ -100,12 +100,12 @@ file against source, and generates exact archive/catalog hashes from that CI
 build. It does not claim byte-identical native output across different compilers.
 
 After committing and testing the source, save the current public catalog in
-`release/0.15.0/previous-catalog.json`, add the release notes and local test report,
+`release/0.16.0/previous-catalog.json`, add the release notes and local test report,
 then lock inputs:
 
 ```sh
-python3 release/publish.py lock-inputs --source . --metadata release/0.15.0 \
-  --version 0.15.0
+python3 release/publish.py lock-inputs --source . --metadata release/0.16.0 \
+  --version 0.16.0
 ```
 
 The generic Actions workflow reads that descriptor's complete source SHA,
@@ -122,7 +122,7 @@ an independently checked-out Store source tree:
 
 ```sh
 node test/store_package_smoke.js /path/to/mgu-store \
-  /path/to/mgu_browser@0.15.0.tgz /path/to/mgu-browser@0.15.0.tgz \
+  /path/to/mgu_browser@0.16.0.tgz /path/to/mgu-browser@0.16.0.tgz \
   /path/to/catalog.json
 ```
 
@@ -140,10 +140,10 @@ native exit before IPC starts.
 
 ```sh
 python3 test/runtime_service_smoke.py \
-  --runtime /path/to/mgu-browser@0.15.0.tgz \
+  --runtime /path/to/mgu-browser@0.16.0.tgz \
   --engine /path/to/mgu-browser-engine@0.1.0.tgz
 node test/store_service_activation_smoke.js /path/to/mgu-store \
-  /path/to/mgu-browser@0.15.0.tgz
+  /path/to/mgu-browser@0.16.0.tgz
 ```
 
 The first command uses local Linux Docker, a digest-pinned Ubuntu 18 image and
@@ -162,16 +162,18 @@ keeps the Store's mandatory first-reboot gate. The final runtime check waits up
 to 15 seconds for protected, fresh status from the exact installed version and
 the correctly owned backend socket; an old version's status is insufficient.
 
-## Packaged video and fullscreen gate, 0.14.0
+## Packaged media and desktop browser gate, 0.16.0
 
 ```sh
 python3 test/fullscreen_audio_package_smoke.py \
-  --runtime /path/to/mgu-browser@0.15.0.tgz \
+  --runtime /path/to/mgu-browser@0.16.0.tgz \
   --engine /path/to/mgu-browser-engine@0.1.0.tgz
 ```
 
-The host needs FFmpeg for a bounded, originally generated VP8/Opus clip; the
-workflow explicitly checks availability and installs it only when absent.
+The host needs FFmpeg for a bounded, originally generated VP8/Opus clip and
+OpenSSL for a disposable self-signed TLS refusal fixture. The workflow checks
+these tools and installs FFmpeg only when absent. TLS test inputs are generated
+in the ignored cache and mounted read-only; no production credential is used.
 The driver shares the startup fixture's pinned Ubuntu 18/Node 8/engine inputs
 and verifies the public old ALSA archive by size and SHA-256. It extracts the
 actual runtime inside the disposable container, then runs both fullscreen
@@ -186,7 +188,7 @@ authored fixtures also require the same final control for 16 raw versus one
 coalesced focus request while video advances. Controller timings are reported
 without a speed-ratio threshold. The same driver additionally runs actual
 Chromium/Linux HTTP/Client-Hints identity and cookie-checkpoint hard-kill tests,
-for five mandatory package tests. Those authored loopback/DOM fixtures do not
+for the five original mandatory package tests. Those authored loopback/DOM fixtures do not
 certify live YouTube, subscription providers, CAPTCHA removal or BMW speakers.
 
 The audio/video script now requires eleven stages, including passive closed-
@@ -196,21 +198,43 @@ an existing route, expires after at most four seconds and cannot acquire from
 unknown state. Packaged SDK tests also cover disconnect release/cleared frames
 and ready-triggered reload while the app is visible and focused.
 
-## Packaged UI foreground gate, 0.15.0
+Nineteen more portable scripts make 24 mandatory script executions: dialogs,
+native input, focused frame metadata, original PDF focus, phone controls,
+HTTP/custom ports/TLS, permissions, files, site-data crash recovery, GET tab
+restore, streamed recovery, find, embedded media, HTTP auth, native zoom,
+live-tab reattachment, large raw/multipart upload and authenticated upload
+retry and cold quiet-page viewport bootstrap. The driver counts completed scripts and checks the count against its
+declared input list. It retains the 12 MiB CDP packet limit while discarding
+unneeded duplicate request-body fields. Native server byte/hash checks prove
+the original HTTP bodies remain intact. Permission grants and missing-device
+assertions run only inside this isolated container. No device or host display
+is exposed and no insecure TLS or disabled Chromium sandbox flag is added.
+
+The native Ozone virtual screen is compared with an independent native target;
+it need not resize with the browser window. The viewport gate separately
+requires first-frame readiness without a manual corrective resize, physical
+pixel bounds, native zoom and main/embedded hit testing. These checks do not
+qualify real headunit display timing or protected streaming.
+
+## Packaged UI integration gate, 0.16.0
 
 The workflow also extracts the exact SDK-free frontend artifact and runs
 `test/chromium_ui_smoke.js` with `MGU_UI_SMOKE_ROOT` pointing to its `javascript`
 folder, once with `MGU_EMULATOR_LOCALE=en-GB` and once with `de-DE`. These
 mandatory checks cover the native foreground API request and subsequently
 observed visibility/focus alongside controller and shutdown behavior. The
-test supplies authored HMI/AudioManager replies; it does not claim a physical
+The expanded UI also exercises native/phone prompts and the new browser
+controls. The test supplies authored HMI/AudioManager replies; it does not claim a physical
 headunit foreground or audible-speaker measurement. Existing native PCM,
 video/fullscreen/controller and root-startup gates remain mandatory.
 
 ## Publication
 
-Publish the three `<id>@<version>.tgz` files, corresponding-source tar,
-`engine-provenance.json`, test summary and `SHA256SUMS` in one versioned release.
+For this runtime/frontend update publish the two new `<id>@0.16.0.tgz` files
+and the generated verification/provenance/test metadata with `SHA256SUMS`.
+The engine row keeps the exact public 0.1.0 URL, bytes, hash and corresponding
+source/provenance from its original release. An engine change needs a new
+engine version and its matching source/license material.
 Drafts/prereleases are ignored by Store, so use a normal release prominently
 marked experimental. Never replace a published component with different bytes
 under an existing version. Keep previous assets and matching sources available.
