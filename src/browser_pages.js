@@ -241,7 +241,10 @@ module.exports={
         await send('Page.bringToFront');
         await send('Emulation.setFocusEmulationEnabled',{enabled:true});
         await this.resize(this.viewport.pixelWidth||this.viewport.width,this.viewport.pixelHeight||this.viewport.height,this.viewport.zoom||100);check();
-        await send('Page.startScreencast',{format:this.performance.codec==='jpeg-native'?'jpeg':'png',quality:75,maxWidth:1280,maxHeight:720,everyNthFrame:1});
+        // resize() may already have re-armed this view's stream (viewport
+        // rebuild); an active screencast is exactly the wanted state.
+        await send('Page.startScreencast',{format:this.performance.codec==='jpeg-native'?'jpeg':'png',quality:75,maxWidth:1280,maxHeight:720,everyNthFrame:1})
+            .catch(error=>{if(!/Screencast is already active/i.test(error&&error.message))throw error;});
         this.emit('loading',!!tab.loading);this.scheduleNavigation();this.inspectInput();
     }
 };
