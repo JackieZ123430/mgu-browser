@@ -33,7 +33,11 @@ function respond(request,response){
     }
     response.setHeader('Content-Type','text/html; charset=utf-8');response.end('<!doctype html><title>Owned public</title><h1>Owned public content</h1>');
 }
-async function value(expression,session){const response=await browser.pipe.send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true,userGesture:true},session||browser.session,5000);if(response.exceptionDetails)throw Error('Auth fixture evaluation failed');return response.result.value;}
+// A navigation briefly has no default execution context; retry like the
+// other real-Chromium smokes instead of failing on that transient state.
+const transient=error=>/Cannot find default execution context|Execution context was destroyed|Cannot find context/.test(error&&error.message);
+async function evaluate(target,params,sessionArg){for(let i=0;;i++){try{return await target(params,sessionArg);}catch(error){if(!transient(error)||i>=60)throw error;await delay(50);}}}
+async function value(expression,session){const response=await evaluate((params,s)=>browser.pipe.send('Runtime.evaluate',params,s,5000),{expression,awaitPromise:true,returnByValue:true,userGesture:true},session||browser.session);if(response.exceptionDetails)throw Error('Auth fixture evaluation failed');return response.result.value;}
 async function until(check,label){for(let i=0;i<100;i++){if(await check())return;await delay(50);}throw Error(label);}
 async function challenge(realm){await until(()=>{const current=browser.authStatus();return current&&(!realm||current.realm===realm);},'Expected native HTTP auth challenge '+realm);return browser.authStatus();}
 async function reject(promise){let rejected=false;try{await promise;}catch(ignore){rejected=true;}assert(rejected,'Stale auth reply must reject');}
@@ -77,9 +81,9 @@ function median(values){return values.slice().sort((a,b)=>a-b)[Math.floor(values
     restricted=new Browser({gate:{check:()=>({allowed:true})},binary:browser.options.binary,profileRoot:root+'/restricted',mediaDisabled:true});
     restricted.options.env=Object.assign({},browser.options.env);
     await restricted.start(base+'/basic/restricted');const restrictedAuth=restricted.authStatus();assert(restrictedAuth);await restricted.authReply(restrictedAuth.id,{username:'fixture-restricted',password:'owned-restricted'});
-    let restrictedResult;for(let i=0;i<80;i++){restrictedResult=await restricted.send('Runtime.evaluate',{expression:'document.title',returnByValue:true});if(restrictedResult.result.value==='Owned authenticated')break;await delay(50);}assert.equal(restrictedResult.result.value,'Owned authenticated');
+    let restrictedResult;for(let i=0;i<80;i++){restrictedResult=await evaluate(params=>restricted.send('Runtime.evaluate',params),{expression:'document.title',returnByValue:true});if(restrictedResult.result.value==='Owned authenticated')break;await delay(50);}assert.equal(restrictedResult.result.value,'Owned authenticated');
     let mediaBlocked=false;restricted.pipe.on('event',event=>{if(event.method==='Network.loadingFailed'&&event.params.type==='Media'&&/BLOCKED_BY_CLIENT/.test(event.params.errorText))mediaBlocked=true;});
-    await restricted.send('Runtime.evaluate',{expression:'const v=document.createElement("video");v.src="'+base+'/media.webm";document.body.appendChild(v);v.load();true',returnByValue:true});
+    await evaluate(params=>restricted.send('Runtime.evaluate',params),{expression:'const v=document.createElement("video");v.src="'+base+'/media.webm";document.body.appendChild(v);v.load();true',returnByValue:true});
     for(let i=0;i<50&&!mediaBlocked;i++)await delay(50);assert.equal(mediaBlocked,true,'Existing native network media rejection stays active');
     assert.deepEqual(errors,[]);assert(paused>60,'The actual all-resource interception path is exercised');
     console.log('BROWSER_AUTH_RESULT '+JSON.stringify({success:true,basic:true,digest:true,wrongCredentialsPromptAgain:true,cancel:true,realmChange:true,staleNavigationRejected:true,tabChangeRejected:true,oopif:true,oopifNavigationRejected:true,stoppedReplyRejected:true,mediaRestrictionPreserved:true,slowReply:process.env.MGU_AUTH_SLOW_REPLY==='1',pausedRequests:paused,benchmark:{nodes:5000,resources:60,nativeMedianMs:median(samples.native),brokerMedianMs:median(samples.broker),samples},sandbox:true,tlsVerification:true}));

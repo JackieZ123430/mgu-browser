@@ -1,6 +1,6 @@
 {
   "version": "0.16.1",
-  "sourceCommit": "d1c9355b6549a43ecedfecdc4b4351cc17aad450",
+  "sourceCommit": "2db347a87bf7f5cc7a5543c5a5017bd9d3d4a41a",
   "date": "2026-11-08",
   "environment": {
     "platform": "Unprivileged Linux x86_64 host and isolated digest-pinned Ubuntu18 Docker containers",
