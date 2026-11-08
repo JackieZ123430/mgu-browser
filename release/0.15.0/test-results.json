@@ -1,0 +1,444 @@
+{
+  "version": "0.15.0",
+  "sourceCommit": "9cee7da296a06866067a863e1210e4a937960542",
+  "date": "2026-11-08",
+  "environment": {
+    "platform": "Unprivileged Linux x86_64 host and isolated pinned Ubuntu18 Docker containers",
+    "nodeHost": "24.22.1",
+    "nodeRuntime": "8.16.2",
+    "engine": "Immutable engine0.1.0, Chromium156.0.8078.79",
+    "sandbox": "enabled",
+    "tlsVerification": "enabled",
+    "audio": "Pinned public old ALSA file sink; no firmware libraries or physical speakers"
+  },
+  "core": {
+    "command": "node --test test/*.test.js",
+    "passed": 151,
+    "failed": 0,
+    "skipped": 0
+  },
+  "publisher": {
+    "command": "python3 release/test_publish.py",
+    "passed": 9,
+    "failed": 0
+  },
+  "node8": {
+    "node": "8.16.2",
+    "distributedJavaScript": 103,
+    "passed": 103,
+    "failed": 0
+  },
+  "packagedVideoFullscreenControllerIdentityCookies": {
+    "command": "python3 test/fullscreen_audio_package_smoke.py --runtime <exact-final-runtime.tgz> --engine <immutable-engine0.1.0.tgz>",
+    "passed": true,
+    "scriptTests": 5,
+    "audioVideoStages": 11,
+    "result": {
+      "success": true,
+      "version": "0.15.0",
+      "node": "v8.16.2",
+      "uid": 3911,
+      "sandbox": true,
+      "codec": "jpeg-native",
+      "stages": [
+        {
+          "stage": "inline",
+          "wallMs": 2003,
+          "pcmBytes": 384000,
+          "clockAdvance": 1.99691,
+          "nonblackFrames": 60
+        },
+        {
+          "stage": "large-dom-inline",
+          "wallMs": 684,
+          "pcmBytes": 130560,
+          "clockAdvance": 0.6537790000000001,
+          "nonblackFrames": 20
+        },
+        {
+          "stage": "fullscreen",
+          "wallMs": 652,
+          "pcmBytes": 124800,
+          "clockAdvance": 0.650665,
+          "nonblackFrames": 19
+        },
+        {
+          "stage": "fullscreen-resize",
+          "wallMs": 653,
+          "pcmBytes": 124800,
+          "clockAdvance": 0.6466179999999997,
+          "nonblackFrames": 12
+        },
+        {
+          "stage": "inline-restored",
+          "wallMs": 654,
+          "pcmBytes": 126720,
+          "clockAdvance": 0.6528489999999998,
+          "nonblackFrames": 20
+        },
+        {
+          "stage": "route-released",
+          "wallMs": 1003,
+          "pcmBytes": 0,
+          "clockAdvance": 1.021134
+        },
+        {
+          "stage": "closed-shadow-playing",
+          "wallMs": 653,
+          "pcmBytes": 112512,
+          "clockAdvance": 0.660344,
+          "nonblackFrames": 20
+        },
+        {
+          "stage": "closed-shadow-unmuted",
+          "wallMs": 653,
+          "pcmBytes": 112512,
+          "clockAdvance": 0.670785,
+          "nonblackFrames": 19
+        },
+        {
+          "stage": "closed-shadow-volume-restored",
+          "wallMs": 654,
+          "pcmBytes": 112512,
+          "clockAdvance": 0.6707650000000001,
+          "nonblackFrames": 20
+        },
+        {
+          "stage": "closed-shadow-resumed",
+          "wallMs": 672,
+          "pcmBytes": 114432,
+          "clockAdvance": 0.6467610000000001,
+          "nonblackFrames": 20
+        },
+        {
+          "stage": "closed-shadow-muted-paused-ended",
+          "pcmBytes": 0,
+          "closedShadowPreserved": true,
+          "ownFlags": true,
+          "unrelatedDomAudio": true,
+          "navigationReleased": true,
+          "tabCloseReleased": true
+        }
+      ],
+      "siteFullscreen": true,
+      "controller": {
+        "test": "Real Chromium 30fps VP8 + Unix IPC,16 detents then press, no debounce",
+        "codec": "jpeg-native",
+        "raw": {
+          "mode": "raw",
+          "focusRequests": 16,
+          "burstToActivationMs": 790.443394,
+          "activated": "control15",
+          "videoBefore": {
+            "time": 0.467909,
+            "decoded": 18
+          },
+          "videoAfter": {
+            "time": 1.260346,
+            "decoded": 42
+          }
+        },
+        "coalesced": {
+          "mode": "coalesced",
+          "focusRequests": 1,
+          "burstToActivationMs": 43.901922,
+          "activated": "control15",
+          "videoBefore": {
+            "time": 1.263519,
+            "decoded": 42
+          },
+          "videoAfter": {
+            "time": 1.308222,
+            "decoded": 44
+          }
+        },
+        "video": {
+          "time": 1.308584,
+          "decoded": 44
+        }
+      },
+      "identity": {
+        "success": true,
+        "product": "Chrome/156.0.8078.79",
+        "platform": "Linux x86_64",
+        "language": "de-DE",
+        "brands": [
+          {
+            "brand": "Chromium",
+            "version": "156"
+          }
+        ],
+        "fullVersionList": [
+          {
+            "brand": "Chromium",
+            "version": "156.0.8078.79"
+          }
+        ],
+        "tabs": 2,
+        "sandbox": true,
+        "tlsVerification": true
+      },
+      "cookies": {
+        "success": true,
+        "hardKill": true,
+        "changedFlags": true,
+        "hostScoped": true,
+        "codec": "jpeg-native",
+        "fps": 30.5,
+        "bandFraction": 0.171875
+      }
+    },
+    "inputs": {
+      "engineSha256": "0b6a73c964354214262d01f2d9bec2d0ab253cac8d27de04708912e804ef0874",
+      "nodeArchiveSha256": "88617a293f5828cc94ee99c94a43fbea12b989e34fe643fc14885a14748a8da6",
+      "image": "ubuntu@sha256:152dc042452c496007f07ca9127571cb9c29697f42acbfad72324b2bb2e43c98",
+      "alsaArchiveSha256": "9f708b08cd507d61a26e350b4d421681131b0e283f3b65ff41b05e737b21e79a"
+    },
+    "scope": "Actual packaged backend/client/native JPEG/audio helper with Node8 and sandboxed immutable engine, no source/native override; authored DOM/loopback/Unix-IPC fixtures, not provider or physical vehicle qualification",
+    "cookieEvidence": "Hard engine kill retains authored consent, flags-only HttpOnly/SameSite update and valid Secure/HttpOnly/__Host cookie without unlocking the separate vault; partition scope participates in snapshot digest",
+    "identityEvidence": "Actual HTTP and Navigator/Client-Hints identity is consistent across tabs/locale and reports real Chromium/Linux; no invented Windows version",
+    "closedShadowEvidence": "Nonblack video and nonzero PCM while closed root remains closed; mute/zero-volume/pause/end/navigation/tab-close release output; unrelated DOM audio does not mask the closed player",
+    "timingScope": "Controller latency and30.5fps/17.1875percent-band animation values describe this local authored workload only; no universal speed-ratio or provider claim"
+  },
+  "audioFocus": {
+    "takeover": "Only source287 verified asCarLifeMedia may have existing routes displaced across sinks, followed by new287to1024",
+    "ownership": "Release disconnects only newly owned ID; other sources and foreign SmartX locks untouched",
+    "guards": "Recheck source/sink/ID and provider generation, bounded retries/timeouts, cancellation on focus loss and stale acquisition",
+    "foreground": "Actual SDK ui.openMAIN request requires observed visibility/focus; no local success flag",
+    "unknownState": "Hold only existing route for at most4000ms since last confirmed audible activity, with expiry timer; never acquire from unknown",
+    "disconnectRecovery": "Unexpected IPC disconnect emitsblocked, releases route and clears frozen frame; ready re-arms currentURL/home only while app remains visible/focused",
+    "tests": "Core and final packaged SDK UI cover busy takeover, refusal, close, pause/resume and stale async-owner races; authored HMI/AudioManager replies are not actual firmware tests"
+  },
+  "resources": {
+    "MemoryLimit": "infinity",
+    "TasksMax": "infinity",
+    "CPUShares": 8192,
+    "Nice": -10,
+    "IOSchedulingClass": "best-effort",
+    "IOSchedulingPriority": 0,
+    "cpuQuota": "not set",
+    "cpuAffinity": "not set",
+    "realtimeClass": false,
+    "rendererProcessCap": "former fixed4cap removed; Chromium decides",
+    "privateWorkFilesystemMiB": 384,
+    "privateWorkScope": "Profile/cache/TMPDIR storage quota distinct from process RAM",
+    "validation": "Unit parse/official directive compatibility and packaged source-byte/semantic checks; actual MGU resource policy and performance not measured"
+  },
+  "packagedRootStartup": {
+    "command": "python3 test/runtime_service_smoke.py --runtime <exact-final-runtime.tgz> --engine <immutable-engine0.1.0.tgz>",
+    "passed": 4,
+    "failed": 0,
+    "cases": [
+      {
+        "version": "0.15.0",
+        "node": "v8.16.2",
+        "appUid": 13001,
+        "audio": false,
+        "legacy": "",
+        "legacyNetworkStatus": false,
+        "legacyUid": false,
+        "success": true,
+        "ready": true,
+        "peerUidRejected": true,
+        "socket": {
+          "uid": 3911,
+          "gid": 13001,
+          "mode": "660"
+        },
+        "backendGid": 3911,
+        "groups": [
+          13001
+        ],
+        "workMiB": 384,
+        "moved": [],
+        "rendered": {
+          "version": "Chrome/156.0.8078.79",
+          "frame": {
+            "width": 1280,
+            "height": 384,
+            "rgbaBytes": 1966080
+          },
+          "transientFrames": 0
+        },
+        "activationBootProof": {
+          "skipped": "proc-owner-outside-container-root",
+          "procUid": 65534
+        },
+        "launcherReady": true,
+        "statusSymlinkProof": true,
+        "installedCheck": true
+      },
+      {
+        "version": "0.15.0",
+        "node": "v8.16.2",
+        "appUid": 14876,
+        "audio": true,
+        "legacy": "",
+        "legacyNetworkStatus": false,
+        "legacyUid": false,
+        "success": true,
+        "ready": true,
+        "peerUidRejected": true,
+        "socket": {
+          "uid": 3911,
+          "gid": 14876,
+          "mode": "660"
+        },
+        "backendGid": 301,
+        "groups": [
+          301,
+          14876
+        ],
+        "workMiB": 384,
+        "moved": [],
+        "rendered": {
+          "version": "Chrome/156.0.8078.79",
+          "frame": {
+            "width": 1280,
+            "height": 384,
+            "rgbaBytes": 1966080
+          },
+          "transientFrames": 0
+        },
+        "activationBootProof": {
+          "skipped": "proc-owner-outside-container-root",
+          "procUid": 65534
+        },
+        "launcherReady": true,
+        "statusSymlinkProof": true,
+        "installedCheck": true
+      },
+      {
+        "version": "0.15.0",
+        "node": "v8.16.2",
+        "appUid": 13001,
+        "audio": false,
+        "legacy": "all",
+        "legacyNetworkStatus": false,
+        "legacyUid": false,
+        "success": true,
+        "ready": true,
+        "peerUidRejected": true,
+        "socket": {
+          "uid": 3911,
+          "gid": 13001,
+          "mode": "660"
+        },
+        "backendGid": 3911,
+        "groups": [
+          13001
+        ],
+        "workMiB": 384,
+        "moved": [
+          "data.legacy-1794099755125",
+          "network.legacy-1794099755125",
+          "work.legacy-1794099755125"
+        ],
+        "rendered": {
+          "version": "Chrome/156.0.8078.79",
+          "frame": {
+            "width": 1280,
+            "height": 384,
+            "rgbaBytes": 1966080
+          },
+          "transientFrames": 0
+        },
+        "activationBootProof": {
+          "skipped": "proc-owner-outside-container-root",
+          "procUid": 65534
+        },
+        "launcherReady": true,
+        "statusSymlinkProof": true,
+        "installedCheck": true
+      },
+      {
+        "version": "0.15.0",
+        "node": "v8.16.2",
+        "appUid": 14876,
+        "audio": true,
+        "legacy": "all",
+        "legacyNetworkStatus": false,
+        "legacyUid": false,
+        "success": true,
+        "ready": true,
+        "peerUidRejected": true,
+        "socket": {
+          "uid": 3911,
+          "gid": 14876,
+          "mode": "660"
+        },
+        "backendGid": 301,
+        "groups": [
+          301,
+          14876
+        ],
+        "workMiB": 384,
+        "moved": [
+          "data.legacy-1794099761933",
+          "network.legacy-1794099761933",
+          "work.legacy-1794099761933"
+        ],
+        "rendered": {
+          "version": "Chrome/156.0.8078.79",
+          "frame": {
+            "width": 1280,
+            "height": 384,
+            "rgbaBytes": 1966080
+          },
+          "transientFrames": 0
+        },
+        "activationBootProof": {
+          "skipped": "proc-owner-outside-container-root",
+          "procUid": 65534
+        },
+        "launcherReady": true,
+        "statusSymlinkProof": true,
+        "installedCheck": true
+      }
+    ],
+    "evidence": "Actual root launcher, private384MiB noexec/nosuid/nodev tmpfs, UID3911 and app/audio groups, socket ownership, wrong-peer rejection, ready fd3 notification, root0:0/0644 status and symlink-victim protection, preserved legacy markers, installedcheck and actual1280x384RGBA1966080B",
+    "localActivationProofLimit": "Only extra activation root/proc ownership proof unavailable in local rootless Docker due unmapped hostproc UID65534; production gate remains strict and rootful CI executes same proof"
+  },
+  "frontend": {
+    "en-GB": "passed",
+    "de-DE": "passed",
+    "source": "Fresh final SDK-free frontend archive",
+    "evidence": "Observed visibility/focus and actual SDKforeground request, busy takeover/refusal/close/pause-resume, controller cancellation, stale-owner async completion, unknown-state expiry and backend-disconnect clear/reload"
+  },
+  "store": {
+    "storeSourceCommit": "8cfae23db27e51d86f84e65b13ce0592668d8df9",
+    "deployValidatorVersion": "0.8.4",
+    "artifactValidation": "passed",
+    "catalogParser": "passed",
+    "sourceByteEquality": "Distributed JavaScript/frontend/runtime modules, installedcheck.sh and serviceunit files match finalsource",
+    "nativeProvenance": "Built native source/helper hashes and GLIBC ceiling2.27 checked; static backend and stock-loader audio bridge; unchanged native JPEG/addons/libjpeg from pinned base",
+    "syntheticDonorPreparation": "passed, proprietary SDK omitted",
+    "activationIntegration": "passed against unchanged official Store restart policy and actual packaged activation",
+    "engine": "Immutable0.1.0 entry retained exactly"
+  },
+  "providerFindings": {
+    "netflix": "Public page and reserved synthetic-email probe advance with old and new UA; reported generic account error not reproduced or verifiedfixed, no authenticated account/protected playback",
+    "netflixLogin": "/login is the email-first entry; initially hidden password DOM is not a direct visible password form",
+    "disney": "Public page loads; closed-shadow player fixture fix is not Disney account/license/playback qualification",
+    "google": "Actual search returnedHTTP429 and network-traffic CAPTCHA even with normalized UA; no CAPTCHA interaction/autosolve or guaranteed removal",
+    "youtube": "Earlier live probe blocked by proxyHTTP403; no live playback/performance qualification"
+  },
+  "localArtifactEvidence": {
+    "meaning": "Exact local archives below passed the local checks. CI rebuilds locked source and tests its own exact artifacts before generating published hashes; native bytes may vary across trusted compilers.",
+    "mgu-browser@0.15.0.tgz": {
+      "size": 344166,
+      "sha256": "97f70a95fe87af88e3f60f3ee940ddc7f2155ada7e24bfbc96e5c56725f15794"
+    },
+    "mgu_browser@0.15.0.tgz": {
+      "size": 1852766,
+      "sha256": "f99668c5e07c1bd2246e79683c25fe5581e45e4baa8f145d70c6d5f08bc07161"
+    }
+  },
+  "limits": [
+    "No physical headunit speaker, actualHMI/AudioManager/SmartX focus or wholevehicle lifecycle proof",
+    "Containerstartup does not run actualMGUsystemd or validate uncapped-resource impact on physicalHU",
+    "Engine hardkill is not physicalpowerloss; changes after lastcookiecheckpoint/profilearchive can be lost and providers may expire/rechallenge sessions",
+    "No authorizedCDM/licenceexchange/protectedprovideroutput or hardwarecertification established by this patch",
+    "SDKUI HMI/AudioManager and controller-IPC fixtures are authored; physicalcontroller/phone behavior still requiresvehicle testing"
+  ]
+}

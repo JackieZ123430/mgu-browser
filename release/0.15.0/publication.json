@@ -1,0 +1,10 @@
+{
+  "repository": "pllanaio/mgu-browser",
+  "version": "0.15.0",
+  "tag": "v0.15.0",
+  "sourceCommit": "9cee7da296a06866067a863e1210e4a937960542",
+  "storeCommit": "8cfae23db27e51d86f84e65b13ce0592668d8df9",
+  "title": "MGU Browser 0.15.0 \u2014 audio takeover, resources and session reliability",
+  "previousCatalogSha256": "6429eaba2f9f54eb4ee57fb1c9dc684f7e61c3d4b19d65eb44b73ca67fb575f1",
+  "sourceInputsSha256": "94a82e91cc0b183e486f2f96c530a59198b79a1e9d9368bd5a3b735415efc714"
+}
