@@ -1,6 +1,6 @@
 # MGU Browser 0.16.1
 
-Gesperrt auf Commit `d1c9355` (`publication.json`, `source-inputs.json`).
+Gesperrt auf Commit `2db347a` (`publication.json`, `source-inputs.json`).
 
 - Handy-Fernbedienung (QR) auch über den Hotspot des Handys: Freigabe für
   `wlan1`/`wlan0`/die aktuelle Uplink-Schnittstelle, ein Root-Wächter setzt
