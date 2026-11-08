@@ -86,7 +86,8 @@ module.exports={
                     // The readback is discarded; projection keeps quality75.
                     await send('Page.captureScreenshot',{format:'jpeg',quality:10,fromSurface:true,captureBeyondViewport:false});
                     await send('Page.stopScreencast');
-                    await send('Page.startScreencast',{format:this.performance&&this.performance.codec==='jpeg-native'?'jpeg':'png',quality:75,maxWidth:1280,maxHeight:720,everyNthFrame:1});
+                    await send('Page.startScreencast',{format:this.performance&&this.performance.codec==='jpeg-native'?'jpeg':'png',quality:75,maxWidth:1280,maxHeight:720,everyNthFrame:1})
+                        .catch(error=>{if(!/Screencast is already active/i.test(error&&error.message))throw error;});
                 }
                 if(previous.width!==next.width||previous.height!==next.height||previous.pixelWidth!==pixelWidth||previous.pixelHeight!==pixelHeight||previous.zoom!==zoom)this.inputFrameGeneration=(this.inputFrameGeneration||0)+1;
                 this.viewport=next;this.emit('viewport',Object.assign({},next));return Object.assign({},next);
