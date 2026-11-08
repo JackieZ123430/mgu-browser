@@ -1,0 +1,10 @@
+{
+  "repository": "pllanaio/mgu-browser",
+  "version": "0.16.0",
+  "tag": "v0.16.0",
+  "sourceCommit": "42256e71671ec370f05fa0a494941110e4f21463",
+  "storeCommit": "8cfae23db27e51d86f84e65b13ce0592668d8df9",
+  "title": "MGU Browser 0.16.0 \u2014 Desktop-Funktionen, Dateien und Wiederherstellung",
+  "previousCatalogSha256": "dc51ec960a33f080ab9eb8ffd1f0bfabeef765a86be534a1a0f007972090fc81",
+  "sourceInputsSha256": "330cb9c7344d98fa0d2b0b82261644404f97e0e776cc7c3c031fa88e70f6958a"
+}

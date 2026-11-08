@@ -1,0 +1,927 @@
+{
+  "version": "0.16.0",
+  "sourceCommit": "42256e71671ec370f05fa0a494941110e4f21463",
+  "date": "2026-11-08",
+  "environment": {
+    "platform": "Unprivileged Linux x86_64 host and isolated digest-pinned Ubuntu18 Docker containers",
+    "nodeHost": "24.22.1",
+    "nodeRuntime": "8.16.2",
+    "engine": "Immutable engine0.1.0, Chromium156.0.8078.79",
+    "sandbox": "enabled",
+    "tlsVerification": "enabled",
+    "audio": "Pinned public old ALSA file sink; no firmware library redistribution or physical speaker qualification"
+  },
+  "core": {
+    "passed": 275,
+    "failed": 0,
+    "log": "/tmp/mgu-desktop-final3-core.log",
+    "skipped": 0
+  },
+  "publisher": {
+    "passed": 9,
+    "log": "/tmp/mgu-desktop-final3-publisher.log"
+  },
+  "node8": {
+    "node": "8.16.2",
+    "distributedJavaScript": 133,
+    "passed": 133,
+    "failed": 0,
+    "failures": []
+  },
+  "packagedMediaAndDesktop": {
+    "command": "python3 test/fullscreen_audio_package_smoke.py --runtime <exact-final-runtime.tgz> --engine <immutable-engine0.1.0.tgz>",
+    "passed": true,
+    "scriptTests": 24,
+    "mainAudioVideoStages": 11,
+    "embeddedAudioVideoStages": 7,
+    "result": {
+      "success": true,
+      "version": "0.16.0",
+      "node": "v8.16.2",
+      "uid": 3911,
+      "sandbox": true,
+      "codec": "jpeg-native",
+      "scriptCount": 24,
+      "stages": [
+        {
+          "stage": "inline",
+          "wallMs": 2003,
+          "pcmBytes": 384000,
+          "clockAdvance": 1.9975710000000002,
+          "nonblackFrames": 60
+        },
+        {
+          "stage": "large-dom-inline",
+          "wallMs": 679,
+          "pcmBytes": 130560,
+          "clockAdvance": 0.6583959999999998,
+          "nonblackFrames": 21
+        },
+        {
+          "stage": "fullscreen",
+          "wallMs": 653,
+          "pcmBytes": 124800,
+          "clockAdvance": 0.654604,
+          "nonblackFrames": 20
+        },
+        {
+          "stage": "fullscreen-resize",
+          "wallMs": 656,
+          "pcmBytes": 126720,
+          "clockAdvance": 0.6515119999999999,
+          "nonblackFrames": 13
+        },
+        {
+          "stage": "inline-restored",
+          "wallMs": 655,
+          "pcmBytes": 124800,
+          "clockAdvance": 0.6536949999999999,
+          "nonblackFrames": 20
+        },
+        {
+          "stage": "route-released",
+          "wallMs": 1001,
+          "pcmBytes": 0,
+          "clockAdvance": 1.002326
+        },
+        {
+          "stage": "closed-shadow-playing",
+          "wallMs": 654,
+          "pcmBytes": 112512,
+          "clockAdvance": 0.666681,
+          "nonblackFrames": 19
+        },
+        {
+          "stage": "closed-shadow-unmuted",
+          "wallMs": 654,
+          "pcmBytes": 112512,
+          "clockAdvance": 0.724761,
+          "nonblackFrames": 20
+        },
+        {
+          "stage": "closed-shadow-volume-restored",
+          "wallMs": 654,
+          "pcmBytes": 112512,
+          "clockAdvance": 0.6734140000000002,
+          "nonblackFrames": 20
+        },
+        {
+          "stage": "closed-shadow-resumed",
+          "wallMs": 654,
+          "pcmBytes": 112512,
+          "clockAdvance": 0.6293709999999999,
+          "nonblackFrames": 20
+        },
+        {
+          "stage": "closed-shadow-muted-paused-ended",
+          "pcmBytes": 0,
+          "closedShadowPreserved": true,
+          "ownFlags": true,
+          "unrelatedDomAudio": true,
+          "navigationReleased": true,
+          "tabCloseReleased": true
+        }
+      ],
+      "siteFullscreen": true,
+      "controller": {
+        "test": "Real Chromium 30fps VP8 + Unix IPC,16 detents then press, no debounce",
+        "codec": "jpeg-native",
+        "raw": {
+          "mode": "raw",
+          "focusRequests": 16,
+          "burstToActivationMs": 782.60925,
+          "activated": "control15",
+          "videoBefore": {
+            "time": 0.466312,
+            "decoded": 19
+          },
+          "videoAfter": {
+            "time": 1.251041,
+            "decoded": 42
+          }
+        },
+        "coalesced": {
+          "mode": "coalesced",
+          "focusRequests": 1,
+          "burstToActivationMs": 44.820878,
+          "activated": "control15",
+          "videoBefore": {
+            "time": 1.252074,
+            "decoded": 42
+          },
+          "videoAfter": {
+            "time": 1.298685,
+            "decoded": 44
+          }
+        },
+        "video": {
+          "time": 1.299026,
+          "decoded": 44
+        }
+      },
+      "identity": {
+        "success": true,
+        "mode": "normal-chromium-ozone",
+        "product": "Chrome/156.0.8078.79",
+        "platform": "Linux x86_64",
+        "language": "en-GB",
+        "brands": [
+          {
+            "brand": "Not:A-Brand",
+            "version": "8"
+          },
+          {
+            "brand": "Chromium",
+            "version": "156"
+          }
+        ],
+        "fullVersionList": [
+          {
+            "brand": "Not:A-Brand",
+            "version": "8.0.0.0"
+          },
+          {
+            "brand": "Chromium",
+            "version": "156.0.8078.79"
+          }
+        ],
+        "webdriver": true,
+        "nativeIdentityPreserved": true,
+        "webgl": true,
+        "screen": {
+          "width": 960,
+          "height": 540
+        },
+        "viewport": {
+          "width": 1280,
+          "height": 480
+        },
+        "tabs": 2,
+        "sandbox": true,
+        "tlsVerification": true
+      },
+      "cookies": {
+        "success": true,
+        "hardKill": true,
+        "changedFlags": true,
+        "hostScoped": true,
+        "codec": "jpeg-native",
+        "fps": 30,
+        "bandFraction": 0.171875
+      },
+      "viewportBootstrap": {
+        "success": true,
+        "stages": [
+          "cold-normal",
+          "cold-oopif",
+          "identical-reload",
+          "cross-site-main",
+          "zoomed-oopif"
+        ],
+        "noInteractionFirstFrame": true,
+        "firstTrustedClick": true,
+        "oopif": true,
+        "reload": true,
+        "crossSite": true,
+        "zoomPreserved": true,
+        "pageGettersIgnored": true
+      },
+      "dialogs": {
+        "success": true,
+        "sandbox": true,
+        "alert": true,
+        "confirmAcceptCancel": true,
+        "promptValueCancel": true,
+        "beforeunloadStayLeave": true,
+        "closeBeforeunloadStayLeave": true,
+        "lastTabReplacementAfterConfirmation": true,
+        "closeModalTab": true,
+        "stopModalBrowser": true,
+        "openerTargetPreserved": true
+      },
+      "input": {
+        "success": true,
+        "passed": [
+          "ordinary text/password/email/number",
+          "multiline and contenteditable",
+          "exact long Unicode bulk paste,64KiB refusal,clear and short PIN key events",
+          "native select/copy/paste/delete/shift selection/replace",
+          "radio group rotary editing",
+          "select/range/checkbox native controls",
+          "date/month/week/time/datetime native segments, seconds, clear and trusted events",
+          "targeted two-axis nested scrolling",
+          "native drag/double click/text selection/context click/hover",
+          "native HTML5 drag-and-drop with trusted events and interceptor cleanup"
+        ],
+        "codec": "jpeg-native",
+        "bulkMs": 38.775357
+      },
+      "focusedInput": {
+        "success": true,
+        "passed": [
+          "closed-shadow password metadata and native typing",
+          "nested closed-shadow multiline metadata",
+          "same-site cross-origin password metadata",
+          "cross-site OOPIF password metadata via verified persistent owner"
+        ],
+        "codec": "jpeg-native"
+      },
+      "pdfInput": {
+        "success": true,
+        "detents": 3,
+        "tabKeyEvents": 6,
+        "changedFocusPixels": 288,
+        "codec": "jpeg-native"
+      },
+      "phoneInput": {
+        "success": true,
+        "viewport": {
+          "width": 414,
+          "height": 700
+        },
+        "actions": [
+          "text",
+          "text",
+          "key",
+          "key",
+          "drag",
+          "tap",
+          "hover",
+          "fillStructured"
+        ],
+        "frameRequests": 13,
+        "conditionalFrames": 12,
+        "scriptErrors": 0,
+        "codec": "jpeg-native"
+      },
+      "navigation": {
+        "success": true,
+        "http": true,
+        "customPort": true,
+        "backgroundTimers": true,
+        "fetch": true,
+        "popupMessage": true,
+        "defaultMotion": true,
+        "strictTLS": true,
+        "initialErrorTab": true,
+        "errorTabRetry": true
+      },
+      "permissions": {
+        "success": true,
+        "codec": "jpeg-native",
+        "requests": [
+          {
+            "origin": "http://127.0.0.1:34481",
+            "embeddingOrigin": "http://127.0.0.1:34481",
+            "permissions": [
+              "geolocation"
+            ]
+          },
+          {
+            "origin": "http://127.0.0.1:34481",
+            "embeddingOrigin": "http://127.0.0.1:34481",
+            "permissions": [
+              "notifications"
+            ]
+          },
+          {
+            "origin": "http://127.0.0.1:34481",
+            "embeddingOrigin": "http://127.0.0.1:34481",
+            "permissions": [
+              "camera",
+              "microphone"
+            ]
+          },
+          {
+            "origin": "http://127.0.0.1:34481",
+            "embeddingOrigin": "http://127.0.0.1:34481",
+            "permissions": [
+              "clipboard-read"
+            ]
+          },
+          {
+            "origin": "http://127.0.0.1:34481",
+            "embeddingOrigin": "http://127.0.0.1:42381",
+            "permissions": [
+              "geolocation"
+            ]
+          },
+          {
+            "origin": "http://localhost:34481",
+            "embeddingOrigin": "http://127.0.0.1:42381",
+            "permissions": [
+              "geolocation"
+            ]
+          },
+          {
+            "origin": "http://localhost:34481",
+            "embeddingOrigin": "http://127.0.0.1:42381",
+            "permissions": [
+              "camera",
+              "microphone"
+            ]
+          },
+          {
+            "origin": "http://127.0.0.1:34481",
+            "embeddingOrigin": "http://127.0.0.1:42381",
+            "permissions": [
+              "geolocation"
+            ]
+          }
+        ],
+        "native": {
+          "initialGeolocation": "prompt",
+          "geolocationDenied": 1,
+          "notificationsGranted": true,
+          "noDevice": "NotFoundError",
+          "isolatedClipboardRead": true,
+          "oopifNoDevice": "NotFoundError"
+        },
+        "staleOriginRejected": true,
+        "iframeOriginVerified": true,
+        "oopifOriginVerified": true,
+        "nestedOriginVerified": true,
+        "oopifCleanup": true,
+        "sandbox": true,
+        "tlsVerification": true
+      },
+      "files": {
+        "success": true,
+        "blobDownload": true,
+        "downloadBytes": 24,
+        "uploadBytes": 20,
+        "explicitSelection": true,
+        "staleChooserRejected": true,
+        "persistentDownload": true,
+        "oopifUpload": true,
+        "oopifDownload": true,
+        "oopifNavigationExpires": true,
+        "popupAttachment": true,
+        "popupRetired": true,
+        "openerAlive": true,
+        "sandbox": true
+      },
+      "siteRecovery": {
+        "success": true,
+        "engineHardKill": true,
+        "localStorage": true,
+        "indexedDB": true,
+        "cacheStorage": true,
+        "serviceWorkerRegistration": true,
+        "cleanRestart": true,
+        "unflushedMemoryGuaranteed": false,
+        "sandbox": true
+      },
+      "tabs": {
+        "success": true,
+        "twoURLs": true,
+        "activeTab": true,
+        "explicitOverride": true,
+        "repeatedStop": true,
+        "disabledClears": true,
+        "interruptedRestore": true,
+        "getURLsOnly": true,
+        "sandbox": true
+      },
+      "streamedRecovery": {
+        "success": true,
+        "node": "8.16.2",
+        "bytes": 73400320,
+        "authenticated": true,
+        "streamed": true
+      },
+      "find": {
+        "success": true,
+        "normal": true,
+        "openShadow": true,
+        "closedShadow": true,
+        "sameOriginFrame": true,
+        "oopif": true,
+        "nextPrevious": true,
+        "caseSensitive": true,
+        "selectionPreserved": true,
+        "scopedFrameLifecycle": true,
+        "topNavigationRetires": true
+      },
+      "frameMedia": {
+        "success": true,
+        "sandbox": true,
+        "codec": "jpeg-native",
+        "crossOrigin": true,
+        "persistentVerifiedSession": true,
+        "ownMutePauseFlags": true,
+        "childFullscreenControls": true,
+        "navigationRetired": true,
+        "tabSwitchAudio": true,
+        "stages": [
+          {
+            "stage": "cross-origin-inline",
+            "wallMs": 720,
+            "clockAdvance": 0.647697,
+            "pcmBytes": 120192,
+            "projected": true
+          },
+          {
+            "stage": "cross-origin-fullscreen",
+            "wallMs": 706,
+            "clockAdvance": 0.7083219999999999,
+            "pcmBytes": 134400,
+            "projected": true
+          },
+          {
+            "stage": "cross-origin-unmuted",
+            "wallMs": 713,
+            "clockAdvance": 0.7222259999999998,
+            "pcmBytes": 124032,
+            "projected": true
+          },
+          {
+            "stage": "cross-origin-resumed",
+            "wallMs": 705,
+            "clockAdvance": 0.7345470000000001,
+            "pcmBytes": 122112,
+            "projected": true
+          },
+          {
+            "stage": "cross-origin-closed-shadow",
+            "wallMs": 705,
+            "clockAdvance": 0.706655,
+            "pcmBytes": 134400,
+            "projected": true
+          },
+          {
+            "stage": "cross-origin-closed-resumed",
+            "wallMs": 705,
+            "clockAdvance": 0.7089689999999997,
+            "pcmBytes": 122112,
+            "projected": true
+          },
+          {
+            "stage": "background-embedded-audio",
+            "wallMs": 705,
+            "clockAdvance": 0.7008479999999997,
+            "pcmBytes": 134400,
+            "projected": false
+          }
+        ]
+      },
+      "auth": {
+        "success": true,
+        "basic": true,
+        "digest": true,
+        "wrongCredentialsPromptAgain": true,
+        "cancel": true,
+        "realmChange": true,
+        "staleNavigationRejected": true,
+        "tabChangeRejected": true,
+        "oopif": true,
+        "oopifNavigationRejected": true,
+        "stoppedReplyRejected": true,
+        "mediaRestrictionPreserved": true,
+        "slowReply": true,
+        "pausedRequests": 390,
+        "benchmark": {
+          "nodes": 5000,
+          "resources": 60,
+          "nativeMedianMs": 73.19999999925494,
+          "brokerMedianMs": 89.79999999888241,
+          "samples": {
+            "native": [
+              81,
+              76,
+              64.19999999925494,
+              73.19999999925494,
+              57.40000000037253,
+              54.90000000037253
+            ],
+            "broker": [
+              89.79999999888241,
+              90.5,
+              87.09999999962747,
+              77.69999999925494,
+              92.79999999888241,
+              88.80000000074506
+            ]
+          }
+        },
+        "sandbox": true,
+        "tlsVerification": true
+      },
+      "viewport": {
+        "success": true,
+        "frames": [
+          {
+            "zoom": 100,
+            "width": 1280,
+            "height": 720,
+            "cssWidth": 1280,
+            "cssHeight": 720
+          },
+          {
+            "zoom": 125,
+            "width": 1280,
+            "height": 720,
+            "cssWidth": 1024,
+            "cssHeight": 576
+          },
+          {
+            "zoom": 150,
+            "width": 1280,
+            "height": 720,
+            "cssWidth": 853,
+            "cssHeight": 480
+          },
+          {
+            "zoom": 125,
+            "width": 1280,
+            "height": 720,
+            "cssWidth": 1024,
+            "cssHeight": 576
+          },
+          {
+            "zoom": 100,
+            "width": 1280,
+            "height": 720,
+            "cssWidth": 1280,
+            "cssHeight": 720
+          }
+        ],
+        "nativePaintDifference": 0.555,
+        "oopifHit": true,
+        "nestedWheel": true,
+        "shortcutsPreserveViewport": true,
+        "fullscreenResize": true,
+        "tabZoomPreserved": true,
+        "rates": [
+          {
+            "zoom": 100,
+            "fps": 29.485257371314344
+          },
+          {
+            "zoom": 150,
+            "fps": 30
+          }
+        ]
+      },
+      "detachedTabs": {
+        "success": true,
+        "sandbox": true,
+        "liveTargetPreserved": true,
+        "unsavedFormPreserved": true,
+        "noReload": true,
+        "oldInputCancelled": true,
+        "blankPopupPreserved": true,
+        "beforeunloadRetained": true,
+        "openerAlive": true
+      },
+      "largeUpload": {
+        "success": true,
+        "codec": "jpeg-native",
+        "raw": {
+          "bytes": 15728640,
+          "sha256": "5f496adeac6ba5b21a781fe82ecff7548255bcec7abd11705187a2c0f058827c",
+          "frames": 2
+        },
+        "multipart": {
+          "bytes": 16777216,
+          "sha256": "341aacac661ccb210720bedaa9ead5d668fe5ea41a73532fc147c71e34040df1",
+          "frames": 12
+        },
+        "requestEvents": 4,
+        "bodyFieldsAbsent": true,
+        "maxPacketBytes": 12582912,
+        "maxHeartbeatGapMs": 499,
+        "sandbox": true,
+        "tlsVerification": true
+      },
+      "authUpload": {
+        "success": true,
+        "codec": "jpeg-native",
+        "postBytes": 15728640,
+        "requests": 2,
+        "allBodyHashesMatch": true,
+        "authPrompts": 1,
+        "framesBefore": 7,
+        "framesDuring": 12,
+        "wallMs": 1006,
+        "maxHeartbeatGapMs": 35,
+        "sandbox": true,
+        "tlsVerification": true
+      }
+    }
+  },
+  "runtimeStartup": {
+    "passed": true,
+    "cases": [
+      {
+        "version": "0.16.0",
+        "node": "v8.16.2",
+        "appUid": 13001,
+        "audio": false,
+        "legacy": "",
+        "legacyNetworkStatus": false,
+        "legacyUid": false,
+        "success": true,
+        "ready": true,
+        "peerUidRejected": true,
+        "socket": {
+          "uid": 3911,
+          "gid": 13001,
+          "mode": "660"
+        },
+        "backendGid": 3911,
+        "groups": [
+          13001
+        ],
+        "workMiB": 384,
+        "moved": [],
+        "rendered": {
+          "version": "Chrome/156.0.8078.79",
+          "frame": {
+            "width": 1280,
+            "height": 384,
+            "rgbaBytes": 1966080
+          },
+          "transientFrames": 0
+        },
+        "activationBootProof": {
+          "skipped": "proc-owner-outside-container-root",
+          "procUid": 65534
+        },
+        "launcherReady": true,
+        "statusSymlinkProof": true,
+        "installedCheck": true
+      },
+      {
+        "version": "0.16.0",
+        "node": "v8.16.2",
+        "appUid": 14876,
+        "audio": true,
+        "legacy": "",
+        "legacyNetworkStatus": false,
+        "legacyUid": false,
+        "success": true,
+        "ready": true,
+        "peerUidRejected": true,
+        "socket": {
+          "uid": 3911,
+          "gid": 14876,
+          "mode": "660"
+        },
+        "backendGid": 301,
+        "groups": [
+          301,
+          14876
+        ],
+        "workMiB": 384,
+        "moved": [],
+        "rendered": {
+          "version": "Chrome/156.0.8078.79",
+          "frame": {
+            "width": 1280,
+            "height": 384,
+            "rgbaBytes": 1966080
+          },
+          "transientFrames": 1
+        },
+        "activationBootProof": {
+          "skipped": "proc-owner-outside-container-root",
+          "procUid": 65534
+        },
+        "launcherReady": true,
+        "statusSymlinkProof": true,
+        "installedCheck": true
+      },
+      {
+        "version": "0.16.0",
+        "node": "v8.16.2",
+        "appUid": 13001,
+        "audio": false,
+        "legacy": "all",
+        "legacyNetworkStatus": false,
+        "legacyUid": false,
+        "success": true,
+        "ready": true,
+        "peerUidRejected": true,
+        "socket": {
+          "uid": 3911,
+          "gid": 13001,
+          "mode": "660"
+        },
+        "backendGid": 3911,
+        "groups": [
+          13001
+        ],
+        "workMiB": 384,
+        "moved": [
+          "data.legacy-1794136302367",
+          "network.legacy-1794136302367",
+          "work.legacy-1794136302367"
+        ],
+        "rendered": {
+          "version": "Chrome/156.0.8078.79",
+          "frame": {
+            "width": 1280,
+            "height": 384,
+            "rgbaBytes": 1966080
+          },
+          "transientFrames": 0
+        },
+        "activationBootProof": {
+          "skipped": "proc-owner-outside-container-root",
+          "procUid": 65534
+        },
+        "launcherReady": true,
+        "statusSymlinkProof": true,
+        "installedCheck": true
+      },
+      {
+        "version": "0.16.0",
+        "node": "v8.16.2",
+        "appUid": 14876,
+        "audio": true,
+        "legacy": "all",
+        "legacyNetworkStatus": false,
+        "legacyUid": false,
+        "success": true,
+        "ready": true,
+        "peerUidRejected": true,
+        "socket": {
+          "uid": 3911,
+          "gid": 14876,
+          "mode": "660"
+        },
+        "backendGid": 301,
+        "groups": [
+          301,
+          14876
+        ],
+        "workMiB": 384,
+        "moved": [
+          "data.legacy-1794136308820",
+          "network.legacy-1794136308820",
+          "work.legacy-1794136308820"
+        ],
+        "rendered": {
+          "version": "Chrome/156.0.8078.79",
+          "frame": {
+            "width": 1280,
+            "height": 384,
+            "rgbaBytes": 1966080
+          },
+          "transientFrames": 0
+        },
+        "activationBootProof": {
+          "skipped": "proc-owner-outside-container-root",
+          "procUid": 65534
+        },
+        "launcherReady": true,
+        "statusSymlinkProof": true,
+        "installedCheck": true
+      }
+    ],
+    "localActivationProofLimit": "The additional current-boot activation /proc ownership proof is explicitly unavailable in local rootless Docker because host proc entries map to UID65534. Production checks remain strict; rootful publication CI must exercise activationBootProof:true in all four cases."
+  },
+  "frontend": {
+    "en-GB": "passed",
+    "de-DE": "passed",
+    "source": "Exact FINAL3 SDK-free frontend archive",
+    "evidence": "Native SDK foreground confirmation, controller/input cancellation, dialogs and auth, Find, phone/structured fields, initial resize before image with retry, sharp viewport mapping, privacy failures and audio close/resume/disconnect"
+  },
+  "store": {
+    "storeSourceCommit": "8cfae23db27e51d86f84e65b13ce0592668d8df9",
+    "deployValidatorVersion": "0.8.4",
+    "artifactValidation": "passed",
+    "sourceByteEquality": "passed",
+    "nativeProvenance": "passed",
+    "sdkFreeDonorPreparation": "passed",
+    "activationIntegration": "passed against unchanged official Store policy and actual packaged activation",
+    "catalogValidation": "passed after prepare against pinned official Store parser: package sizes/SHA-256, coupled0.16.0 versions, exact engine0.1 entry preserved",
+    "engine": "Immutable0.1.0 entry preserved exactly from previous catalog"
+  },
+  "sourceAndNativeEvidence": {
+    "success": true,
+    "version": "0.16.0",
+    "sourceComparisons": 115,
+    "nativeSources": 5,
+    "nativeAudit": {
+      "backend-launch": {
+        "sha256": "b7e0f4efa749b69fe461968d0d583070590e0caaa81ededf6593b0e94c98d750",
+        "size": 79320,
+        "static": true,
+        "interpreter": null,
+        "needed": [],
+        "glibcVersions": [],
+        "glibcCeiling": "2.27"
+      },
+      "audio-bridge": {
+        "sha256": "c32b067a7e75ed5319c747b1ec924e43d225915dc97fdbdc42214f2ab3787ff4",
+        "size": 22464,
+        "static": false,
+        "interpreter": "/lib/ld-linux-x86-64.so.2",
+        "needed": [
+          "libdl.so.2",
+          "libc.so.6"
+        ],
+        "glibcVersions": [
+          "2.2.5",
+          "2.14",
+          "2.17"
+        ],
+        "glibcCeiling": "2.27"
+      }
+    },
+    "reusedHelpers": 3,
+    "assets": [
+      {
+        "name": "mgu-browser@0.16.0.tgz",
+        "size": 404884,
+        "sha256": "8c80b536187075df2d64f1e6661d68f6380f9b979b7d5937bc691c2b44e15a2d"
+      },
+      {
+        "name": "mgu_browser@0.16.0.tgz",
+        "size": 1906667,
+        "sha256": "ced21b1fbfb5e67d512b9fe5892624a3424e0059ea0fb4d49436a8b40929871d"
+      }
+    ]
+  },
+  "priorProviderFindings": {
+    "netflix": "Public page and reserved synthetic-email probe advance with old and new UA; reported generic account error not reproduced or verifiedfixed, no authenticated account/protected playback",
+    "netflixLogin": "/login is the email-first entry; initially hidden password DOM is not a direct visible password form",
+    "disney": "Public page loads; closed-shadow player fixture fix is not Disney account/license/playback qualification",
+    "google": "Actual search returnedHTTP429 and network-traffic CAPTCHA even with normalized UA; no CAPTCHA interaction/autosolve or guaranteed removal",
+    "youtube": "Earlier live probe blocked by proxyHTTP403; no live playback/performance qualification",
+    "scope": "Prior authored/public probes only; no0.16 authenticated provider or physical-headunit qualification"
+  },
+  "localArtifactEvidence": {
+    "meaning": "Exact local FINAL3 archives below passed the checks. CI rebuilds the source lock, tests its own exact packages and generates the published hashes; compiled native bytes can differ across trusted compiler versions.",
+    "mgu-browser@0.16.0.tgz": {
+      "size": 404884,
+      "sha256": "8c80b536187075df2d64f1e6661d68f6380f9b979b7d5937bc691c2b44e15a2d"
+    },
+    "mgu_browser@0.16.0.tgz": {
+      "size": 1906667,
+      "sha256": "ced21b1fbfb5e67d512b9fe5892624a3424e0059ea0fb4d49436a8b40929871d"
+    }
+  },
+  "limits": [
+    "No physical MGU speaker, real AudioManager/SmartX/SDK focus, controller/phone device or complete vehicle lifecycle qualification",
+    "Root container startup does not run actual headunit systemd or measure uncapped-resource behavior on physical hardware",
+    "Native Ozone virtual screen can remain fixed while the native window/viewport changes; it is not a physical-display measurement",
+    "Ordinary Chromium identity retains navigator.webdriver:true; no CAPTCHA removal, stealth or server trust guarantee",
+    "No authorized CDM/license exchange or Netflix/Disney account/protected playback qualification; Debian engine0.1 disables its Widevine updater",
+    "64MiB normal archive and192MiB streamed encrypted recovery budgets include metadata; beyond them a private unsaved work profile is retained only while available and is not durable through backend restart or power loss",
+    "Engine hard-kill site-data recovery covers Chromium-flushed database/WAL files; unflushed renderer memory and physical power loss are not guaranteed",
+    "GET tab restore does not reconstruct form values, POST bodies, navigation history stacks or JavaScript execution state",
+    "Download progress/disk cancellation is monitored rather than a hard filesystem quota; transient overshoot is possible. Phone transfer remains authenticated local HTTP and downloaded files are outside encrypted site archives",
+    "No extension manager, general desktop filesystem/print UI or universal browser-feature parity is claimed"
+  ],
+  "publicationGates": {
+    "sourceLocked": true,
+    "localChecksPassed": true,
+    "catalogMustBeValidatedAfterPrepare": true,
+    "rootfulCiRequiredBeforePublish": true,
+    "publicAssetAndCatalogRecheckRequiredAfterPublish": true,
+    "catalogValidated": true
+  }
+}
