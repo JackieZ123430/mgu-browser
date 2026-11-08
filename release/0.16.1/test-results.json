@@ -1,6 +1,6 @@
 {
   "version": "0.16.1",
-  "sourceCommit": "55245dd116b78f2011527d6dc34693d606fa02e1",
+  "sourceCommit": "d1c9355b6549a43ecedfecdc4b4351cc17aad450",
   "date": "2026-11-08",
   "environment": {
     "platform": "Unprivileged Linux x86_64 host and isolated digest-pinned Ubuntu18 Docker containers",
@@ -924,5 +924,5 @@
     "publicAssetAndCatalogRecheckRequiredAfterPublish": true,
     "catalogValidated": true
   },
-  "changesSince0.16.0": "runtime/remote_firewall.js (uplink interfaces, idempotent, root keeper), runtime/launch.js, src/remote_control.js (QR address); unit-tested"
+  "changesSince0.16.0": "runtime/remote_firewall.js (uplink interfaces, idempotent, root keeper), runtime/launch.js, src/remote_control.js (QR address); unit-tested; src/browser_pages.js, src/browser_viewport.js (already active screencast is success)"
 }
