@@ -250,3 +250,15 @@ Package acceptance uses mgu-deploy 0.7.17's external Linux fixture with simulate
 manager/systemd and synthetic donor, followed by real packaged sandboxed Chromium
 startup with a different app UID. It cannot qualify real-HU boot, power loss,
 audio, touchpad or provider playback. See `docs/MGU_STORE.md` for the limits.
+
+
+## Chinese website fonts
+
+Runtime builds also bundle Noto Sans SC from the public Google Fonts source,
+verified against the pinned SHA-256 in `release/browser_fonts.py`. A verified
+local `.local/browser-fonts/NotoSansSC.ttf` can be reused for offline builds.
+The runtime manifest hashes the font and its OFL notice, and runtime provenance
+records the source URL, hash and license. Its `fonts.conf` adds the runtime font
+directory and includes the existing engine configuration. No engine 0.1.0 bytes
+are replaced. Installing the frontend alone fixes native title glyph coverage;
+the runtime font bundle is required for Chinese webpage text.

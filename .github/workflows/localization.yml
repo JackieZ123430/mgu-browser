@@ -18,7 +18,17 @@ jobs:
         with:
           persist-credentials: false
       - name: Run core regressions
-        run: node --test test/*.test.js
+        run: |
+          node --test test/*.test.js
+          python3 -m unittest release.test_browser_fonts
+      - name: Verify public CJK web font bundle
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from release.browser_fonts import bundle
+          bundle(Path.cwd(),Path(os.environ['RUNNER_TEMP'])/'font-bundle','/var/opt/mgu-browser-engine/versions/0.1.0/engine')
+          PY
       - name: Build public SDK-free frontend
         env:
           MGU_OUT: ${{ runner.temp }}/frontend

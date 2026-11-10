@@ -25,13 +25,15 @@ locale tags retain the English fallback. Technical date formats, URLs and
 unknown website text are preserved. The on-screen keyboard keeps its existing
 Latin layout; this translation does not add a Chinese IME.
 
-The native UI uses the public kit's CJK glyph atlas. Website text is rendered
-separately by Chromium: the published engine 0.1.0 only bundles DejaVu Sans,
-so a frontend update alone does not guarantee Chinese website font coverage.
-Adding CJK web fonts needs a separately versioned immutable engine release,
-including its font licenses and provenance; this change does not replace the
-published engine. Local UI checks do not qualify physical MGU rendering,
-input or website display.
+Native menus use a sharp subset CJK atlas. A separate fallback atlas covers
+GB2312 Chinese title characters, including titles such as 百度热搜; it is not a
+complete Unicode CJK font. Both atlases fit the renderer's texture budget.
+Website text is rendered separately by Chromium. The runtime now bundles the
+complete public Noto Sans SC font with its OFL notice and verified source hash,
+and includes the existing engine font configuration as a fallback. This keeps
+the immutable engine 0.1.0 unchanged; update both frontend and runtime to obtain
+both title and webpage fixes. Physical MGU checks are recorded separately from
+local UI tests; this does not add a Chinese IME.
 
 ## Desktop browser functions in 0.16.0
 

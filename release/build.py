@@ -15,6 +15,7 @@ import subprocess
 import tarfile
 import tempfile
 from native_build import build_additions
+from browser_fonts import bundle as bundle_browser_fonts
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = '0.16.1'
@@ -201,6 +202,7 @@ def reuse_native(base, files, rebuild_backend=False):
 def build_runtime(work, output, base=None, native_sysroot=None):
     stage = work / 'runtime-tool'
     files = stage / 'files'
+    font_record = bundle_browser_fonts(ROOT, files, ENGINE_PREFIX)
     legacy = {'native_reader.js', 'http_reader.js', 'html_page.js', 'html5_parser.js', 'park_gate.js', 'vehicle_signals.js'}
     for file in (ROOT / 'src').glob('*.js'):
         if file.name not in legacy:
@@ -234,7 +236,7 @@ def build_runtime(work, output, base=None, native_sysroot=None):
         raise RuntimeError('Audio helper source is missing')
     native_sources = list(NATIVE_INPUTS) + (['audio_bridge.c'] if built_native else [])
     record = {'version': VERSION, 'nativeSources': {name: sha(ROOT / 'native' / name) for name in native_sources},
-              'engineComponent': ENGINE_VERSION, 'reusedNative': native_record, 'builtNative': built_native}
+              'engineComponent': ENGINE_VERSION, 'webFont': font_record, 'reusedNative': native_record, 'builtNative': built_native}
     (files / 'build-provenance.json').write_text(json.dumps(record, indent=2) + '\n')
     (output / 'runtime-provenance.json').write_text(json.dumps(record, indent=2) + '\n')
     copy(ROOT / 'LICENSE', files / 'LICENSE')

@@ -8,6 +8,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import sys
 import urllib.request
 import zlib
 from PIL import Image, ImageDraw, ImageFont
@@ -29,9 +30,19 @@ def main():
     labels = json.loads(subprocess.check_output([
         'node', '-e', 'process.stdout.write(JSON.stringify(Object.values(require("./src/browser_zh_cn"))))'
     ], cwd=ROOT, encoding='utf-8'))
+    titles = '--titles' in sys.argv
+    extra = ''
+    if titles:
+        # GB2312's complete Chinese repertoire, not just translated menu words.
+        for high in range(0xb0, 0xf8):
+            for low in range(0xa1, 0xff):
+                try:
+                    extra += bytes([high, low]).decode('gb2312')
+                except UnicodeDecodeError:
+                    pass
     chars = sorted(set((OUT / 'cjk-baseline.txt').read_text(encoding='utf-8').strip()
-                       + ''.join(labels) + '中文网页标题'))
-    for size in (48, 44, 40, 36, 32):
+                       + ''.join(labels) + '中文网页标题' + extra))
+    for size in ((24, 22, 20, 18, 16, 14, 12) if titles else (48, 44, 40, 36, 32)):
         font = ImageFont.truetype(str(fontfile), size)
         font.set_variation_by_axes([500])
         ascent, descent = font.getmetrics()
@@ -60,8 +71,9 @@ def main():
     data = dict(size=size, ascent=ascent, descent=descent, atlasW=1024, atlasH=height,
                 glyphs=glyphs, alpha=base64.b64encode(zlib.compress(atlas.tobytes(), 9)).decode())
     cache = hashlib.sha256(json.dumps(data, separators=(',', ':')).encode()).hexdigest()[:16]
-    result = dict(family='cjk', source='Noto Sans SC (OFL-1.1)', cacheKey=cache, sizes=[data])
-    (OUT / 'cjk.json').write_text(json.dumps(result, separators=(',', ':'))+'\n', encoding='utf-8')
+    family = 'cjk-titles' if titles else 'cjk'
+    result = dict(family=family, source='Noto Sans SC (OFL-1.1)', cacheKey=cache, sizes=[data])
+    (OUT / (family+'.json')).write_text(json.dumps(result, separators=(',', ':'))+'\n', encoding='utf-8')
     print(f'CJK: {len(chars)} glyphs, {size}px, 1024 x {height}')
 
 

@@ -6,6 +6,17 @@ assert(fs.readFileSync(root+'/kit/mgu.js','utf8').includes("require('../browser_
 if(fs.existsSync(storeFile))fs.unlinkSync(storeFile);
 const {Recorder,play}=require(root+'/kit/record'),{Canvas}=require(root+'/kit/canvas');
 const RealBrowserClient=require(root+'/browser_client');
+{
+    const fonts=require(root+'/kit/fonts');
+    const restore=require(root+'/browser_fonts').install(fonts,path.join(root,'kit/fonts'));
+    const atlas=JSON.parse(fs.readFileSync(root+'/kit/fonts/cjk-titles.json','utf8'));
+    assert(atlas.sizes.every(s=>s.atlasW<=1024&&s.atlasH<=2048),'Title font must fit the renderer texture budget');
+    for(const text of ['百度一下，你就知道','百度安全验证','百度热搜']){
+        const font=fonts.get('label',18,text);
+        for(const ch of text)assert(font.glyphs[ch.codePointAt(0)],'Missing title glyph: '+ch);
+    }
+    restore();
+}
 if(/^zh(?:-|$)/i.test(process.env.MGU_EMULATOR_LOCALE||'')){
     const fonts=require(root+'/kit/fonts');
     const atlas=JSON.parse(fs.readFileSync(root+'/kit/fonts/cjk.json','utf8'));

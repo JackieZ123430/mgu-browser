@@ -1,6 +1,7 @@
 'use strict';
 const nativeBridge=require('./native_image_bridge');nativeBridge.install();
 const mgu=require('./kit/mgu'),{setImage}=require('./kit/record');
+require('./browser_fonts').install(require('./kit/fonts'),require('path').join(__dirname,'kit/fonts'));
 const Gate=require('./visibility_gate'),Browser=require('./browser_client'),Controller=require('./browser_controller');
 const {BrowserState,inputURL}=require('./browser_state'),icon=require('./browser_icons'),installLayout=require('./browser_layout');
 const {BrowserLocale}=require('./browser_locale');
