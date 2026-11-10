@@ -1,6 +1,40 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),Events=require('events');
 const {BrowserLocale}=require('../src/browser_locale');
+const zhCN=require('../src/browser_zh_cn');
+
+test('Simplified Chinese follows vehicle language and preserves English and technical text',()=>{
+    const units=new Events();let value='zh_CN';units.getLanguage=()=>value;
+    const locale=new BrowserLocale({currentVehicleUnits:units});
+    for(const tag of ['zh_CN','zh-SG','zh-Hans','zh-Hans-CN','zh']){
+        value=tag;units.emit('languageChanged');
+        assert.equal(locale.text('Einstellungen'),'设置');
+        assert.equal(locale.text('completed'),'已完成');
+        assert.equal(locale.text('Secure website required for permissions'),'网站权限需要安全的网页连接');
+        assert.equal(locale.text('JJJJ-MM-TTTHH:MM'),'YYYY-MM-DDTHH:MM');
+        assert.equal(locale.text('https://example.invalid/中文?q=Settings'),'https://example.invalid/中文?q=Settings');
+        assert.equal(locale.text('未收录的网站标题'),'未收录的网站标题');
+        assert.equal(locale.keyboard()[0],'qwertyuiop','Translation does not add a Chinese IME');
+    }
+    for(const tag of ['zh-TW','zh-Hant','zh-Hant-HK','zh-HK','zh-MO','en-GB']){
+        value=tag;units.emit('languageChanged');assert.equal(locale.text('Einstellungen'),'Settings');
+    }
+    value='de-DE';units.emit('languageChanged');assert.equal(locale.text('Einstellungen'),'Einstellungen');
+    locale.close();assert.equal(units.listenerCount('languageChanged'),0);
+});
+
+test('Chinese catalog covers every native English label without altering technical formats',()=>{
+    const fs=require('fs'),vm=require('vm');
+    const source=fs.readFileSync(require.resolve('../src/browser_locale'),'utf8');
+    const fixture={exports:{}};
+    const sourceRequire=require('module').createRequire(require.resolve('../src/browser_locale'));
+    vm.runInNewContext(source+'\nmodule.exports.catalog=en;', {module:fixture,require:sourceRequire,process});
+    for(const english of new Set(Object.values(fixture.exports.catalog))){
+        assert(Object.prototype.hasOwnProperty.call(zhCN,english),'Missing translation: '+english);
+        assert(zhCN[english].length>0);
+        if(english.startsWith('YYYY'))assert.equal(zhCN[english],english);
+    }
+});
 test('BMW CurrentVehicleUnits drives language changes, Unicode labels and keyboard',()=>{
     const units=new Events();let value='de_DE',changes=[];units.getLanguage=()=>value;
     const locale=new BrowserLocale({currentVehicleUnits:units},s=>changes.push(s));

@@ -17,6 +17,8 @@ fonts=ROOT/'.local/browser-fonts'
 if not (fonts/'label.json').is_file():raise RuntimeError('Build private Unicode font atlases with tools/build_browser_fonts.py first')
 for name in ['label.json','bold.json','light.json','Ubuntu-LICENCE.txt','Ubuntu-COPYRIGHT.txt']:
     shutil.copyfile(fonts/name,private_kit/'runtime/fonts'/name)
+for name in ['cjk.json','OFL-NotoSansSC.txt']:
+    shutil.copyfile(ROOT/'assets/ui-fonts'/name,private_kit/'runtime/fonts'/name)
 build.KIT=str(private_kit)
 target=ROOT/'.build/apps/mgu_browser';target.mkdir(parents=True,exist_ok=True)
 for p in (ROOT/'apps/mgu_browser').iterdir():

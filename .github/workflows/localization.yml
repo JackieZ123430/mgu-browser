@@ -1,0 +1,33 @@
+name: Native UI localization
+
+on:
+  pull_request:
+  push:
+    branches: ['feat/simplified-chinese-support']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Run core regressions
+        run: node --test test/*.test.js
+      - name: Build public SDK-free frontend
+        env:
+          MGU_OUT: ${{ runner.temp }}/frontend
+        run: python3 tools/build_store.py --app mgu_browser --version 0.16.1 --source apps/mgu_browser --release-package
+      - name: Check packaged UI and Chinese glyph coverage
+        run: |
+          mkdir "$RUNNER_TEMP/frontend-unpacked"
+          tar -xzf "$RUNNER_TEMP/frontend/mgu_browser@0.16.1.tgz" -C "$RUNNER_TEMP/frontend-unpacked"
+          export MGU_UI_SMOKE_ROOT="$RUNNER_TEMP/frontend-unpacked/javascript"
+          MGU_EMULATOR_LOCALE=en-GB node test/chromium_ui_smoke.js
+          MGU_EMULATOR_LOCALE=de-DE node test/chromium_ui_smoke.js
+          MGU_EMULATOR_LOCALE=zh-CN node test/chromium_ui_smoke.js

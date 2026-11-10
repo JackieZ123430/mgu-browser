@@ -1,3 +1,5 @@
+English | [简体中文](README.zh-CN.md) | [Deutsch](README.de.md)
+
 # MGU Browser — English overview
 
 An experimental native browser UI for BMW MGU / iDrive 7, backed by a separate
@@ -13,7 +15,23 @@ version is pending. Protected streams need a separately authorized CDM. No
 Widevine binary or BMW SDK is distributed, and provider playback is unconfirmed.**
 See [installation, dependencies and rollback](docs/MGU_STORE.md).
 
-The [full German README](README.md) describes features and verified limits.
+The [full German README](README.de.md) describes features and verified limits.
+
+## Simplified Chinese UI
+
+Native controls follow the vehicle language. `zh-CN`, `zh-SG`, `zh-Hans`,
+`zh-Hans-CN` and bare `zh` use Simplified Chinese; explicit Traditional Chinese
+locale tags retain the English fallback. Technical date formats, URLs and
+unknown website text are preserved. The on-screen keyboard keeps its existing
+Latin layout; this translation does not add a Chinese IME.
+
+The native UI uses the public kit's CJK glyph atlas. Website text is rendered
+separately by Chromium: the published engine 0.1.0 only bundles DejaVu Sans,
+so a frontend update alone does not guarantee Chinese website font coverage.
+Adding CJK web fonts needs a separately versioned immutable engine release,
+including its font licenses and provenance; this change does not replace the
+published engine. Local UI checks do not qualify physical MGU rendering,
+input or website display.
 
 ## Desktop browser functions in 0.16.0
 
@@ -155,7 +173,7 @@ See [audio](docs/AUDIO.md) and [tests](docs/TESTING.md).
 - Up to eight tabs with separate page state and navigation histories.
 - Configurable home page, frequent pages, bookmarks and history.
 - Native controller and touchscreen navigation, side keyboard, Unicode and symbols.
-- System-language integration, German/English UI and multiple keyboard layouts.
+- System-language integration, German/English/Simplified Chinese UI and multiple keyboard layouts.
 - Reading mode, page zoom and optional auto-hidden browser chrome.
 - Uncropped video fullscreen with controller play/pause, seek, mute and exit.
 - Prepared hotspot settings and Wi-Fi scanner/broker; real-hardware qualification pending.

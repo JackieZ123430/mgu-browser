@@ -1,5 +1,6 @@
 'use strict';
 // Language comes from the same CurrentVehicleUnits object the BMW SDK uses.
+const zhCN=require('./browser_zh_cn');
 const en={
  'Anmeldeeingabe ist zu lang':'The sign-in entry is too long',
  'Dialogantwort ist zu lang (maximal 4096 Byte)':'The dialog answer is too long (maximum 4096 bytes)',
@@ -145,7 +146,10 @@ class BrowserLocale{
     }
     text(value){
         const s=String(value==null?'':value);if(this.language.toLowerCase().startsWith('de'))return deMessages[s]||s.replace(/gueltige|auswaehlen|pruefen|Zurueck|Vorwaerts|schliessen|Haeufig|haeufig|Waehle|waehlt|Druecken|bestaetigt|oeffnen|zurueck|geschuetzten|ergaenzt|Loeschen|Laedt|Oeffnen|fuer|Fuer|verfuegbar|vollstaendig|unterstuetzt|hoechstens|groesse|verschluesselt/g,m=>de[m]);
-        return en[s]||s;
+        const translated=en[s]||s;
+        // Explicit Traditional Chinese locales keep the existing English fallback.
+        if (/^zh(?:-|$)/i.test(this.language) && !/^zh-(?:Hant|TW|HK|MO)(?:-|$)/i.test(this.language))return zhCN[translated]||translated;
+        return translated;
     }
     keyboard(){
         const lang=this.language.slice(0,2).toLowerCase();

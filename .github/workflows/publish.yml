@@ -80,7 +80,7 @@ jobs:
         run: |
           node --test test/*.test.js
           python3 ../publish-control/release/test_publish.py
-      - name: Verify packaged SDK UI focus and controller integration in English and German
+      - name: Verify packaged SDK UI focus and controller integration in English, German and Simplified Chinese
         working-directory: source
         run: |
           mkdir "$RUNNER_TEMP/packaged-frontend"
@@ -88,6 +88,7 @@ jobs:
           export MGU_UI_SMOKE_ROOT="$RUNNER_TEMP/packaged-frontend/javascript"
           MGU_EMULATOR_LOCALE=en-GB node test/chromium_ui_smoke.js
           MGU_EMULATOR_LOCALE=de-DE node test/chromium_ui_smoke.js
+          MGU_EMULATOR_LOCALE=zh-CN node test/chromium_ui_smoke.js
       - name: Test the packaged native audio bridge with GLIBC 2.27 and old ALSA
         working-directory: source
         run: |

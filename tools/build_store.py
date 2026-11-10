@@ -115,7 +115,7 @@ def main():
         archive.unlink()
         fonts = ROOT / 'assets' / 'ui-fonts'
         if fonts.is_dir():
-            for name in ('label.json', 'bold.json', 'light.json', 'LICENSE.txt', 'COPYRIGHT.txt'):
+            for name in ('label.json', 'bold.json', 'light.json', 'cjk.json', 'OFL-NotoSansSC.txt', 'LICENSE.txt', 'COPYRIGHT.txt'):
                 shutil.copyfile(fonts / name, work / 'kit' / 'runtime' / 'fonts' / ('UFL-' + name if name.endswith('.txt') else name))
         target = work / 'apps' / args.app
         target.mkdir(parents=True)

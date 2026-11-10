@@ -6,6 +6,18 @@ assert(fs.readFileSync(root+'/kit/mgu.js','utf8').includes("require('../browser_
 if(fs.existsSync(storeFile))fs.unlinkSync(storeFile);
 const {Recorder,play}=require(root+'/kit/record'),{Canvas}=require(root+'/kit/canvas');
 const RealBrowserClient=require(root+'/browser_client');
+if(/^zh(?:-|$)/i.test(process.env.MGU_EMULATOR_LOCALE||'')){
+    const fonts=require(root+'/kit/fonts');
+    const atlas=JSON.parse(fs.readFileSync(root+'/kit/fonts/cjk.json','utf8'));
+    assert(atlas.sizes.every(s=>s.atlasW<=1024&&s.atlasH<=2048),'CJK atlas must fit the renderer texture budget');
+    const labels=Object.values(require(root+'/browser_zh_cn')).concat(['中文网页标题']);
+    for(const label of labels){
+        const font=fonts.get('label',24,label);
+        for(const ch of label)if(/[\u3000-\u9fff\uff00-\uffef]/.test(ch))
+            assert(font.glyphs[ch.codePointAt(0)],'Missing packaged CJK glyph: '+ch);
+    }
+}
+
 let browser,ready,tick,frame,closed=false,controllerInput,recorder;const timers=[];
 class FakeBrowser extends EventEmitter{
     constructor(){super();browser=this;this.calls=[];this.tabs=[];}
@@ -76,7 +88,7 @@ require(root+'/app');global.setInterval=interval;
 const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Missing target '+key);await t.run();tick();};
 (async()=>{try{
     await ready;browser.emit('ready');await new Promise(r=>setImmediate(r));tick();assert(frame.targets.some(t=>t.key==='home'));assert(!frame.targets.some(t=>t.key==='address'));
-    const frequent=frame.targets.find(t=>t.key==='list-frequent'),label=frame.textCalls.find(t=>['Frequently visited','Häufig besucht'].includes(t.label));
+    const frequent=frame.targets.find(t=>t.key==='list-frequent'),label=frame.textCalls.find(t=>['Frequently visited','Häufig besucht','常用网站'].includes(t.label));
     assert(label&&label.y>frequent.y&&label.y<frequent.y+frequent.h,'Translated text and its hit target must share the tab-row offset');
     await press('urlbar');assert(frame.targets.some(t=>t.key==='mode-123'));await press('key-0-0');await press('suffix');await press('done');
     assert.equal(browser.url,'https://q.com/','Address should open with automatic HTTPS');
@@ -106,7 +118,7 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     await press('privacy-back');await press('settings-done');
     // Phone remote control: QR panel, connection notice, new code and stop.
     await press('settings');await press('remote-settings');await new Promise(r=>setImmediate(r));tick();
-    const cameraInstruction=browser.locale.toLowerCase().startsWith('de')?'Mit der Handy-Kamera scannen':'Scan with your phone camera';
+    const cameraInstruction=new (require(root+'/browser_locale').BrowserLocale)({currentVehicleUnits:{getLanguage:()=>browser.locale}}).text('Mit der Handy-Kamera scannen');
     assert(frame.textCalls.some(t=>t.label===cameraInstruction),'QR instructions match the active language');
     const qrImage=require(root+'/kit/record').imageById.get(701);
     assert(qrImage&&qrImage.w>0&&qrImage.w===qrImage.h&&qrImage.data.length===qrImage.w*qrImage.h*4,'QR image registered with complete pixels');
@@ -118,13 +130,13 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     await press('block-ads');assert(browser.calls.indexOf('block-false')<0||true);await press('block-ads');await press('settings-done');
     await press('settings');await press('streaming-settings');
     frame.targets.forEach(t=>assert(t.x>=0&&t.y>=0&&t.x+t.w<=1600&&t.y+t.h<=533,'Streaming control outside display'));
-    assert(frame.textCalls.some(t=>/No audio output detected|Kein Audio-Ausgang erkannt/.test(t.label)),'Missing audio output must be explained');
+    assert(frame.textCalls.some(t=>/No audio output detected|Kein Audio-Ausgang erkannt|未检测到音频输出/.test(t.label)),'Missing audio output must be explained');
     await press('audio-test');assert(browser.calls.includes('audio-test'));
-    assert(frame.textCalls.some(t=>/Check audible output|Hörbare Ausgabe/.test(t.label)),'Generating a test tone must ask the user to check audibility');
+    assert(frame.textCalls.some(t=>/Check audible output|Hörbare Ausgabe|请检查设备是否发声/.test(t.label)),'Generating a test tone must ask the user to check audibility');
     await press('media-fullscreen');assert(browser.calls.includes('video-fullscreen'));
     await press('media-toggle');assert(browser.calls.includes('video-toggle'));
     browser.audioRoute=true;await press('settings');await press('streaming-settings');
-    assert(frame.textCalls.some(t=>/vehicle sound unverified|Fahrzeugton unbestätigt/.test(t.label)),'An available output must not be presented as verified vehicle sound');
+    assert(frame.textCalls.some(t=>/vehicle sound unverified|Fahrzeugton unbestätigt|车辆声音尚未验证/.test(t.label)),'An available output must not be presented as verified vehicle sound');
     browser.vehicleRoute=true;await press('audio-test');await new Promise(r=>setImmediate(r));
     assert(vehicleCalls.includes('connect')&&vehicleCalls.includes('disconnect'),'Vehicle test tone acquires and releases the owned AudioManager route');
     assert(browser.calls.indexOf('audio-route-start')<browser.calls.lastIndexOf('audio-test'),'Vehicle output is ready before generating its tone');
@@ -207,7 +219,7 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     finishController({});await new Promise(r=>setImmediate(r));assert.deepEqual(controllerCalls,['pageFocus'],'No hidden webpage focus or activation follows the keyboard transition');browser.request=originalRequest;
     await press('keyboard-close');browser.emit('input',{editable:false});
     browser.emit('input',{editable:false,adjusting:true});tick();
-    assert(frame.textCalls.some(t=>/Turn: change value|Drehen: Wert ändern/.test(t.label)),'Rotary form editing explains how to finish');
+    assert(frame.textCalls.some(t=>/Turn: change value|Drehen: Wert ändern|旋转：修改数值/.test(t.label)),'Rotary form editing explains how to finish');
     browser.emit('input',{editable:true,password:false,type:'textarea',multiline:true});tick();await press('text-keyboard');
     const beforeDone=browser.calls.filter(c=>c==='web-key').length;await press('done');assert.equal(browser.calls.filter(c=>c==='web-key').length,beforeDone,'Dismissing a text keyboard must not submit or insert a newline');
     browser.emit('input',{editable:true,password:false,type:'date'});tick();await press('text-keyboard');
@@ -220,7 +232,7 @@ const press=async key=>{const t=frame.targets.find(t=>t.key===key);assert(t,'Mis
     browser.emit('fileChooser',{id:'native-chooser',origin:'https://q.com',accept:'.txt',multiple:false,files:[]});tick();assert(frame.targets.some(t=>t.key==='browser-chooser-phone'));await press('browser-chooser-cancel');
     browser.emit('auth',{id:'native-auth',origin:'http://auth.example',realm:'Synthetic test only',scheme:'basic',isProxy:false});tick();await press('browser-auth-username');await press('key-0-0');await press('done');await press('browser-auth-password');for(let i=0;i<12;i++)await press('key-0-0');assert(!JSON.stringify(frame).includes('q'.repeat(12)),'Authentication password never enters native rendering text');await press('done');await press('browser-auth-submit');assert.deepEqual(browser.lastAuthReply,{authId:'native-auth',username:'q',password:'q'.repeat(12),cancel:false});
     await press('settings');await press('find-settings');await press('key-0-0');await press('done');assert(frame.targets.some(t=>t.key==='find-next'));assert(frame.targets.some(t=>t.key==='page-controller'),'Search results remain visible in the page');await press('find-next');await press('find-close');assert(!frame.targets.some(t=>t.key==='find-next'));
-    browser.emit('privacy',{supported:true,storage:{state:'failed'}});tick();assert(frame.textCalls.some(t=>/Website-Daten sind nicht|Website data/.test(t.label)),'Unsaved site storage stays visible');browser.emit('privacy',{supported:true,storage:{state:'saved'}});
+    browser.emit('privacy',{supported:true,storage:{state:'failed'}});tick();assert(frame.textCalls.some(t=>/Website-Daten sind nicht|Website data|网站数据尚未完整保存/.test(t.label)),'Unsaved site storage stays visible');browser.emit('privacy',{supported:true,storage:{state:'saved'}});
     const beforeFullscreenCancel=browser.calls.filter(c=>c==='controller-cancel').length;
     browser.emit('frame',{width:1280,height:380,rgba:Buffer.alloc(1280*380*4)});browser.emit('media',{fullscreen:true,playerMode:true,paused:true,currentTime:10,duration:120});tick();
     assert(browser.calls.filter(c=>c==='controller-cancel').length>beforeFullscreenCancel,'Fullscreen transition cancels pending controller work before switching UI');
