@@ -1,0 +1,53 @@
+{
+  "id": "mgu_browser",
+  "title": "浏览器",
+  "description": "支持主页、历史记录、书签、密码管理和 iDrive 操作的车机浏览器。",
+  "version": "0.16.101",
+  "vendor": "custom",
+  "loggingId": "OA9B",
+  "maxDiskUsage": 268435456,
+  "iconGlyph": "WEB",
+  "signals": {
+    "org.genivi.am.commandinterface.CommandControl": {
+      "_optional": "Vehicle speaker output",
+      "_instances": "1",
+      "_methods": [
+        "connect",
+        "disconnect",
+        "getListMainConnections",
+        "getListMainSources"
+      ]
+    },
+    "org.genivi.am.routinginterface.RoutingControlObserver": {
+      "_optional": "Vehicle speaker output",
+      "_instances": "1",
+      "_methods": [
+        "hookSourceAvailablityStatusChange"
+      ]
+    }
+  },
+  "screens": [
+    {
+      "name": "MAIN",
+      "kind": "canvas",
+      "title": " ",
+      "bar": false,
+      "buttons": [
+        [
+          "BTN_OPEN",
+          "Startseite öffnen"
+        ],
+        [
+          "BTN_BACK",
+          "Zurück"
+        ],
+        [
+          "BTN_STOP",
+          "Schließen"
+        ]
+      ]
+    }
+  ],
+  "settings": [],
+  "config": {}
+}

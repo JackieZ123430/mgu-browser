@@ -2,7 +2,7 @@
   "schema": 1,
   "apps": {
     "path": "apps/*",
-    "manifest": "app.json",
+    "manifest": "app.zh-CN.json",
     "mguHmi": [
       "ID7"
     ],
@@ -14,17 +14,20 @@
       "mgu-browser-engine": "0.1.0"
     },
     "build": {
-      "python": "tools/build_store.py",
+      "python": "tools/build_store_zh.py",
       "args": [
-        "--app",
-        "{id}",
-        "--version",
-        "{version}",
-        "--source",
-        "{dir}"
+        "{id}"
       ],
       "sdk": "oap-sdk",
-      "network": true
+      "network": true,
+      "output": "dist/{id}@{version}.tgz",
+      "shared": [
+        "src",
+        "assets",
+        "localization",
+        "tools/build_store.py",
+        "tools/kit_shutdown.py"
+      ]
     }
   }
 }
