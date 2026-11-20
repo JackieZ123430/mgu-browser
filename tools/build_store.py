@@ -79,6 +79,7 @@ def main():
     parser.add_argument('--version', required=True)
     parser.add_argument('--source', required=True)
     parser.add_argument('--release-package', action='store_true', help='Build without a donor and omit oap-sdk; the Store supplies it on install')
+    parser.add_argument('--language', choices=('en', 'zh-CN'), default='en')
     args = parser.parse_args()
     if hasattr(os, 'geteuid') and os.geteuid() == 0:
         raise SystemExit('Run the Store build as an unprivileged user')
@@ -133,7 +134,11 @@ def main():
         build.SDK = str(sdk)
         build.APPS = str(target.parent)
         build.DIST = str(work / 'dist')
-        build.build(args.app)
+        if args.language == 'zh-CN':
+            shutil.copyfile(ROOT / 'localization/zh-CN.json', work / 'kit/runtime/locales/zh-CN.json')
+            shutil.copyfile(ROOT / 'localization/cjk.json', work / 'kit/runtime/fonts/cjk.json')
+            shutil.copyfile(ROOT / 'localization/OFL-NotoSansSC.txt', work / 'kit/runtime/fonts/OFL-NotoSansSC.txt')
+        build.build(args.app, args.language)
         package = work / 'dist' / args.app / 'source'
         manifest = package / 'package.json'
         metadata = json.loads(manifest.read_text(encoding='utf-8'))
